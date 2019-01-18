@@ -1,4 +1,5 @@
  # MRIToolkit
+ 
  ## What is it?
  For my [my research](https://www.isi.uu.nl/people/alberto-de-luca/) I developed a set of scripts and tools to process (diffusion) magnetic resonance imaging (MRI) data, that are (slowly) being integrated in MRIToolkit in a MATLAB (R) toolbox .
 
