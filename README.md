@@ -8,7 +8,7 @@
 ## What can I do with it?
 The toolbox is slowly but steadly growing!
 ###### Ready to use:
-[x] LesionEditor: a graphical user interface to visualize and edit segmentations of 3D MRI images, originally designed for delination of multiple-sclerosis lesions on fluid attenuated inversion recovery (FLAIR) images 
+- [x] LesionEditor: a graphical user interface to visualize and edit segmentations of 3D MRI images, originally designed for delination of multiple-sclerosis lesions on fluid attenuated inversion recovery (FLAIR) images 
 ###### Being integrated and coming soon:
 - [ ] 'NiftiIO_basic': Basic Nifti input/output
 - [ ] 'ImageRegistrations': Image registration utils based on Elastix
