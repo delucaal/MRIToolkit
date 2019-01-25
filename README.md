@@ -10,7 +10,7 @@
 The toolbox is slowly but steadly growing!
 ###### Ready to use:
 - [x] **'LesionEditor'**: a graphical user interface to visualize and edit segmentations of 3D MRI images, originally designed for delination of multiple-sclerosis lesions on fluid attenuated inversion recovery (FLAIR) images. Requires MATLAB R2018a or newer. **Documentation coming soon**
-- [x] **'NiftiIO_basic'**: Basic Nifti input/output, originally written by [Jimmy Shen](https://nl.mathworks.com/matlabcentral/fileexchange/8797-tools-for-nifti-and-analyze-image)%  Part of this file is copied and modified from:
+- [x] **'NiftiIO_basic'**: Basic Nifti input/output, originally written by [Jimmy Shen](https://nl.mathworks.com/matlabcentral/fileexchange/8797-tools-for-nifti-and-analyze-image)
 ###### Being integrated and coming soon:
 - [ ] **'ImageRegistrations'**: Image registration utils based on Elastix
 - [ ] **'DW_basic'**: Basic data structures / utilities for diffusion MRI data
