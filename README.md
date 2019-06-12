@@ -12,7 +12,7 @@ The toolbox is slowly but steadly growing!
 - [x] **'LesionEditor'**: a graphical user interface to visualize and edit segmentations of 3D MRI images, originally designed for delination of multiple-sclerosis lesions on fluid attenuated inversion recovery (FLAIR) images. Requires MATLAB R2018a or newer. **Documentation coming soon**
 - [x] **'NiftiIO_basic'**: Basic Nifti input/output, originally written by [Jimmy Shen](https://nl.mathworks.com/matlabcentral/fileexchange/8797-tools-for-nifti-and-analyze-image)
 - [x] **'OptimizationMethods'**: Classes for numeric optimization methods
-- [x] **'Relaxometry'**: Classes for T1/T2 quantification using inversion-recovery / multi-echo data
+- [x] **'Relaxometry'**: Classes for T1/T2 quantification using inversion-recovery / spin-echo multi-echo data
 - [x] **'ThirdParty'**: Utilities from third parties used in other scripts. Includes EPG code from [Brian Hargreaves](http://web.stanford.edu/~bah/software/epg/)
 ###### Being integrated and coming soon:
 - [ ] **'ImageRegistrations'**: Image registration utils based on Elastix
@@ -37,4 +37,13 @@ The toolbox is slowly but steadly growing!
 ###### Notes:
 - This code is a work in progress. It will be updated without notice to ensure bug-fixes and the inclusion of best available methods
 - Most code is poorly commented and not general, but will be improved over releases. 
+
+###### Keywords:
+- Magnetic Resonance Imaging (MRI)
+- Image segmentation
+- T1 quantification, Inversion Recovery
+- T2 quantification, spin echo multi echo
+- Extended Phase Graphs
+
+
 
