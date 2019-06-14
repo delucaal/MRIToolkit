@@ -1,4 +1,5 @@
-%%%$ Included in MRIToolkit (https://github.com/delucaal/MRIToolkit) %%%%%% Alberto De Luca - alberto@isi.uu.nl $%%%
+
+%%% Distributed under the terms of CC BY-NC-ND (https://creativecommons.org/licenses) %%%
 function semaphore = setfilesemaphore(fileList)
 %SETFILESEMAPHORE  Set semaphore for file access.
 %   SEMAPHORE = SETFILESEMAPHORE(FILENAME) sets a semaphore to get

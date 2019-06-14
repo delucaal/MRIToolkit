@@ -1,3 +1,5 @@
+
+%%% Distributed under the terms of CC BY-NC-ND (https://creativecommons.org/licenses) %%%
 %
 %	function magphase(x,arr)
 %
@@ -26,7 +28,5 @@ ylabel('Phase/\pi');
 a = axis;
 axis([a(1) a(2) -1 1]);
 grid on;
-
-
 
 

@@ -1,3 +1,5 @@
+
+%%% Distributed under the terms of CC BY-NC-ND (https://creativecommons.org/licenses) %%%
 %function [M] = epg_FZ2spins(FpFmZ, N, frac)
 %
 %	Function returns a 3xN array of magnetization vectors [Mx My Mz].'
@@ -48,5 +50,3 @@ FpFmZ(3,1)=FpFmZ(3,1)/2;		% Account for discretization
 Mz = 2*real(ph*FpFmZ(3,:).');		% Transform to Mz
 
 M = [real(Mxy) imag(Mxy) Mz].'/N;	% Form output vector.
-
-

@@ -1,3 +1,5 @@
+
+%%% Distributed under the terms of CC BY-NC-ND (https://creativecommons.org/licenses) %%%
 %
 %
 %	Simulation of SPGR using EPG.  Yes, you can do this!!
@@ -86,4 +88,3 @@ for q=k-Nf:k
   imwrite(fim,fn,'TIFF');
 
 end;
-

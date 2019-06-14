@@ -1,4 +1,5 @@
-%%%$ Included in MRIToolkit (https://github.com/delucaal/MRIToolkit) %%%%%% Alberto De Luca - alberto@isi.uu.nl $%%%
+
+%%% Distributed under the terms of CC BY-NC-ND (https://creativecommons.org/licenses) %%%
 %  Undo the flipping and rotations performed by xform_nii; spit back only
 %  the raw img data block. Initial cut will only deal with 3D volumes
 %  strongly assume we have called xform_nii to write down the steps used 

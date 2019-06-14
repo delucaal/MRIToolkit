@@ -1,3 +1,5 @@
+
+%%% Distributed under the terms of CC BY-NC-ND (https://creativecommons.org/licenses) %%%
 %
 %	EPG - Extended Phase Graph Analysis Functions
 %
@@ -40,7 +42,5 @@
 %	epg_sediff - Spin Echo Diffusion
 %	epg_stim - Simple stimulated echo example
 %	epg_bssfp - bSSFP example
-
-
 
 

@@ -1,4 +1,5 @@
-%%%$ Included in MRIToolkit (https://github.com/delucaal/MRIToolkit) %%%%%% Alberto De Luca - alberto@isi.uu.nl $%%%
+
+%%% Distributed under the terms of CC BY-NC-ND (https://creativecommons.org/licenses) %%%
 %  Make NIfTI structure specified by an N-D matrix. Usually, N is 3 for 
 %  3D matrix [x y z], or 4 for 4D matrix with time series [x y z t]. 
 %  Optional parameters can also be included, such as: voxel_size, 

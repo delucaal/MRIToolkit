@@ -1,3 +1,5 @@
+
+%%% Distributed under the terms of CC BY-NC-ND (https://creativecommons.org/licenses) %%%
 % plotc(x,y) 
 %
 % plots the complex vector y as a function of x.
@@ -15,4 +17,3 @@ else
 	% color... plot(x,real(y),'b--',x,imag(y),'r:',x,abs(y),'y-');
 	plot(x,real(y),'k--',x,imag(y),'k:',x,abs(y),'k-');
 end;
-

@@ -1,3 +1,5 @@
+
+%%% Distributed under the terms of CC BY-NC-ND (https://creativecommons.org/licenses) %%%
 %function [S,P] = epg_stim(flips)
 %
 %	Function uses EPG simulation to quickly calculate
@@ -19,6 +21,4 @@ for k=1:length(flips)
   P = epg_grelax(P,1,.2,0,1,0,1);	% Gradient
 end;
 S = P(1,1);				% Return signal from F0
-
-
 

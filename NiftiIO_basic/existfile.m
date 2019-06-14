@@ -1,4 +1,5 @@
-%%%$ Included in MRIToolkit (https://github.com/delucaal/MRIToolkit) %%%%%% Alberto De Luca - alberto@isi.uu.nl $%%%
+
+%%% Distributed under the terms of CC BY-NC-ND (https://creativecommons.org/licenses) %%%
 function res = existfile(fileName)
 %EXISTFILE  Check for file existence.
 %	  RES = EXISTFILE(FILENAME) returns true if the file FILENAME is existing

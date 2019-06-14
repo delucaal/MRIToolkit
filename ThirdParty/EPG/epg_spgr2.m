@@ -1,3 +1,5 @@
+
+%%% Distributed under the terms of CC BY-NC-ND (https://creativecommons.org/licenses) %%%
 %
 %
 %	Simulation of SPGR using EPG.  Yes, you can do this!!
@@ -72,4 +74,3 @@ ylabel('Signal');
 legend('EPG Signal','Perfect Spoiling');
 title('RF-Spoiled Evolution');
 grid on;
-

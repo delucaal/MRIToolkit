@@ -1,3 +1,5 @@
+
+%%% Distributed under the terms of CC BY-NC-ND (https://creativecommons.org/licenses) %%%
 %function [FpFmZ,EE,BV] = epg_grelax(FpFmZ,T1,T2,T,kg,D,Gon,noadd)
 %
 %	Propagate EPG states through a period of relaxation, and
@@ -78,5 +80,3 @@ if (Gon==1)
     FpFmZ = epg_mgrad(FpFmZ,noadd);	% Advance states by negative gradient.
   end;
 end;
-
-

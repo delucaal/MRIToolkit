@@ -1,3 +1,5 @@
+
+%%% Distributed under the terms of CC BY-NC-ND (https://creativecommons.org/licenses) %%%
 function epg_showstate(FZ,frac,scale)
 %function epg_showstate(FZ,frac,scale)
 %
@@ -106,4 +108,3 @@ cc = [
 sz = size(cc);
 cind = round(([1:n]/(n+1))*sz(1));
 c = cc(cind,:);
-

@@ -1,4 +1,5 @@
-%%%$ Included in MRIToolkit (https://github.com/delucaal/MRIToolkit) %%%%%% Alberto De Luca - alberto@isi.uu.nl $%%%
+
+%%% Distributed under the terms of CC BY-NC-ND (https://creativecommons.org/licenses) %%%
 function postprocessdemo(postProcStruct)
 %POSTPROCESSDEMO  Example for a user-defined postprocessing function.
 %   POSTPROCESSDEMO(POSTPROCSTRUCT) accepts a structure passed by function

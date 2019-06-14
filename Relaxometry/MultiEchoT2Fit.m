@@ -1,3 +1,4 @@
+%%%$ Included in MRIToolkit (https://github.com/delucaal/MRIToolkit) %%%%%% Alberto De Luca - alberto@isi.uu.nl $%%%%%% Distributed under the terms of CC BY-NC-ND (https://creativecommons.org/licenses) %%%
 % A. De Luca - UMC Utrecht - alberto@isi.uu.nl
 % This script performs a T1 fit with inversion recovery data
 % This code uses the RelaxometryMethods and OptimizationMethods libraries

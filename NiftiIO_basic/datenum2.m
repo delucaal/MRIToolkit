@@ -1,4 +1,5 @@
-%%%$ Included in MRIToolkit (https://github.com/delucaal/MRIToolkit) %%%%%% Alberto De Luca - alberto@isi.uu.nl $%%%
+
+%%% Distributed under the terms of CC BY-NC-ND (https://creativecommons.org/licenses) %%%
 function dateNr = datenum2(dateStr)
 %DATENUM2  Return serial date number.
 %		Note: This function is a workaround for a kind of bug in Matlab. In

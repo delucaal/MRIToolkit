@@ -1,3 +1,5 @@
+
+%%% Distributed under the terms of CC BY-NC-ND (https://creativecommons.org/licenses) %%%
 %	epg_bssfp
 %
 %	This is a simple example of how EPG can be
@@ -35,6 +37,4 @@ subplot(2,1,2);
 plot(angle(Msig)/pi);
 title('Phase / \pi');
 grid;
-
-
 

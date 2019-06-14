@@ -1,3 +1,5 @@
+
+%%% Distributed under the terms of CC BY-NC-ND (https://creativecommons.org/licenses) %%%
 %
 %function [S1,S2,F] = epg_dessf(T1,T2,TR,TE,alpha,G,Tg,D,N)
 %

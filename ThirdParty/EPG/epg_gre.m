@@ -1,3 +1,5 @@
+
+%%% Distributed under the terms of CC BY-NC-ND (https://creativecommons.org/licenses) %%%
 %
 %	Very simple simulation of Gradient-Spoiled 
 %	sequence using EPG methods.

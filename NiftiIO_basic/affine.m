@@ -1,4 +1,5 @@
-%%%$ Included in MRIToolkit (https://github.com/delucaal/MRIToolkit) %%%%%% Alberto De Luca - alberto@isi.uu.nl $%%%
+
+%%% Distributed under the terms of CC BY-NC-ND (https://creativecommons.org/licenses) %%%
 %  Using 2D or 3D affine matrix to rotate, translate, scale, reflect and
 %  shear a 2D image or 3D volume. 2D image is represented by a 2D matrix,
 %  3D volume is represented by a 3D matrix, and data type can be real 

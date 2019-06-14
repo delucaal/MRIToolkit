@@ -1,3 +1,5 @@
+
+%%% Distributed under the terms of CC BY-NC-ND (https://creativecommons.org/licenses) %%%
 %
 %	function epg_plot(FZ)
 %
@@ -28,5 +30,3 @@ xlabel('State number');
 ylabel('Phase');
 grid on;
 if (exist('setprops')) setprops; end;
-
-

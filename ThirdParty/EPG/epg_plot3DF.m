@@ -1,3 +1,5 @@
+
+%%% Distributed under the terms of CC BY-NC-ND (https://creativecommons.org/licenses) %%%
 %function epg_plot3DF(FZ,n,nm,frac)
 %
 %	Function plots the F state(s) as a 3D rendition
@@ -46,8 +48,6 @@ hold off;
 xlabel('Mx');
 ylabel('My');
 zlabel('Mz');
-
-
 
 
 

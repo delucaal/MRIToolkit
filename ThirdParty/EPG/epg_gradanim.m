@@ -1,3 +1,5 @@
+
+%%% Distributed under the terms of CC BY-NC-ND (https://creativecommons.org/licenses) %%%
 function FZ = epg_gradanim(FZ,ns,nframes)
 %
 %	Animates the effect of gradient on F states
@@ -25,7 +27,5 @@ for k=1:nframes
   epg_plot3DF(FZ,[],ns,(k-1)/(nframes-1));
   drawnow;
 end;
-
-
 
 

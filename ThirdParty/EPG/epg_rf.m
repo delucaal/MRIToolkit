@@ -1,3 +1,5 @@
+
+%%% Distributed under the terms of CC BY-NC-ND (https://creativecommons.org/licenses) %%%
 %
 %function [FpFmZ,RR] = epg_rf(FpFmZ,alpha,phi)
 %	Propagate EPG states through an RF rotation of 
@@ -35,5 +37,3 @@ RR = [(cos(alpha/2))^2 exp(2*i*phi)*(sin(alpha/2))^2 -i*exp(i*phi)*sin(alpha);
 
 
 FpFmZ = RR * FpFmZ;
-
-

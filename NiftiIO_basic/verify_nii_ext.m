@@ -1,4 +1,5 @@
-%%%$ Included in MRIToolkit (https://github.com/delucaal/MRIToolkit) %%%%%% Alberto De Luca - alberto@isi.uu.nl $%%%
+
+%%% Distributed under the terms of CC BY-NC-ND (https://creativecommons.org/licenses) %%%
 %  Verify NIFTI header extension to make sure that each extension section
 %  must be an integer multiple of 16 byte long that includes the first 8
 %  bytes of esize and ecode. If the length of extension section is not the

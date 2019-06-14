@@ -1,3 +1,5 @@
+
+%%% Distributed under the terms of CC BY-NC-ND (https://creativecommons.org/licenses) %%%
 %
 %function [FpFmZ] = epg_grad(FpFmZ,noadd)
 %	Propagate EPG states through a "unit" gradient.
@@ -29,6 +31,4 @@ FpFmZ(1,:) = circshift(FpFmZ(1,:),[0 1]);	% Shift Fp states.
 FpFmZ(2,:) = circshift(FpFmZ(2,:),[0 -1]);	% Shift Fm states.
 FpFmZ(2,end)=0;					% Zero highest Fm state.
 FpFmZ(1,1) = conj(FpFmZ(2,1));			% Fill in lowest Fp state.
-
-
 

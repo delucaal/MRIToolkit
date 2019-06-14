@@ -1,3 +1,5 @@
+
+%%% Distributed under the terms of CC BY-NC-ND (https://creativecommons.org/licenses) %%%
 function epg_show(FZ,frac,scale)
 %function epg_show(FZ,frac,scale)
 %
@@ -46,7 +48,5 @@ end;
 
 setprops;
  
-
-
 
 

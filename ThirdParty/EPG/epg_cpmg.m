@@ -1,3 +1,5 @@
+
+%%% Distributed under the terms of CC BY-NC-ND (https://creativecommons.org/licenses) %%%
 % function [s,phasediag,P] = epg_cpmg(flipangle,etl,T1,T2,esp)
 %
 %	EPG Simulation of CPMG sequence.  First flip angle

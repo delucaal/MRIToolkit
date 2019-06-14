@@ -1,3 +1,5 @@
+
+%%% Distributed under the terms of CC BY-NC-ND (https://creativecommons.org/licenses) %%%
 function [FpFmZ] = epg_trim(FpFmZ,thres)
 %
 %	Trim higher-order states to N if the sum of absolute
@@ -16,4 +18,3 @@ function [FpFmZ] = epg_trim(FpFmZ,thres)
 f = find(sum(abs(FpFmZ))>=thres);
 fn = max(f);
 FpFmZ = FpFmZ(:,1:fn);
-

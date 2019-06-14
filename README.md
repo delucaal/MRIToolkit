@@ -38,6 +38,9 @@ The toolbox is slowly but steadly growing!
 - This code is a work in progress. It will be updated without notice to ensure bug-fixes and the inclusion of best available methods
 - Most code is poorly commented and not general, but will be improved over releases. 
 
+###### License:
+- This software is distributed under the Creative Commons [CC-BY-NC-ND](https://creativecommons.org/licenses). 
+
 ###### Keywords:
 - Magnetic Resonance Imaging (MRI)
 - Image segmentation
