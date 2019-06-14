@@ -48,5 +48,6 @@ The toolbox is slowly but steadly growing!
 - T2 quantification, spin echo multi echo
 - Extended Phase Graphs
 
+Alberto De Luca - 2019
 
 
