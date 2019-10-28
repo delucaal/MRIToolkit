@@ -1,5 +1,5 @@
  # MRIToolkit
- 
+
  ## What is it?
  For my [my research](https://www.isi.uu.nl/people/alberto-de-luca/) I developed a set of scripts and tools to process (diffusion) magnetic resonance imaging (MRI) data, that are (slowly) being integrated in MRIToolkit in a MATLAB (R) toolbox .
 
@@ -18,7 +18,7 @@ The toolbox is slowly but steadly growing!
 - [ ] **'ImageRegistrations'**: Image registration utils based on Elastix
 - [ ] **'DW_basic'**: Basic data structures / utilities for diffusion MRI data
 - [ ] **'Diffusion_basic'**: Class for (basic) dMRI quantification
-- [ ] **'DW_IVIMDTDK_I'**: Diffusion MRI fit utilities - IVIM, DT, DKI 
+- [ ] **'DW_IVIMDTDK_I'**: Diffusion MRI fit utilities - IVIM, DT, DKI
 - [ ] **'Dicom_utils'**: Tools for handling unconventional or buggy DICOMs
 - [ ] **'DW_Laplacian_NNLS'**: Tools for spectral multi-compartment fit (NNLS/L2NNLS/PL2NNLS)
 - [ ] **'MixedCodeUtils'**: 'Useful general purpose functions
@@ -36,10 +36,10 @@ The toolbox is slowly but steadly growing!
 
 ###### Notes:
 - This code is a work in progress. It will be updated without notice to ensure bug-fixes and the inclusion of best available methods
-- Most code is poorly commented and not general, but will be improved over releases. 
+- Most code is poorly commented and not general, but will be improved over releases.
 
 ###### License:
-- This software is distributed under the Creative Commons [CC-BY-NC-ND](https://creativecommons.org/licenses). 
+- This software is distributed under the LGPLv3 license (https://opensource.org/licenses/lgpl-3.0.html). 
 
 ###### Keywords:
 - Magnetic Resonance Imaging (MRI)
@@ -49,5 +49,3 @@ The toolbox is slowly but steadly growing!
 - Extended Phase Graphs
 
 Alberto De Luca - 2019
-
-
