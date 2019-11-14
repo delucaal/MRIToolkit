@@ -1,5 +1,5 @@
-
-%%% Distributed under the terms of CC BY-NC-ND (https://creativecommons.org/licenses) %%%
+%%%$ Included in MRIToolkit (https://github.com/delucaal/MRIToolkit) %%%%%% Alberto De Luca - alberto@isi.uu.nl $%%%%%% Distributed under the terms of LGPLv3  %%%
+%%% Distributed under the terms of LGPLv3  %%%
 function fileCell = findfiles(varargin)
 %FINDFILES  Recursively search directory for files.
 %   FINDFILES returns a cell array with the file names of all files

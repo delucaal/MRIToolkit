@@ -1,0 +1,48 @@
+//ImageTypes
+(FixedInternalImagePixelType "float")
+(MovingInternalImagePixelType "float")
+(UseDirectionCosines "true")
+//Components
+(Registration "MultiResolutionRegistration")
+(FixedImagePyramid "FixedRecursiveImagePyramid")
+(MovingImagePyramid "MovingRecursiveImagePyramid")
+(Interpolator "LinearInterpolator")
+(Metric "AdvancedMattesMutualInformation")
+(Optimizer "AdaptiveStochasticGradientDescent")
+(ResampleInterpolator "FinalLinearInterpolator")
+(Resampler "DefaultResampler")
+(Transform "AffineDTITransform")
+// ********** Pyramid
+// Total number of resolutions
+(NumberOfResolutions 3)
+// ********** Transform
+//(CenterOfRotation 128 128) center by default
+(AutomaticTransformInitialization "true")
+(AutomaticScalesEstimation "true")
+(HowToCombineTransforms "Compose")
+// ********** Optimizer
+// Maximum number of iterations in each resolution level:
+(MaximumNumberOfIterations 300 300 600)
+(AutomaticParameterEstimation "true")
+(UseAdaptiveStepSizes "true")
+// ********** Metric
+//Number of grey level bins in each resolution level:
+(NumberOfHistogramBins 32)
+(FixedKernelBSplineOrder 1)
+(MovingKernelBSplineOrder 3)
+// ********** Several
+(WriteTransformParametersEachIteration "false")
+(WriteTransformParametersEachResolution "false")
+(ShowExactMetricValue "false")
+(ErodeMask "true")
+// ********** ImageSampler
+// Number of spatial samples used to compute the
+// mutual information in each resolution level:
+(ImageSampler "RandomCoordinate")
+(NumberOfSpatialSamples 2048)
+(NewSamplesEveryIteration "true")
+// ********** Interpolator and Resampler
+//Default pixel value for pixels that come from outside the picture:
+(DefaultPixelValue 0)
+(ResultImageFormat "nii")
+(CompressResultImage "true")

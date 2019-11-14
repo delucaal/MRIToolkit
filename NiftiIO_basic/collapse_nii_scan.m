@@ -1,5 +1,5 @@
-
-%%% Distributed under the terms of CC BY-NC-ND (https://creativecommons.org/licenses) %%%
+%%%$ Included in MRIToolkit (https://github.com/delucaal/MRIToolkit) %%%%%% Alberto De Luca - alberto@isi.uu.nl $%%%%%% Distributed under the terms of LGPLv3  %%%
+%%% Distributed under the terms of LGPLv3  %%%
 %  Collapse multiple single-scan NIFTI files into a multiple-scan NIFTI file
 %
 %  Usage: collapse_nii_scan(scan_file_pattern, [collapsed_fileprefix], [scan_file_folder])

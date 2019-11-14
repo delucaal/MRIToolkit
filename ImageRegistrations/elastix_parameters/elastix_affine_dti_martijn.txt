@@ -1,0 +1,70 @@
+// *********************
+// * affineDTI
+// *********************
+
+// *********************
+// * ImageTypes
+// *********************
+(FixedInternalImagePixelType "float")
+(MovingInternalImagePixelType "float")
+(UseDirectionCosines "true")
+
+// *********************
+// * Components
+// *********************
+(ResampleInterpolator "FinalBSplineInterpolator")
+(FixedImagePyramid "FixedRecursiveImagePyramid")
+(MovingImagePyramid "MovingRecursiveImagePyramid")
+(Registration "MultiResolutionRegistration")
+(Interpolator "BSplineInterpolator")
+(Metric "AdvancedMattesMutualInformation")
+(BSplineInterpolationOrder 3)
+(Resampler "DefaultResampler")
+(Optimizer "AdaptiveStochasticGradientDescent")
+(Transform "AffineDTITransform")
+(MovingImageDerivativeScales 1 1 1)
+
+// *********************
+// * Mask settings
+// *********************
+(ErodeMask "false")
+(ErodeFixedMask "false")
+
+// *********************
+// * Optimizer settings
+// *********************
+(NumberOfResolutions 1)
+(MaximumNumberOfIterations 250)
+(AutomaticScalesEstimation "true")
+(AutomaticTransformInitialization "true")
+
+
+// *********************
+// * Transform settings
+// *********************
+(HowToCombineTransforms "Compose")
+
+// *********************
+// * Pyramid settings
+// *********************
+(NumberOfHistogramBins 32)
+(Scales -1.000000e+00 -1.000000e+00 -1.000000e+00  1.000000e+06  1.000000e+06  1.000000e+06  1.000000e+06  1.000000e+06  1.000000e+06 -1.000000e+00 -1.000000e+00 -1.000000e+00)
+
+// *********************
+// * Sampler parameters
+// *********************
+(NumberOfSpatialSamples 2000)
+(ImageSampler "RandomCoordinate")
+(CheckNumberOfSamples "false")
+(NewSamplesEveryIteration "true")
+(MaximumNumberOfSamplingAttempts 100)
+(FinalBSplineInterpolationOrder 1)
+
+// *********************
+// * Output settings
+// *********************
+(DefaultPixelValue 0)
+(WriteTransformParametersEachIteration "false")
+(WriteResultImage  "true")
+(ResultImageFormat "nii")
+(ResultImagePixelType "float")

@@ -1,5 +1,5 @@
-
-%%% Distributed under the terms of CC BY-NC-ND (https://creativecommons.org/licenses) %%%
+%%%$ Included in MRIToolkit (https://github.com/delucaal/MRIToolkit) %%%%%% Alberto De Luca - alberto@isi.uu.nl $%%%%%% Distributed under the terms of LGPLv3  %%%
+%%% Distributed under the terms of LGPLv3  %%%
 %  This function is only used to save Analyze or NIfTI header that is
 %  ended with .hdr and loaded by load_untouch_header_only.m. If you 
 %  have NIfTI file that is ended with .nii and you want to change its

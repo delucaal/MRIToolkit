@@ -1,11 +1,11 @@
-%%%$ Included in MRIToolkit (https://github.com/delucaal/MRIToolkit) %%%%%% Alberto De Luca - alberto@isi.uu.nl $%%%%%% Distributed under the terms of CC BY-NC-ND (https://creativecommons.org/licenses) %%%
-% A. De Luca - alberto@isi.uu.nl
+%%%$ Included in MRIToolkit (https://github.com/delucaal/MRIToolkit) %%%%%% Alberto De Luca - alberto@isi.uu.nl $%%%%%% Distributed under the terms of LGPLv3  %%%
+%%% Distributed under the terms of LGPLv3  %%%
+% A. De Luca
 % This function adds the specified toolboxes to the path. If no input is
 % specified all toolboxes will be added
 % 29/03/2018: creation - v1.0
-% 23/09/2018: addition of LesionEditor
-% 12/06/2019: addition of OptimizationMethods, Relaxometry, ThirdParty
-
+% 23/09/2018: addition of ThirdParty, OptimizationMethods, Relaxometry
+% 09/11/2019: Change of name - added the - ExploreDTIInterface
 function MRIToolkitInit(SelectedToolboxes)
     run_folder = mfilename('fullpath');
     if(~isempty(run_folder))
@@ -20,23 +20,27 @@ function MRIToolkitInit(SelectedToolboxes)
     end
     addpath(fullfile(run_folder,'init'));
 
-    global MRIKaleidoscope;
-    MRIKaleidoscope.version = 1.0;
-    
+    global MRIToolkit;
+    clear MRIToolkit;
+    MRIToolkit.version = 1.0;
+
     try
-       MRIKaleidoscopeDefineLocalVars(); 
+       MRIToolkitDefineLocalVars();
     catch
         disp('I cannot find a configuration file. Please define one');
     end
-    
+
     available_toolboxes = {
         {'NiftiIO_basic','Manages basic Nifti input/output',true},...
-        {'LesionEditor','A GUI for basic segmentation editing',true},...
+        {'DW_basic','Basic diffusion MRI utils',true},...
+        {'ImageRegistrations','Elastix based registration utils',true},...
         {'ThirdParty','Third party utilities',true},...
         {'OptimizationMethods','Class for numeric optimization',true},...
-        {'Relaxometry','Class for T1/T2 quantification - based on EPG code from Brian Hargreaves',true},...
+        {'Relaxometry','Class for T1/T2 quantification',true},...
+        {'ExploreDTIInterface','ExploreDTI powered library',true},...
+        {'SphericalDeconvolution','Methods to perform GRL/mFOD deconvolution',true}
         }; % Folder, Description, Load default
-    
+
     if(nargin > 0 && ~iscell(SelectedToolboxes))
         disp('Usage 1: MRIToolkitInit() -> load all toolboxes');
         disp('Usage 2: MRIToolkitInit({''Identifier1'',...)');
@@ -46,9 +50,9 @@ function MRIToolkitInit(SelectedToolboxes)
         end
         return
     end
-    
+
     run_folder = get_executed_file_path();
-    
+
     % Add all toolboxes if no input is specified
     if(nargin < 1)
         SelectedToolboxes = available_toolboxes;
@@ -79,7 +83,7 @@ function MRIToolkitInit(SelectedToolboxes)
            end
         end
     end
-    
+
     for tool_id=1:length(SelectedToolboxes)
         % Call the init function of each toolbox
         if(SelectedToolboxes{tool_id}{3} || override_default)
@@ -87,5 +91,5 @@ function MRIToolkitInit(SelectedToolboxes)
             run(fullfile(run_folder,SelectedToolboxes{tool_id}{1},'mk_init.m'));
         end
     end
-    
+
 end

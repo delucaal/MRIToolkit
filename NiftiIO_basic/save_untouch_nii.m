@@ -1,5 +1,5 @@
-
-%%% Distributed under the terms of CC BY-NC-ND (https://creativecommons.org/licenses) %%%
+%%%$ Included in MRIToolkit (https://github.com/delucaal/MRIToolkit) %%%%%% Alberto De Luca - alberto@isi.uu.nl $%%%%%% Distributed under the terms of LGPLv3  %%%
+%%% Distributed under the terms of LGPLv3  %%%
 %  Save NIFTI or ANALYZE dataset that is loaded by "load_untouch_nii.m".
 %  The output image format and file extension will be the same as the
 %  input one (NIFTI.nii, NIFTI.img or ANALYZE.img). Therefore, any file
