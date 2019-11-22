@@ -41,6 +41,7 @@ The toolbox is slowly but steadily growing!
 - More examples will come in the next days.
 
 ###### Notes:
+- The file naming convention is to always indicate Niftis as .nii, even when they are actually compressed in .nii.gz. The code takes care of that, but expects only .nii as arguments in function calls!
 - Not everything has been checked yet - expect many bug fixes and new releases in the next time.
 - MRIToolkit relies on a couple of third party dependencies:
   - Elastix: 1) Either compile your own version or grab the executables for your platform here. 2) Copy the file "TemplateMRIToolkitDefineLocalVars.m" to your MATLAB default folder (user/MATLAB or Documents/MATLAB), rename the file as "MRIToolkitDefineLocalVars.m". 3) Edit the script, adjusting the variable MRIToolkit.Elastix.Location as needed.

@@ -1,5 +1,7 @@
 %%%$ Included in MRIToolkit (https://github.com/delucaal/MRIToolkit) %%%%%% Alberto De Luca - alberto@isi.uu.nl $%%%%%% Distributed under the terms of LGPLv3  %%%
-%%% Distributed under the terms of LGPLv3  %%%
+
+
+
 function DW_SaveVolumeLikeNii(input_vol,ref_nii_struct,out_prefix,niigz)
     if(nargin < 4)
         niigz = 1;

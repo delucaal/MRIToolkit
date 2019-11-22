@@ -1,5 +1,7 @@
 %%%$ Included in MRIToolkit (https://github.com/delucaal/MRIToolkit) %%%%%% Alberto De Luca - alberto@isi.uu.nl $%%%%%% Distributed under the terms of LGPLv3  %%%
-%%% Distributed under the terms of LGPLv3  %%%
+
+
+
 % function [s,phasediag,P] = epg_cpmg(flipangle,etl,T1,T2,esp)
 %
 %	EPG Simulation of CPMG sequence.  First flip angle

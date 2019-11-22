@@ -1,5 +1,7 @@
 %%%$ Included in MRIToolkit (https://github.com/delucaal/MRIToolkit) %%%%%% Alberto De Luca - alberto@isi.uu.nl $%%%%%% Distributed under the terms of LGPLv3  %%%
-%%% Distributed under the terms of LGPLv3  %%%
+
+
+
 function [new_data,parts] = DW_MergeData(data1,data2)
     if(ischar(data1))
         if(exist([data1 '.nii'],'file') > 0)

@@ -1,5 +1,7 @@
 %%%$ Included in MRIToolkit (https://github.com/delucaal/MRIToolkit) %%%%%% Alberto De Luca - alberto@isi.uu.nl $%%%%%% Distributed under the terms of LGPLv3  %%%
-%%% Distributed under the terms of LGPLv3  %%%
+
+
+
 % MRIToolkit OptimizationMethods class - A. De Luca
 % Optimization methods, as grid search
 % History:

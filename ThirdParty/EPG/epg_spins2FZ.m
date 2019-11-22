@@ -1,5 +1,7 @@
 %%%$ Included in MRIToolkit (https://github.com/delucaal/MRIToolkit) %%%%%% Alberto De Luca - alberto@isi.uu.nl $%%%%%% Distributed under the terms of LGPLv3  %%%
-%%% Distributed under the terms of LGPLv3  %%%
+
+
+
 %function [FpFmZ] = epg_spins2FZ(M,trim)
 %
 %	Function converts a 3xQ array of vectors to EPG states F+,F- and Z,
@@ -29,4 +31,3 @@ Z = fft(M(3,:));			% FFT to get Z.
 FpFmZ = [Fp;Fm;Z];			% Combine into 3xQ matrix
 FpFmZ = FpFmZ(:,1:floor(Q/2)+1);	% Cut off redundant states.
 FpFmZ = epg_trim([FpFmZ],trim);		% Trim near-zero states.
-

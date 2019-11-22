@@ -1,5 +1,7 @@
 %%%$ Included in MRIToolkit (https://github.com/delucaal/MRIToolkit) %%%%%% Alberto De Luca - alberto@isi.uu.nl $%%%%%% Distributed under the terms of LGPLv3  %%%
-%%% Distributed under the terms of LGPLv3  %%%
+
+
+
 function hostName = gethostname
 %GETHOSTNAME  Get host name.
 %		HOSTNAME = GETHOSTNAME returns the name of the computer that MATLAB 

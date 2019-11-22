@@ -1,5 +1,7 @@
 %%%$ Included in MRIToolkit (https://github.com/delucaal/MRIToolkit) %%%%%% Alberto De Luca - alberto@isi.uu.nl $%%%%%% Distributed under the terms of LGPLv3  %%%
-%%% Distributed under the terms of LGPLv3  %%%
+
+
+
 %  Load NIfTI / Analyze header without applying any appropriate affine
 %  geometric transform or voxel intensity scaling. It is equivalent to
 %  hdr field when using load_untouch_nii to load dataset. Support both

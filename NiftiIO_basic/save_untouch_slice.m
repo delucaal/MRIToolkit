@@ -1,5 +1,7 @@
 %%%$ Included in MRIToolkit (https://github.com/delucaal/MRIToolkit) %%%%%% Alberto De Luca - alberto@isi.uu.nl $%%%%%% Distributed under the terms of LGPLv3  %%%
-%%% Distributed under the terms of LGPLv3  %%%
+
+
+
 %  Save back to the original image with a portion of slices that was
 %  loaded by "load_untouch_nii". You can process those slices matrix
 %  in any way, as long as their dimension is not altered.

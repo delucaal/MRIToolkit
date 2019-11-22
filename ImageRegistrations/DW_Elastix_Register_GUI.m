@@ -1,5 +1,7 @@
 %%%$ Included in MRIToolkit (https://github.com/delucaal/MRIToolkit) %%%%%% Alberto De Luca - alberto@isi.uu.nl $%%%%%% Distributed under the terms of LGPLv3  %%%
-%%% Distributed under the terms of LGPLv3  %%%
+
+
+
 function varargout = DW_Elastix_Register_GUI(varargin)
 % DW_ELASTIX_REGISTER_GUI MATLAB code for DW_Elastix_Register_GUI.fig
 %      DW_ELASTIX_REGISTER_GUI, by itself, creates a new DW_ELASTIX_REGISTER_GUI or raises the existing

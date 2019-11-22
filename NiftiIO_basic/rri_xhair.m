@@ -1,5 +1,7 @@
 %%%$ Included in MRIToolkit (https://github.com/delucaal/MRIToolkit) %%%%%% Alberto De Luca - alberto@isi.uu.nl $%%%%%% Distributed under the terms of LGPLv3  %%%
-%%% Distributed under the terms of LGPLv3  %%%
+
+
+
 %   rri_xhair: create a pair of full_cross_hair at point [x y] in
 %              axes h_ax, and return xhair struct
 %
@@ -12,7 +14,6 @@
 
 %   24-nov-2003 jimmy (jimmy@rotman-baycrest.on.ca)
 %
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 function xhair = rri_xhair(varargin)
 

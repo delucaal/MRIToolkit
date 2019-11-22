@@ -1,5 +1,7 @@
 %%%$ Included in MRIToolkit (https://github.com/delucaal/MRIToolkit) %%%%%% Alberto De Luca - alberto@isi.uu.nl $%%%%%% Distributed under the terms of LGPLv3  %%%
-%%% Distributed under the terms of LGPLv3  %%%
+
+
+
 % This class transforms the processing methods originally implemented in ExploreDTI
 % into a library, made consistent into a class.enforcing its consistency,
 % ease to use and availability for scripting / command line tools without
@@ -28,11 +30,16 @@ classdef EDTI < handle
         % Computes bmat (b-matrix) from bvals and bvecs and writes it
         % to a .txt file with the same name. Specify only the
         % bval file as input. The bvec must then be in the same folder with
-        % the same naming.
-        function bmat = b_Matrix_from_bval_bvec(bval_file)
-            E_DTI_convert_nii_dic_2_txt_exe(bval_file);
+        % the same naming. txt_file is the destination file of the b-matrix
+        % (optional, otherwise the file is created in the same directory)
+        function bmat = b_Matrix_from_bval_bvec(bval_file,txt_file)
+            E_DTI_convert_nii_dic_2_txt_exe(bval_file,txt_file);
             if(nargout > 0)
-                bmat = load([bval_file(1:end-5) '.txt']);
+                if(isempty(txt_file))
+                    bmat = load([bval_file(1:end-5) '.txt']);
+                else
+                    bmat = load(txt_file);
+                end
             end
         end
         
@@ -81,6 +88,8 @@ classdef EDTI < handle
         end
         
         % Interface to the signal drift correction. Arguments:
+        % nii_file: the input .nii file
+        % output: the output .nii file
         % target_bval: the target b-value used for the correction, default is 0
         % target_bval_tol: tolerance around the target b-value - default is 1
         % pol_degree: Degree of the polynomial used for correction (1-3), default is 2
@@ -90,27 +99,37 @@ classdef EDTI < handle
             par.bvalC = 0;
             tgt_bval = GiveValueForName(coptions,'target_bval');
             if(~isempty(tgt_bval))
-                par.bvalC = str2double(tgt_bval);
+                par.bvalC = (tgt_bval);
             end
             par.bv_thresh=1;
             tgt_thresh = GiveValueForName(coptions,'target_bval_tol');
             if(~isempty(tgt_thresh))
-                par.bv_thresh = str2double(tgt_thresh);
+                par.bv_thresh = (tgt_thresh);
             end
             par.method = 2;
             tgt_method = GiveValueForName(coptions,'pol_degree');
             if(~isempty(tgt_method))
-                par.method = str2double(tgt_method);
+                par.method = (tgt_method);
             end
             par.masking.do_it = 0;
             tgt_masking = GiveValueForName(coptions,'masking');
             if(~isempty(tgt_masking))
-                par.tgt_masking = str2double(tgt_masking);
+                par.tgt_masking = (tgt_masking);
             end
             par.show_summ_plot = 1;
             par.suff = '_sdc';
             par.masking.p1 = 5;
             par.masking.p2 = 1;
+            
+            file_in = GiveValueForName(coptions,'nii_file');
+            if(isempty(file_in))
+                error('Missing mandatory argument nii_file');
+            end 
+            
+            file_out = GiveValueForName(coptions,'output');
+            if(isempty(file_out))
+                error('Missing mandatory argument output');
+            end 
             
             param{1} = par;
             param{1}.f_in_nii = file_in;
@@ -153,9 +172,14 @@ classdef EDTI < handle
             if(isempty(file_out))
                 file_out = [file_in(1:end-4) '_FP.nii'];
             end
-            
+                        
             params.force_voxel_size = [];
             E_DTI_flip_permute_nii_file_exe(file_in,params,file_out);
+            
+            if(exist([file_in(1:end-4) '.txt'],'file'))
+                copyfile([file_in(1:end-4) '.txt'],[file_out(1:end-4) '.txt']);
+            end
+            
         end
         
         % Interface to perform the DTI/DKI fit. This will create a .mat
@@ -359,7 +383,7 @@ classdef EDTI < handle
         end
         
         % This function performs whole volume deterministic fiber
-        % tractography using the first eigenvector of the DTI fit. Possible
+        % tractography of an FOD in spherical harmonics. Possible
         % input arguments are:
         % mat_file: The ExpoloreDTI-like .mat file (for reference)
         % fod_file: The ExpoloreDTI-like FOD .nii file (in SH basis)
@@ -441,6 +465,93 @@ classdef EDTI < handle
             WholeBrainFODTractography(file_in,fod_file,parameters,filename_out);
         end
         
+        % This function performs whole volume deterministic fiber
+        % tractography of multiple FODs in spherical harmonics. Possible
+        % input arguments are:
+        % mat_file: The ExpoloreDTI-like .mat file (for reference)
+        % fod_basename: The name prefix used for the mFOD output (see the SphericalDeconvolution class) (in SH basis)
+        % output: The output tracts (must be .mat)
+        % SeedPointRes: The seeding resolution in mm, as [2 2 2] (default)
+        % StepSize: the step size in mm, as 1 (default)
+        % FODThresh: The FOD thredshold to stop tracking, as 0.1000 	(default)
+        % AngleThresh: The angle threshold to stop tracking, as 30 (default)
+        % FiberLengthRange: The mininum - maximum allowed fiber length in mm: [30 500]
+        % SeedMask: A mask to perform the seeding. If empty, the whole
+        %   volume is used
+        % InterpolationMode: how to merge the mulitple FODs. 'linear'
+        %   corresponds to mFOD-WS (each FOD weighted by its fraction and
+        %   summed), whereas 'majority' tracks the locally larger
+        %   FOD
+        function Perform_mFOD_FiberTracking(varargin)
+            coptions = varargin;
+            file_in = GiveValueForName(coptions,'mat_file');
+            if(isempty(file_in))
+                error('Need to specify the input .mat file');
+            end
+            
+            fod_basename = GiveValueForName(coptions,'fod_basename');
+            if(isempty(fod_basena))
+                error('Need to specify the input FOD basename');
+            end
+            
+            filename_out = GiveValueForName(coptions,'output');
+            if(isempty(filename_out))
+                error('Need to specify the output .mat file');
+            end
+            
+            option = GiveValueForName(coptions,'SeedPointRes');
+            if(isempty(option))
+                parameters.SeedPointRes = [2 2 2];
+            else
+                parameters.SeedPointRes = option;
+            end
+            
+            option = GiveValueForName(coptions,'StepSize');
+            if(isempty(option))
+                parameters.StepSize = 1;
+            else
+                parameters.StepSize = option;
+            end
+            
+            option = GiveValueForName(coptions,'FODThresh');
+            if(isempty(option))
+                parameters.blob_T = 0.1;
+            else
+                parameters.blob_T = option;
+            end
+            
+            option = GiveValueForName(coptions,'AngleThresh');
+            if(isempty(option))
+                parameters.AngleThresh = 30;
+            else
+                parameters.AngleThresh = option;
+            end
+            
+            option = GiveValueForName(coptions,'FiberLengthRange');
+            if(isempty(option))
+                parameters.FiberLengthRange = [30 500];
+            else
+                parameters.FiberLengthRange = option;
+            end
+            
+            option = GiveValueForName(coptions,'SeedMask');
+            if(isempty(option))
+                parameters.SeedMask = [];
+            else
+                parameters.SeedMask = option;
+            end
+            
+            option = GiveValueForName(coptions,'InterpolationMode');
+            if(isempty(option))
+                interpolation_mode = 'linear';
+            else
+                interpolation_mode = option;
+            end
+            
+            parameters.randp = 0;
+            WholeBrainTracking_mDRL_fast_exe(file_in, fod_basename, filename_out, parameters, interpolation_mode); 
+        end
+        
         % This function exports the DTI/DKI metrics contained in a .mat
         % file to Nifti format. This will export fractional anisotropy (FA),
         % mean diffusivity (MD), axial diffusivity (L1), radial diffusivity
@@ -493,6 +604,7 @@ classdef EDTI < handle
             mrt_data.bvals = bvals;
             mrt_data.bvecs = bvecs;
             mrt_data.mask = mask;
+            mrt_data.VD = VDims;
         end
         
         % This function performs the motion/eddy currents/EPI distortions
@@ -509,6 +621,7 @@ classdef EDTI < handle
         %       information. The first is useful for images with similar
         %       contrasts (e.g. T1-FA), whereas mutual information typically works well
         %       both with similar and with different contrasts.
+        % fit_mode: force a new fit_mode, ols, wls, nls, rekindle
         % output: output folder
         function PerformMocoEPI(varargin)
             global MRIToolkit;
@@ -521,8 +634,30 @@ classdef EDTI < handle
             
             basic_info = load(file_in,'par');
             if(~isfield(basic_info,'par'))
-                warning('This MAT file is missing essential information. Please, reprocess it with MRIToolkit');
-                return
+%                 warning('This MAT file is missing essential information. Please, reprocess it with MRIToolkit');
+                basic_info.par.clean_up_PIS = 1;
+                basic_info.par.ROBUST_option = 1;
+                basic_info.par.RE.rel_convergence = 1e-3;
+                basic_info.par.RE.max_iter = 20;
+                basic_info.par.RE.kappa = 6;
+                basic_info.par.DKI_constraints.do_it = 1;
+                basic_info.par.DKI_constraints.constr1 = [-Inf Inf];
+                basic_info.par.DKI_constraints.constr2 = [-Inf Inf];
+                basic_info.par.TE = 1;
+            end
+            
+            option_value = GiveValueForName(coptions,'fit_mode');
+            if(~isempty(option_value))
+                fit_mode = option_value;
+                if(strcmpi(fit_mode,'ols'))
+                    basic_info.par.TE = 1;
+                elseif(strcmpi(fit_mode,'wls'))
+                    basic_info.par.TE = 2;
+                elseif(strcmpi(fit_mode,'nls'))
+                    basic_info.par.TE = 3;
+                elseif(strcmpi(fit_mode,'rekindle'))
+                    basic_info.par.TE = 4;
+                end                    
             end
             
             par = basic_info.par;
@@ -650,7 +785,7 @@ classdef EDTI < handle
             
             if suc==0
                 if par.no_GUI==0
-                    my_msgbox('See command prompt for more info...','Error...','Modal')
+%                    my_msgbox('See command prompt for more info...','Error...','Modal')
                 end
                 return;
             end
@@ -677,6 +812,203 @@ classdef EDTI < handle
                 disp(['Total computation time was ' num2str(d) ' days.'])
             end
         end
+        
+        function SelectVolumesWithBvals(varargin)
+            coptions = varargin;
+            file_in = GiveValueForName(coptions,'nii_file');
+            if(isempty(file_in))
+                error('Need to specify the input .nii file');
+            end       
+            bvals_list = GiveValueForName(coptions,'bvals');
+            if(isempty(bvals_list))
+                error('Need to specify the bvals to keep');
+            end
+            outname = GiveValueForName(coptions,'output');
+            if(isempty(outname))
+                error('Need to specify the output .nii file');
+            end
+            use_txt = 0;
+            if(exist([file_in(1:end-4) '.bval'],'file'))
+                bval = load([file_in(1:end-4) '.bval']);
+                bvec = load([file_in(1:end-4) '.bvec']);
+            else
+                use_txt = 1;
+                bmat = load([file_in(1:end-4) '.txt']);
+                [bval,~] = EDTI.bval_bvec_from_b_Matrix(bmat);
+            end
+            IX = false(size(bval));
+            for ij=1:length(bvals_list)
+                IX(abs(round(bval)-bvals_list(ij)) <= max(1,0.1*bvals_list(ij))) = true;
+            end     
+            [data,VD] = E_DTI_read_nifti_file(file_in);
+            data = data(:,:,:,IX);
+            bval = bval(IX);
+            if(use_txt == 1)
+                bmat = bmat(IX,:);
+                save([outname(1:end-4) '.txt'],'bmat','-ascii');
+            else
+                bvec = bvec(:,IX);
+                save([outname(1:end-4) '.bvec'],'bvec','-ascii');
+                save([outname(1:end-4) '.bval'],'bval','-ascii');
+            end
+            E_DTI_write_nifti_file(data,VD,outname);
+        end
+        
+        % Gets the number of b=0s/mm2 and of dwis from a .mat or .nii
+        % Input arguments (nii_file or mat_file are exclusive):
+        % nii_file: .nii to inspect. a .txt or .bval / .bvec in the same folder and
+        %       with the same name specifying the diffusion gradients are expected.
+        % mat_file: .mat file to inspect.
+        % b0_tol: the minimum b=0s/mm2 to be treated as 0. default = 5s/mm2
+        function [nrb0s,nrdwis,b0s_indices,dwis_indices] = GetNumOfB0sDWIs(varargin)
+            coptions = varargin;
+            b0_tol = GiveValueForName(coptions,'b0_tol');
+            if(isempty(b0_tol))
+                b0_tol = 5;
+            end
+            
+            file_in = GiveValueForName(coptions,'nii_file');
+            if(~isempty(file_in))
+                if(exist([file_in(1:end-4) '.bval'],'file'))
+                    bvals = load([file_in(1:end-4) '.bval']);
+                else
+                    bvals = load([file_in(1:end-4) '.txt']);
+                    bvals = sum(bvals(:,[1 4 6]),2);
+                end
+                b0s_indices = find(bvals <= b0_tol);
+                dwis_indices = find(bvals > b0_tol);
+                nrb0s = length(b0s_indices);
+                nrdwis = length(dwis_indices);
+                return;
+            end        
+            
+            file_in = GiveValueForName(coptions,'mat_file');
+            if(~isempty(file_in))
+                bvals = load(file_in(1:end-4), 'b');
+                bvals = sum(bvals.b(:,[1 4 6]),2);
+                b0s_indices = find(bvals <= b0_tol);
+                dwis_indices = find(bvals > b0_tol);
+                nrb0s = length(b0s_indices);
+                nrdwis = length(dwis_indices);
+                return;
+            end   
+            
+        end
+       
+        % Performs the Gibbs ringing correction on b=0s/mm2 images with a
+        % TV filter. Input arguments:
+        % nii_file: .nii file to correct (sorted in ascending b-value
+        % order)
+        % output: Name of the output .nii
+        function PerformGibbsRingingCorrection(varargin)
+            coptions = varargin;
+            file_in = GiveValueForName(coptions,'nii_file');
+            if(isempty(file_in))
+                error('Missing mandatory argument nii_file');
+            end
+            output = GiveValueForName(coptions,'output');
+            if(isempty(file_in))
+                error('Missing mandatory argument output');
+            end
+            GibbsRingingCorrection(file_in,output);
+            
+            if(exist([file_in(1:end-4) '.txt'],'file'))
+                copyfile([file_in(1:end-4) '.txt'],[output(1:end-4) '.txt']);
+            end
+        end
+        
+        % Sort a .nii according to the diffusion weighting in ascending
+        % order. Input arguments:
+        % nii_file: the .nii file to sort
+        % output: the output .nii file
+        % txt_file: the b-matrix file (optional). If not specified, the
+        %   function will look for a .txt or .bval/.bvec with the same name
+        %   of the .nii
+        function SortNiiWRTbval(varargin)
+            coptions = varargin;
+            file_in = GiveValueForName(coptions,'nii_file');
+            if(isempty(file_in))
+                error('Missing mandatory argument nii_file');
+            end
+            bmat_file = GiveValueForName(coptions,'txt_file');
+            if(isempty(bmat_file))
+                bmat_file = [file_in(1:end-4) '.txt'];
+            end
+            output = GiveValueForName(coptions,'output');
+            if(isempty(output))
+                output = [file_in(1:end-4) '_sorted.nii'];
+            end            
+            
+            [data,VD] = E_DTI_read_nifti_file(varargin);
+            use_bmat = 0;
+            if(exist(bmat_file,'file'))
+                use_bmat = 1;
+            end
+            
+            if(use_bmat == 1)
+                bmat = load(bmat_file);
+                bvals = sum(bmat(:,[1 4 6]),2);
+                [~,IX] = sort(bvals,'ascend');
+                bmat = bmat(IX,:);
+                save([output(1:end-4) '.txt'],'bmat','-ascii');
+            else
+                bvals = load([file_in(1:end-4) '.bval']);
+                bvecs = load([file_in(1:end-4) '.bvec']);
+                [bvals,IX] = sort(bvals,'ascend');
+                bvecs = bvecs(:,IX);
+                save([output(1:end-4) '.bval'],'bvals','-ascii');
+                save([output(1:end-4) '.bvec'],'bvecs','-ascii');                
+            end
+            
+            data = data(:,:,:,IX);
+            E_DTI_write_nifti_file(data,VD,output);
+        end
+        
+        % Compute voxel-wise residuals using the DTI/DKI model. Input
+        % arguments:
+        % mat_file: the ExploreDTI-like .mat file to compute residuals from
+        % normalize: 0-1 divide all signals by the correspondent b = 0s/mm2
+        % output: if set, save the residuals to the specified .nii file
+        function res = AverageNormalizedResiduals(varargin)
+            coptions = varargin;
+            mat_file = GiveValueForName(coptions,'mat_file');
+            if(isempty(mat_file))
+                error('Missing mandatory argument mat_file');
+            end
+            normalize = GiveValueForName(coptions,'normalize');
+            if(isempty(normalize))
+                normalize = 1;
+            end
+            load(mat_file,'DWI','DWIB0','DT','b','VDims','KT');
+            DWI = single(E_DTI_DWI_cell2mat(DWI));
+            if(normalize == 1)
+                for iz=1:size(DWI,4)
+                    sl = DWI(:,:,:,iz)./(DWIB0+eps);
+                    sl(DWIB0 == 0) = 0;
+                    DWI(:,:,:,iz) = sl;
+                end
+            end
+            DT = E_DTI_DWI_cell2mat(DT);
+            siz = size(DT);
+            if(exist('KT','var') < 1 || isempty(KT))
+                DT = reshape(DT,siz(1)*siz(2)*siz(3),size(DT,4));
+                pred = exp(DT*(-b'));
+            end
+            pred = reshape(pred,[siz(1:3) size(b,1)]);
+            if(normalize == 0)
+                for iz=1:size(pred,4)
+                    pred(:,:,:,iz) = DWIB0.*pred(:,:,:,iz);
+                end
+            end
+            res = mean(abs(DWI-pred),4);
+            
+            output = GiveValueForName(coptions,'output');
+            if(~isempty(output))
+                E_DTI_write_nifti_file(res,VDims,output);
+            end
+            
+        end
+        
     end
 end
 
@@ -770,6 +1102,24 @@ end
 
 warning on all
 end
+
+% From ExploreDTI: helper function for masking
+function M = E_DTI_mean_DWI(DWI, NrB0)
+
+if ~iscell(DWI)
+   DWI = E_DTI_DWI_mat2cell(DWI); 
+end
+
+pp = size(DWI{1});
+M = repmat(double(0),pp);
+
+for i=NrB0+1:length(DWI)
+    M = M + double(DWI{i});
+end
+
+M = M/(length(DWI)-NrB0);
+
+end    
 
 % From ExploreDTI: helper function for Motion/Eddy/EPI correction
 function suc = E_DTI_do_initial_check_reg_tra_files(E_path,T_path)
@@ -2086,13 +2436,11 @@ if ispc
     
 else
     
-%     %%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %      par.fixed_SMEC_fn = replace(par.fixed_SMEC_fn,' ','\ ');
 %      par.fixed_SMEC_fn_mask = replace(par.fixed_SMEC_fn_mask,' ','\ ');
 %      f_moving = replace(f_moving,' ','\ ');
 %      dir_temp_i = replace(dir_temp_i,' ','\ ');
 %      par.Par_SMEC = replace(par.Par_SMEC,' ','\ ');
-%     %%%%%%%%%%%%%%%%%%%%%%%%%%%%
     
     [dir_e,el] = fileparts(par.E_path);
     sys_c = ['./' el ' -f ' par.fixed_SMEC_fn ...
@@ -2128,12 +2476,10 @@ if ispc
     
 else
     
-%     %%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %     dir_temp_i = replace(dir_temp_i,' ','\ ');
 %     dir_temp_i = ['""' dir_temp_i '""'];
 %     tra_file = replace(tra_file,' ','\ ');
 %     f_moving = replace(f_moving,' ','\ ');
-%     %%%%%%%%%%%%%%%%%%%%%%%%%%%%
     
     [dir_e,tra] = fileparts(par.T_path);
     sys_c = ['./' tra ' -in ' f_moving ...
@@ -2426,9 +2772,11 @@ if par.R2D.type==0
 elseif par.R2D.type==1
     FN = par.R2D.FN;
 else
-    [Fol,Fil] = fileparts(f_in);
+%     [Fol,Fil] = fileparts(f_in);
+    [Fol,Fil] = fileparts(par.R2D.FN);
     if(~isempty(Fol))
-        FN = [Fol filesep Fil par.R2D.FN];
+%         FN = [Fol filesep Fil par.R2D.FN];
+        FN = par.R2D.FN;
     else
         FN = fullfile(pwd,par.R2D.FN);
     end
@@ -2680,6 +3028,24 @@ for k = 1:numDims
   idx{k} = [onesVector 1:M M*onesVector];
 end
 b = a(idx{:});
+end
+
+% From ExploreDTI: Helper function 
+function B = E_DTI_DT_cell2mat(A)
+
+if iscell(A)
+    B = repmat(A{1},[1 1 1 9]);
+    B(:,:,:,2) = A{2};
+    B(:,:,:,3) = A{3};
+    B(:,:,:,4) = A{2};
+    B(:,:,:,5) = A{4};
+    B(:,:,:,6) = A{5};
+    B(:,:,:,7) = A{3};
+    B(:,:,:,8) = A{5};
+    B(:,:,:,9) = A{6};
+else
+    B=A;
+end
 end
 
 % From ExploreDTI: read .nii files in the ExploreDTI format
@@ -3056,10 +3422,14 @@ end
 end
 
 % From ExploreDTI: compute b-matrix
-function E_DTI_convert_nii_dic_2_txt_exe(bvalf)
+function E_DTI_convert_nii_dic_2_txt_exe(bvalf,outname)
 
 bvecf = [bvalf(1:end-4) 'bvec'];
-bmf = [bvalf(1:end-4) 'txt'];
+if(nargin < 2 || isempty(outname))
+    bmf = [bvalf(1:end-4) 'txt'];
+else
+    bmf = outname;
+end
 
 if exist(bvecf,'file')==2
     
@@ -3205,6 +3575,27 @@ mask = imdilate(mask,se)>0;
 for i=1:size(mask,3)
     mask(:,:,i) = imfill(mask(:,:,i),'holes');
 end
+end
+
+% From ExploreDTI: masking based on image-processing
+function mask = E_DTI_Create_Mask_From_DWI_enhanced(DWI,NrB0,tune_1,tune_2,a)
+
+if tune_1==0 && tune_2==0
+    mask = true(size(DWI{1}));
+    return;
+end
+
+mask1 = E_DTI_Create_Mask_From_DWI_enhanced_IND(DWI{1},tune_1,a);
+m2 = E_DTI_mean_DWI(DWI, NrB0);
+mask2 = E_DTI_Create_Mask_From_DWI_enhanced_IND(m2,tune_2,a);
+
+mask = or(mask1,mask2);
+
+if sum(double(mask(:)))==0
+    disp('Warning: mask was too small... omitting mask instead.')
+    mask = true(size(DWI{1}));
+end
+    
 end
 
 % From ExploreDTI: signal drift correction
@@ -3402,7 +3793,7 @@ end
 if par.show_summ_plot>0
     
     h_k = figure('Name','Drift correction','NumberTitle' ,'off','Color','w','visible','off');
-    E_DTI_Set_Fig_Icon(h_k);
+%     E_DTI_Set_Fig_Icon(h_k);
     plot(F,b0s,'or','MarkerSize',4,'Markerfacecolor',[0.8 0.8 0.8])
     hold on;
     if exist('dws','var')==1
@@ -3678,6 +4069,13 @@ for i=1:length(Q)
     dummy(mask) = ~Q{i};
     Bm(:,:,:,i) = dummy;
 end
+end
+
+% From ExploreDTI: helper function (cosine angle)
+function a = angle2(v1, v2)
+% v1 = normalize(v1);
+% v2 = normalize(v2); 
+a = 180/pi*real(acos(abs(sum(v1.*v2,1))));
 end
 
 % From ExploreDTI: Fractional Anisotropy
@@ -5227,7 +5625,7 @@ clear DT PD;
 
 V = [squeeze(V(1,1,:))'; squeeze(V(2,1,:))'; squeeze(V(3,1,:))'];
 
-dummy = E_DTI_FrAn(D(1,:),D(2,:),D(3,:))*sqrt(3);
+dummy = FrAn_calc(D(1,:),D(2,:),D(3,:))*sqrt(3);
 
 dummy(dummy>sqrt(3)) = sqrt(3);
 dummy(dummy<0) = 0;
@@ -5282,6 +5680,38 @@ for i=1:L
     t_Ang{i} = real(t_Ang{i});
     
 end
+end
+
+% From ExploreDTI: helper for DTI-based tractography
+function Tract_dir = E_DTI_Get_tract_dir(Tracts)
+
+if length(Tracts)==0
+    Tract_dir = cell(1,0);
+end
+
+for i=1:length(Tracts)
+    
+    Tract_dir{i} = Tracts{i};
+    
+    if size(Tracts{i},1)>2
+        dummy = Tract_dir{i}(2:end,:)-Tract_dir{i}(1:end-1,:);
+        Tract_dir{i}(2:end-1,:) = (dummy(1:end-1,:)+dummy(2:end,:))/2;
+        Tract_dir{i}(1,:) = dummy(1,:);
+        Tract_dir{i}(end,:) = dummy(end,:);
+    else
+        dummy = Tract_dir{i}(2,:)-Tract_dir{i}(1,:);
+        Tract_dir{i}(1,:) = dummy;
+        Tract_dir{i}(2,:) = dummy;
+    end
+    
+    
+    NT = sqrt(sum(Tract_dir{i}.^2,2));
+    
+    Tract_dir{i} = Tract_dir{i}./[NT NT NT];
+    
+    
+end
+    
 end
 
 % From ExploreDTI: DTI based fiber tractography - Adapted
@@ -5445,24 +5875,6 @@ dwi = zeros(length(DWI),sum(fa_mask(:)),'single');
 for i=1:length(DWI)
     dwi(i,:) = single(DWI{i}(fa_mask(:))');
 end
-end
-
-% From ExploreDTI: converts cartesian coordinates to spherical
-function S = c2s(C)
-% Originally written from Ben Jeurissen under the supervision of Alexander
-% Leemans
-norm = sqrt(sum(C.^2, 2));
-S(:,1) = acos(C(:,3)./norm);
-S(:,2) = atan2(C(:,2), C(:,1));
-end
-
-% From ExploreDTI: converts spherical coordinates to cartesian
-function C = s2c(S)
-% Originally written from Ben Jeurissen under the supervision of Alexander
-% Leemans
-C = [ cos(S(:,2)).*sin(S(:,1)), ...
-    sin(S(:,2)).*sin(S(:,1)), ...
-    cos(S(:,1)) ];
 end
 
 % From ExploreDTI: creates an RF given some initial parameters
@@ -5728,7 +6140,6 @@ dwi = dwi(NrB0+1:end,:);
 grad = grad(NrB0+1:end,1:3);
 
 % dwi in SH
-%%%%%%%%%%%%%%%%%%%% sh = SH(grad,lmax);
 sh = SH(lmax,grad);
 
 dwi_sh = sh.coef(dwi);
@@ -5762,7 +6173,6 @@ for i=1:it
     csd_fod_sh = csd.deconv(dwi_sh);
     
     % peak extraction
-    %%%%%%%%%%     [dirs, vals] = SHPrecomp.all_peaks(csd_fod_sh, init_dir, 0, 2);
     [dirs_, vals_] = SHPrecomp.all_peaks(csd_fod_sh, 0, 2);
     
     vals = zeros(2,length(vals_));
@@ -6559,7 +6969,7 @@ for i=1:length(LS)
         end
         eigval = abs(eigval);
         eigval = sort(eigval,4,'descend');
-        data_v{i} = E_DTI_FrAn(eigval(:,:,:,1),eigval(:,:,:,2),eigval(:,:,:,3));
+        data_v{i} = FrAn_calc(eigval(:,:,:,1),eigval(:,:,:,2),eigval(:,:,:,3));
         
         fns{i} = LE{1};
         
@@ -6818,7 +7228,7 @@ for i=1:length(LS)
         eigval = abs(eigval);
         eigval = sort(eigval,4,'descend');
         
-        FA = E_DTI_FrAn(eigval(:,:,:,1),eigval(:,:,:,2),eigval(:,:,:,3));
+        FA = FrAn_calc(eigval(:,:,:,1),eigval(:,:,:,2),eigval(:,:,:,3));
         FE = FE(:,:,:,[2 1 3]);
         data_v{i} = abs(FE).*(repmat(FA,[1 1 1 3]));
         fns{i} = LE{19};
@@ -6983,7 +7393,7 @@ for i=1:length(LS)
         eigval = abs(eigval);
         eigval = sort(eigval,4,'descend');
         
-        FA = E_DTI_FrAn(eigval(:,:,:,1),eigval(:,:,:,2),eigval(:,:,:,3));
+        FA = FrAn_calc(eigval(:,:,:,1),eigval(:,:,:,2),eigval(:,:,:,3));
         clear eigval;
         
         FA_ = FA;
@@ -7477,4 +7887,321 @@ for x = xrange
     end
 end
 seedPoint = seedPoint(:,1:i);
+end
+
+% This function is used to track multiple FODs (mFOD). Written by A. De
+% Luca
+function WholeBrainTracking_mDRL_fast_exe(f_in, suffix, f_out, p, use_linear_or_majority)
+
+if(strcmp(use_linear_or_majority,'linear'))
+    use_linear_or_majority = 1;
+elseif(strcmp(use_linear_or_majority,'majority'))
+    use_linear_or_majority = 2;
+else
+    error('Unexpected interpolation.');
+end
+
+disp('Performing mFOD tracking (FOD interpolation) for file:')
+disp(['' f_in ''])
+
+disp('Calculating FOD...')
+
+[fractions,VD] = E_DTI_read_nifti_file([f_in suffix '_fractions.nii']);
+[~,IX] = max(fractions(:,:,:,:),[],4);
+
+CSD_FOD = [];
+for ij=1:size(fractions,4)
+    VOL = E_DTI_read_nifti_file([f_in suffix '_CSD_FOD_' num2str(ij) '.nii']);
+    if(ij == 1)
+        CSD_FOD = zeros([size(VOL) size(fractions,4)]);
+    end
+    if(isempty(VOL))
+        disp(['Found ' num2str(ij-1) ' FODs']);
+        CSD_FOD = CSD_FOD(:,:,:,:,1:ij-1);
+        break;
+    end
+    CSD_FOD(:,:,:,:,ij) = VOL;
+end
+
+to_eliminate = size(fractions,4);
+if(to_eliminate == size(fractions,4))
+    % there is an isotropic compartment
+    BadVoxels = fractions(:,:,:,end) > 0.9;%
+    %     BadVoxels = IX == to_eliminate;
+    for ij=1:size(CSD_FOD,5)
+        for ih=1:size(CSD_FOD,4)
+            V = CSD_FOD(:,:,:,ih,ij);
+            V(BadVoxels) = 0;
+            CSD_FOD(:,:,:,ih,ij) = V;
+        end
+    end
+end
+
+[sx,sy,sz,sh,sf] = size(CSD_FOD);
+CSD_FOD = reshape(CSD_FOD,sx*sy*sz,sh,sf);
+[~,IX] = max(fractions(:,:,:,1:sf),[],4);
+
+if(use_linear_or_majority == 1)
+    
+    % Save a linterp FOD
+    CSD_FOD_tmp = zeros([sx*sy*sz sh]);
+    fr_col = reshape(fractions(:,:,:,1:sf),sx*sy*sz,sf);
+    for ij=1:sf
+        the_norm = 1;%prctile(CSD_FOD(fr_col(:,ij)>0.7,1,1),95)/prctile(CSD_FOD(fr_col(:,1)>0.7,1,ij),95);
+        the_norm = max(nanmean(CSD_FOD(IX==1,:,1)))/max(nanmean(CSD_FOD(IX==ij,:,ij)));
+        for ik=1:size(fr_col,1)
+            if(fr_col(ik,ij) == 0 || CSD_FOD(ik,1,ij) == 0 || ~isfinite(CSD_FOD(ik,1,ij)))
+                continue
+            end
+            CSD_FOD_tmp(ik,:) = CSD_FOD_tmp(ik,:) + fr_col(ik,ij)*CSD_FOD(ik,:,ij)*the_norm;
+        end
+    end
+    CSD_FOD_tmp = reshape(CSD_FOD_tmp,sx,sy,sz,sh);
+
+    FOD_1 = CSD_FOD_tmp(:,:,:,1);
+    FA_k = load(f_in,'FA');
+    ratio = 0.1/mean(FOD_1(FA_k.FA(:)>0.6));
+%     disp(['Ratio is: ' num2str(ratio)]);
+    CSD_FOD_tmp = CSD_FOD_tmp*ratio;
+    
+    E_DTI_write_nifti_file(CSD_FOD_tmp,VD,[f_in suffix '_CSD_FOD_linterp.nii']);
+    
+elseif(use_linear_or_majority == 2)
+    
+    % Save a majority FOD
+    CSD_FOD_tmp = zeros([sx*sy*sz sh]);
+    fr_col = reshape(fractions(:,:,:,1:sf),sx*sy*sz,sf);
+    the_norm = ones(sf,1);
+    
+    for ij=1:sf
+        the_norm(ij) = 1;%prctile(CSD_FOD(fr_col(:,ij)>0.7,1,1),95)/prctile(CSD_FOD(fr_col(:,1)>0.7,1,ij),95);
+    end
+    
+    for ij=1:sf
+        SEL = IX == ij;
+        CSD_FOD_tmp(SEL,:) = CSD_FOD(SEL,:,ij)*the_norm(ij);
+    end
+    CSD_FOD_tmp = reshape(CSD_FOD_tmp,sx,sy,sz,sh);
+    
+    FOD_1 = CSD_FOD_tmp(:,:,:,1);
+    FA_k = load(f_in,'FA');
+    ratio = 0.1/mean(FOD_1(FA_k.FA(:)>0.6));
+%     disp(['Ratio is: ' num2str(ratio)]);
+    CSD_FOD_tmp = CSD_FOD_tmp*ratio;
+    
+    E_DTI_write_nifti_file(CSD_FOD_tmp,VD,[f_in suffix '_CSD_FOD_majority.nii']);
+    
+else
+    disp('Unsupported');
+    return;
+end
+
+WholeBrainFODTractography(f_in,CSD_FOD_tmp,p,f_out)
+
+end
+
+% Wraooer around the Gibbs ringing correction
+function GibbsRingingCorrection(fnp_in,fnp_out)
+
+try
+    txt_file = load([fnp_in(1:end-4) '.txt']);
+catch
+    error(['Cannot find a .txt gradient file associated to ' fnp_in]);
+end
+
+% bval = sum(txt_file(:,[1 4 6]),2);
+[~,~,IX] = EDTI.GetNumOfB0sDWIs('nii_file',fnp_in);
+% IX = find(bval < 1);
+IXd = diff(IX);
+if(~isempty(IXd) && any(IXd) ~= 1)
+    error('The .nii file should be sorted per ascending b-value');
+end
+
+nrb0 = EDTI.GetNumOfB0sDWIs('nii_file',fnp_in);
+
+parameters.NrB0 = nrb0;
+parameters.lambda = 100;
+parameters.iter = 100;
+parameters.ss = 0.01;
+parameters.ip = 3;
+
+parameters.ext = '';
+
+
+E_DTI_Gibbs_Ringing_removal_with_TV_exe(fnp_in,fnp_out,parameters);
+
+end
+
+% From ExploreDTI: perform Gibbs ringing correction
+function suc  = E_DTI_Gibbs_Ringing_removal_with_TV_exe(f_in,f_out,parameters)
+
+suc = 1;
+
+try
+    [DWI, VDims] = E_DTI_read_nifti_file(f_in);
+catch
+    suc = 0;
+    disp('Could not load file:')
+    disp(f_in)
+    return;
+end
+
+if ndims(DWI)~=4 && ndims(DWI)~=3
+    suc = 0;
+    disp('Error for file:')
+    disp(f_in)
+    disp('Number of dimensions should be 3 or 4!')
+    return;
+end
+
+DWI = E_DTI_DWI_mat2cell(DWI);
+
+DWI(1:parameters.NrB0) = E_DTI_Gibbs_Ringing_removal_TV(DWI(1:parameters.NrB0),...
+    parameters.lambda,parameters.iter,parameters.ss,parameters.ip);
+
+DWI = E_DTI_DWI_cell2mat(DWI);
+
+try
+    E_DTI_write_nifti_file(DWI,VDims,f_out);
+catch
+    suc = 0;
+    disp('Error for file:')
+    disp(f_in)
+    disp('Probably memory issues...')
+    return;
+end
+
+end
+
+% From ExploreDTI: The actual gibbs ringing correction
+function B0 = E_DTI_Gibbs_Ringing_removal_TV(B0,lambda,timeSteps,stepsize,recon)
+
+cla = class(B0{1});
+
+for i=1:length(B0)
+    B0{i}=double(B0{i});
+end
+
+if recon==1
+    for i=1:length(B0); 
+        B0{i} = permute(B0{i},[3 2 1]);
+    end
+elseif recon==2
+    for i=1:length(B0); 
+        B0{i} = permute(B0{i},[1 3 2]);
+    end    
+end
+
+parfor i=1:length(B0)
+    for j=1:size(B0{i},3)
+        dummy = double(B0{i}(:,:,j));
+        M = max(dummy(:));
+        dummy = dummy/M;
+        dummy = digitalTotalVariationFilter_2d(dummy,lambda,timeSteps,stepsize);
+        B0{i}(:,:,j) = dummy*M;
+    end
+end
+
+if recon==1
+    for i=1:length(B0); 
+        B0{i} = permute(B0{i},[3 2 1]);
+    end
+elseif recon==2
+    for i=1:length(B0); 
+        B0{i} = permute(B0{i},[1 3 2]);
+    end    
+end
+
+for i=1:length(B0) 
+    if strcmp(cla,'int16')
+        B0{i} = int16(round(B0{i}));
+    elseif strcmp(cla,'uint16')
+        B0{i} = uint16(round(B0{i}));
+    elseif strcmp(cla,'single')
+        B0{i} = single(B0{i});
+    end
+end
+
+end
+
+% From ExploreDTI: Total variation filter
+function v = digitalTotalVariationFilter_2d(u0,lambda,number_iter,stepsize)
+
+% DIGITALTOTALVARIATIONFILTER_2D
+%
+% References: (1) Digitized {PDE} Method for Data Restoration. Ch. 16, p. 751 to 771, 
+%                 in Analytic-Computational Methods in Applied Mathematics (2000), G. Anastassiou editor
+%             (2) Digital Total Variation Filtering as Postprocessing for Pseudospectral Methods for Conservation Laws,
+%                 Numerical Algorithms, vol. 41, p. 17-33, 2006
+% Inputs
+%       u0[][]     physical space function values (not spectral coefficients)
+%      lambda      fitting parameter
+%   number_iter      number of time marching steps
+% Output
+%        v[][]     the postprocessed function values
+% Called by:
+%   1) postProcessDriver2d.m
+% Notes: 
+%   uses time-marching (Euler's method) to advance the nonlinear restoration to a steady state 
+%   uses a 4 point neighborhood
+% Last modified: October 17, 2007
+
+
+a = 1e-4;
+a = a^2;
+N = length(u0(:,1));
+M = length(u0(1,:));
+v = u0; U = u0;
+
+dt = stepsize;
+
+k = 1;
+s = zeros(N,M);
+
+while k <= number_iter
+    
+    i = 2:N-1;
+    j = 2:M-1;
+    
+    s(i,j) = sqrt( (U(i,j-1)-U(i,j)).^2 + (U(i,j+1)-U(i,j)).^2 + (U(i-1,j)-U(i,j)).^2 + (U(i+1,j)-U(i,j)).^2 + a );
+    i=1;
+    s(1,j) = sqrt( (U(i,j-1)-U(i,j)).^2 + (U(i,j+1)-U(i,j)).^2 +          0           + (U(i+1,j)-U(i,j)).^2 + a );
+    i = 2:N-1; j=M;
+    s(i,M) = sqrt( (U(i,j-1)-U(i,j)).^2 +          0           + (U(i-1,j)-U(i,j)).^2 + (U(i+1,j)-U(i,j)).^2 + a );
+    i=N; j = 2:M-1;
+    s(N,j) = sqrt( (U(i,j-1)-U(i,j)).^2 + (U(i,j+1)-U(i,j)).^2 + (U(i-1,j)-U(i,j)).^2 +          0           + a );
+    i = 2:N-1; j=1;
+    s(i,1) = sqrt(          0           + (U(i,j+1)-U(i,j)).^2 + (U(i-1,j)-U(i,j)).^2 + (U(i+1,j)-U(i,j)).^2 + a );
+    i=1; j=1;
+    s(1,1) = sqrt(          0           + (U(i,j+1)-U(i,j)).^2 +          0           + (U(i+1,j)-U(i,j)).^2 + a );
+    i=N; j=M;
+    s(N,M) = sqrt( (U(i,j-1)-U(i,j)).^2 +          0           + (U(i-1,j)-U(i,j)).^2 +          0           + a );
+    i=N; j=1;
+    s(N,1) = sqrt(          0           + (U(i,j+1)-U(i,j)).^2 + (U(i-1,j)-U(i,j)).^2 +          0           + a );
+    i=1; j=M;
+    s(1,M) = sqrt( (U(i,j-1)-U(i,j)).^2 +          0           +          0           + (U(i+1,j)-U(i,j)).^2 + a );
+    
+    %        v = euler(U,k*dt,dt,@F);
+    
+    
+    i=2:N-1;
+    j=2:M-1;
+    
+    v(i,j) = U(i,j) + dt*( ( U(i+1,j) - U(i,j) ).*( 1 + s(i,j)./s(i+1,j) ) + ...
+        ( U(i-1,j) - U(i,j) ).*( 1 + s(i,j)./s(i-1,j) ) + ...
+        ( U(i,j+1) - U(i,j) ).*( 1 + s(i,j)./s(i,j+1) ) + ...
+        ( U(i,j-1) - U(i,j) ).*( 1 + s(i,j)./s(i,j-1) ) - ...
+        lambda.*s(i,j).*( U(i,j) - u0(i,j) )                   );
+    %          end
+    %        end
+    
+    v(1:N,1) = u0(1:N,1);
+    v(1:N,M) = u0(1:N,M);
+    v(1,1:M) = u0(1,1:M);
+    v(N,1:M) = u0(N,1:M);
+    
+    k = k+1;  U = v;
+    
+end  % while
+
 end

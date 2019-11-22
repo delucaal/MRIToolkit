@@ -1,5 +1,7 @@
 %%%$ Included in MRIToolkit (https://github.com/delucaal/MRIToolkit) %%%%%% Alberto De Luca - alberto@isi.uu.nl $%%%%%% Distributed under the terms of LGPLv3  %%%
-%%% Distributed under the terms of LGPLv3  %%%
+
+
+
 function res = existfile(fileName)
 %EXISTFILE  Check for file existence.
 %	  RES = EXISTFILE(FILENAME) returns true if the file FILENAME is existing
@@ -29,13 +31,11 @@ function res = existfile(fileName)
 % 
 %   See also EXIST.
 
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % persistent warnmex
 % if isempty(warnmex)
 % 	fprintf('This is the m-file %s.m, not the mex-file! Type "mex existfile.c" to compile.\n', mfilename);
 % 	warnmex = 1;
 % end
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 % check input arguments
 res = exist(fileName, 'file') ~= 0;

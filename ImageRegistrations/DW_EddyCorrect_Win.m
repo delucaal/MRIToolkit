@@ -1,5 +1,7 @@
 %%%$ Included in MRIToolkit (https://github.com/delucaal/MRIToolkit) %%%%%% Alberto De Luca - alberto@isi.uu.nl $%%%%%% Distributed under the terms of LGPLv3  %%%
-%%% Distributed under the terms of LGPLv3  %%%
+
+
+
 function [yaw,roll,pitch,traslx,trasly,traslz,determinant] = DW_EddyCorrect_Win(dataname,correction_method,rotate_bvecs,reference_volume,show_plot,parameters_file)
 if(nargin < 2)
     correction_method = 'eddy_correct';

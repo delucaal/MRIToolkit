@@ -1,5 +1,7 @@
 %%%$ Included in MRIToolkit (https://github.com/delucaal/MRIToolkit) %%%%%% Alberto De Luca - alberto@isi.uu.nl $%%%%%% Distributed under the terms of LGPLv3  %%%
-%%% Distributed under the terms of LGPLv3  %%%
+
+
+
 function printTensor(tensor,order)
 %-fanDTasia ToolBox------------------------------------------------------------------
 % This Matlab script is part of the fanDTasia ToolBox: a Matlab library for Diffusion 

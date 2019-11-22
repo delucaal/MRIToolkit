@@ -1,5 +1,7 @@
 %%%$ Included in MRIToolkit (https://github.com/delucaal/MRIToolkit) %%%%%% Alberto De Luca - alberto@isi.uu.nl $%%%%%% Distributed under the terms of LGPLv3  %%%
-%%% Distributed under the terms of LGPLv3  %%%
+
+
+
 classdef CSD
 % Originally written from Ben Jeurissen (ben.jeurissen@uantwerpen.be)
 % under the supervision of Alexander Leemans (a.leemans@umcutrecht.nl)

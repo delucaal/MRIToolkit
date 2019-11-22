@@ -1,5 +1,7 @@
 %%%$ Included in MRIToolkit (https://github.com/delucaal/MRIToolkit) %%%%%% Alberto De Luca - alberto@isi.uu.nl $%%%%%% Distributed under the terms of LGPLv3  %%%
-%%% Distributed under the terms of LGPLv3  %%%
+
+
+
 function resultCell = startmulticoremaster(functionHandleCell, parameterCell, settings)
 %STARTMULTICOREMASTER  Start multicore master process.
 %   RESULTCELL = STARTMULTICOREMASTER(FHANDLE, PARAMETERCELL)
@@ -198,9 +200,7 @@ deletewithsemaphores(existingMulticoreFiles);
 dateStr = sprintf('%04d%02d%02d%02d%02d%02d', round(clock));
 parameterFileNameTemplate = fullfile(multicoreDir, sprintf('parameters_%s_XX.mat', dateStr));
 
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % generate parameter files %
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 % Initialize waitbar again
 multicoreWaitbar('init1', nrOfFiles);
@@ -264,9 +264,7 @@ firstRun = true;
 masterIsWorker = settings.masterIsWorker;
 while 1 % this while-loop will be left if all work is done
   if masterIsWorker && ~firstRun
-    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     % work down the file list from top %
-    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     if debugMode
       fprintf('********** 1. Working from top to bottom (file nr %d)\n', lastFileNrMaster);
     end
@@ -463,9 +461,7 @@ while 1 % this while-loop will be left if all work is done
 
   end % if masterIsWorker
 
-  %%%%%%%%%%%%%%%%%%%%%%%%%%%%%
   % Check if all work is done %
-  %%%%%%%%%%%%%%%%%%%%%%%%%%%%%
   % (lastFileNrMaster - 1) is the number of the file/job that was last computed/loaded when
   % working down the list from top to bottom.
   % (lastFileNrSlave + 1) is the number of the file/job that was last computed/loaded when
@@ -479,9 +475,7 @@ while 1 % this while-loop will be left if all work is done
     break
   end
 
-  %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
   % work down the file list from bottom to top and collect results %
-  %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
   if debugMode
     fprintf('********** 2. Working from bottom to top (file nr %d)\n', lastFileNrSlave);
   end
@@ -757,9 +751,7 @@ while 1 % this while-loop will be left if all work is done
     end % if resultLoaded
   end % while 1
 
-  %%%%%%%%%%%%%%%%%%%%%%%%%%%%%
   % Check if all work is done %
-  %%%%%%%%%%%%%%%%%%%%%%%%%%%%%
   % (see comment between the two while-loops)
   if (lastFileNrMaster - 1) + 1 == (lastFileNrSlave + 1)
     % all results have been collected, leave big while-loop
@@ -795,9 +787,7 @@ end
 % Ask user for feedback
 %userfeedback('Multicore', mfilename, 50, 30);
 
-% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % % Cancel processing by callback %
-% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % I don't like using nested functions, but they are useful for handling
 % callbacks.
   function multicoreCancel1
@@ -850,7 +840,6 @@ end
 
 end % function startmulticoremaster
 
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 function [result, resultLoaded] = loadResultFile(resultFileName, showWarnings)
 
 % reset warnings and errors
@@ -896,7 +885,6 @@ end
 
 end % function
 
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 function multicoreWaitbar(command, varargin)
 %MULTICOREWAITBAR  Handle multicore waitbar.
 
@@ -1067,7 +1055,6 @@ end
 
 end % function
 
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 function cancelCallback(hObject, eventdata, multicoreCancelHandle) %#ok
 %CANCELCALLBACK  Cancel multicore computation on user request.
 %   This callback function is used to avoid having to use "hObject" and
@@ -1081,7 +1068,6 @@ multicoreCancelHandle();
 
 end % function
 
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 function timeString = formattime(time, mode)
 %FORMATTIME  Return formatted time string.
 %  STR = FORMATTIME(TIME) returns a formatted time string for the given
@@ -1215,7 +1201,6 @@ end
 end % function
 
 
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 function fHandles = getFunctionHandles(functionHandleCell, index)
   
   if isa(functionHandleCell, 'function_handle')
@@ -1240,7 +1225,6 @@ function fHandles = getFunctionHandles(functionHandleCell, index)
 
 end % function
 
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 function settings = combineSettings(settings, settingsDefault)
 
 % get settings

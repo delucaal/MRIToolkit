@@ -1,5 +1,7 @@
 %%%$ Included in MRIToolkit (https://github.com/delucaal/MRIToolkit) %%%%%% Alberto De Luca - alberto@isi.uu.nl $%%%%%% Distributed under the terms of LGPLv3  %%%
-%%% Distributed under the terms of LGPLv3  %%%
+
+
+
 function semaphore = setfilesemaphore(fileList)
 %SETFILESEMAPHORE  Set semaphore for file access.
 %   SEMAPHORE = SETFILESEMAPHORE(FILENAME) sets a semaphore to get
@@ -80,9 +82,7 @@ for fileNr = 1:nOfFiles
     semaphoreExisting = false;
 
     if ~isempty(dirStruct)
-      %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
       % other semaphore file existing %
-      %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
       % check if any existing semaphore file has to be respected
       for k=1:length(dirStruct)
@@ -140,9 +140,7 @@ for fileNr = 1:nOfFiles
     end % if ~isempty(dirStruct)
 
     if ~semaphoreExisting
-      %%%%%%%%%%%%%%%%%%%%%%%%%%
       % set own semaphore file %
-      %%%%%%%%%%%%%%%%%%%%%%%%%%
       for attemptNr = 1:10
         % build semaphore file name
         [randomNr, randomStr] = generaterandomnumber; %#ok
@@ -203,7 +201,6 @@ for fileNr = 1:nOfFiles
   end % while 1
 end % for fileNr = 1:nOfFiles
 
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 function [randomNr, randomStr] = generaterandomnumber
 %GENERATERANDOMNUMBER
 %   in very unlikely cases, it might happen that the random states of rand

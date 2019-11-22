@@ -1,5 +1,7 @@
 %%%$ Included in MRIToolkit (https://github.com/delucaal/MRIToolkit) %%%%%% Alberto De Luca - alberto@isi.uu.nl $%%%%%% Distributed under the terms of LGPLv3  %%%
-%%% Distributed under the terms of LGPLv3  %%%
+
+
+
 %BIPOLAR returns an M-by-3 matrix containing a blue-red colormap, in
 %	in which red stands for positive, blue stands for negative, 
 %	and white stands for 0.

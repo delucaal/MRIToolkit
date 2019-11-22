@@ -1,5 +1,7 @@
 %%%$ Included in MRIToolkit (https://github.com/delucaal/MRIToolkit) %%%%%% Alberto De Luca - alberto@isi.uu.nl $%%%%%% Distributed under the terms of LGPLv3  %%%
-%%% Distributed under the terms of LGPLv3  %%%
+
+
+
 function stringOut = textwrap2(stringIn, nOfColumns)
 %TEXTWRAP2  Wrap text string.
 %		OUT = TEXTWRAP2(IN, COL) wraps the given text string IN to fit into COL

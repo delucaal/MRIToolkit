@@ -1,5 +1,7 @@
 %%%$ Included in MRIToolkit (https://github.com/delucaal/MRIToolkit) %%%%%% Alberto De Luca - alberto@isi.uu.nl $%%%%%% Distributed under the terms of LGPLv3  %%%
-%%% Distributed under the terms of LGPLv3  %%%
+
+
+
 % Spherical deconvolution class - including GRL and mFOD
 % A. De Luca - UMC Utrecht - 28/10/2019 - alberto@isi.uu.nl -
 % alberto.deluca.06@gmail.com
@@ -20,6 +22,7 @@ classdef SphericalDeconvolution < handle
         HRKernel;
         nDirections;
         NN_L, NN_H;
+        data_size;
     end
     
     methods
@@ -47,6 +50,7 @@ classdef SphericalDeconvolution < handle
             for ij=1:size(InputPairs,1)
                 if(strcmpi(InputPairs{ij,1},'data'))
                     obj.data = InputPairs{ij,2};
+                    obj.data_size = size(obj.data.img);
                 end
             end
         end
@@ -90,6 +94,23 @@ classdef SphericalDeconvolution < handle
             obj.rf_models(end+1) = {'ADC'};
         end
         
+        % Sets the target data for deconvolution. Please use this function
+        % and do not assign the property directly.
+        function obj = setData(obj,data)
+            obj.data = data;
+            obj.data_size = size(data.img);
+            obj.LRKernel = [];
+            obj.HRKernel = [];
+            obj.n_anisotropic = 0;
+            obj.n_isotropic = 0;
+        end
+        
+        % After PerformDeconv is called, the data might be in vectorial
+        % format. If you need it in the original shape, this allows for it
+        function obj = ReshapeDataToOriginal(obj)
+            obj.data = reshape(obj.data,obj.data_size);
+        end
+        
         % Add an anisotropic RF based on the DTI/DKI model. These can be
         % added only before any isotropic RF. Eigenvalues is a vector
         % containing the three main eigenvalues of the diffusion tensor,
@@ -106,7 +127,7 @@ classdef SphericalDeconvolution < handle
             pass_data = obj.data;
             pass_data.bvecs(:,3) = -pass_data.bvecs(:,3);
             obj.n_anisotropic = obj.n_anisotropic+1;
-            [~,lLRKernel,lHRKernel] = mDRLMT_MakeDKIKernel_multicomp(pass_data,obj.nDirections,EigenValues,MeanKurtosis,[],1);
+            [~,lLRKernel,lHRKernel] = mDRLMT_MakeDKIKernel_multicomp(pass_data,obj.nDirections,EigenValues,MeanKurtosis,[],0);
             IndexHR = size(obj.HRKernel,2)+1:size(obj.HRKernel,2)+obj.nDirections;
             IndexLR = size(obj.LRKernel,2)+1:size(obj.LRKernel,2)+size(lLRKernel,2);
             if(~isempty(obj.LRKernel))
@@ -123,7 +144,7 @@ classdef SphericalDeconvolution < handle
         
         % Add an anisotropic RF based on the NODDI model. These can be
         % added only before any isotropic RF.
-        % noddi_parameters(x) should be specified as follows:
+        % noddi_parameters is a cell array containing elements (x), which should be specified as follows:
         % x(1) is the volume fraction of the intracellular space.
         % x(2) is the free diffusivity of the material inside and outside the cylinders.
         % x(3) is the concentration parameter of the Watson's distribution.
@@ -140,8 +161,8 @@ classdef SphericalDeconvolution < handle
                 warning('Please add all anisotropic RFs before any isotropic component.');
                 return
             end
-            obj.n_anisotropic = obj.n_anisotropic+1;
-            [~,lLRKernel,lHRKernel] = mDRLMT_MakeNODDIKernel_multicomp(obj.data,obj.nDirections,noddi_parameters,[],1);
+            obj.n_anisotropic = obj.n_anisotropic+length(noddi_parameters);
+            [~,lLRKernel,lHRKernel] = mDRLMT_MakeNODDIKernel_multicomp(obj.data,obj.nDirections,noddi_parameters,[],0);
             IndexHR = size(obj.HRKernel,2)+1:size(obj.HRKernel,2)+obj.nDirections;
             IndexLR = size(obj.LRKernel,2)+1:size(obj.LRKernel,2)+size(lLRKernel,2);
             if(~isempty(obj.LRKernel))
@@ -175,19 +196,20 @@ classdef SphericalDeconvolution < handle
                 return
             end
             
+            siz = obj.data_size;
             if(~ismatrix(obj.data.img))
-                siz = size(obj.data.img);
                 obj.data.img = reshape(obj.data.img,siz(1)*siz(2)*siz(3),siz(4)); % st(133)* ~isnan(FA)
                 obj.data.img = permute(obj.data.img,[2 1]);
             end
             [st,sm] = size(obj.data.img);
             
             NC = obj.n_isotropic;
+            ANC = obj.n_anisotropic;
             
             nreconstruction_vertices = size(obj.HRKernel,2)-NC;
             nreconstruction_vertices_lr = size(obj.LRKernel,2)-NC;
             
-            fprintf('Determining NN: %.3f for LR and %.3f for HR %s',obj.NN_L, obj.NN_H, newline);
+%             fprintf('Determining NN: %.3f for LR and %.3f for HR %s',obj.NN_L, obj.NN_H, newline);
             
             shell_weight = zeros(size(obj.data.bvals));
             all_shells = (unique(obj.data.bvals));
@@ -211,7 +233,7 @@ classdef SphericalDeconvolution < handle
                 weighted_HRKernel(:,ij) = obj.HRKernel(:,ij).*shell_weight;
             end
             
-            fractions = zeros([sm 3]);
+            fractions = zeros([sm NC+ANC]);
             WM_fod = zeros([sm nreconstruction_vertices],'single');
             RSS = zeros([sm 1]);
             S0 = zeros([sm 1]);
@@ -305,9 +327,24 @@ classdef SphericalDeconvolution < handle
                 end
                 fODFC = fODF;
                 fODFC(fODFC < median(fODFC)) = 0;
-                Y = [obj.HRKernel(:,1:end-NC)*fODFC obj.HRKernel(:,end-NC+1:end)]; % 3 columns (WM-SIGNAL GM-SIGNAL CSF-SIGNAL)
-                if(sum(Y(:,1)) > 0) % i.e. if the FOD is non-zero
-                    Y(:,1) = Y(:,1)/max(Y(:,1)); % Normalize WM signal
+                if(obj.n_anisotropic == 1)
+                    Y = [obj.HRKernel(:,1:end-NC)*fODFC obj.HRKernel(:,end-NC+1:end)]; % 3 columns (WM-SIGNAL GM-SIGNAL CSF-SIGNAL)
+                    if(sum(Y(:,1)) > 0) % i.e. if the FOD is non-zero
+                        Y(:,1) = Y(:,1)/max(Y(:,1)); % Normalize WM signal
+                    end
+                else
+                    Y = [];
+                    cindex = 1;
+                    for kANC = 1:ANC
+                        Y = [Y weighted_HRKernel(:,cindex:cindex+obj.nDirections-1)*fODFC(cindex:cindex+obj.nDirections-1)];
+                        cindex = cindex+obj.nDirections;
+                %         if(sum(Y(:,1)) > 0) % i.e. if the FOD is non-zero
+                        % changed for multi FOD
+                        if(sum(Y(:,kANC)) > 0) % i.e. if the FOD is non-zero
+                            Y(:,kANC) = Y(:,kANC)/max(Y(:,kANC)); % Normalize WM signal
+                        end
+                    end
+                    Y = [Y weighted_HRKernel(:,end-NC+1:end)]; % 3 columns (WM-SIGNAL GM-SIGNAL CSF-SIGNAL)
                 end
                 p = lsqnonneg(Y,Stot./shell_weight,op_e2); % Compute the signal fractions
                 RSS(x) = sum((Stot-Y*p).^2);
@@ -320,7 +357,7 @@ classdef SphericalDeconvolution < handle
             % Restructure data
             
             fsum = sum(fractions,2);
-            for ij=1:3
+            for ij=1:size(fractions,2)
                 fractions(:,ij) = fractions(:,ij) ./ (fsum+eps);
             end
             
@@ -353,6 +390,11 @@ classdef SphericalDeconvolution < handle
            obj.deconv_method = method; 
         end
         
+        % Sets the L2 regularization value.
+        function setL2REG(obj,reg_val)
+           obj.L2LSQ_reg = reg_val;           
+        end
+       
     end
     
     methods(Static)
@@ -383,11 +425,54 @@ classdef SphericalDeconvolution < handle
             super_scheme = gen_scheme(SpherDec.nDirections,lmax); % the reconstruction scheme. Change 300 to any number
             sh = SH(lmax,super_scheme.vert);
 
-            fod_wm = sh.coef(output.FOD);
+            if(SpherDec.n_anisotropic == 1)
+                % Single FOD case
+                fod = sh.coef(output.FOD);
 
-            DW_SaveVolumeLikeNii(fod_wm,SpherDec.data,[file_prefix '_CSD_FOD'],0);
+    %             FOD_max = max(output.FOD,[],4);
+    %             FOD_scaled = output.FOD;
+    %             FOD_val = mean(FOD_max(output.fractions(:,:,:,1) > 0.7*max(FOD_max(:)))); % 20/12/2017
+    %             for ij=1:size(FOD_scaled,4)
+    %                 FOD_scaled(:,:,:,ij) = FOD_scaled(:,:,:,ij) / FOD_val;% .* fractions(:,:,:,1); % 20/12/2017
+    %             end
+                mult = 1;
+                if(SpherDec.NN_H ~= 0)
+                    mult = 0.1/SpherDec.NN_H;
+                end
 
-            DW_SaveVolumeLikeNii(output.fractions,SpherDec.data,[file_prefix '_fractions'],0);
+                if(isfield(SpherDec.data,'hdr'))
+                    DW_SaveVolumeLikeNii(fod,SpherDec.data,[file_prefix '_CSD_FOD'],0);
+                    DW_SaveVolumeLikeNii(output.fractions,SpherDec.data,[file_prefix '_fractions'],0);
+                    DW_SaveVolumeLikeNii(FOD_scaled,SpherDec.data,[file_prefix '_CSD_FOD_scaled'],0);
+                else
+                    data_struct.img = fod;
+                    data_struct.VD = SpherDec.data.VD;
+                    EDTI.WriteNifti(data_struct,[file_prefix '_CSD_FOD.nii']);
+                    data_struct.img = output.fractions;
+                    EDTI.WriteNifti(data_struct,[file_prefix '_fractions.nii']);
+                    data_struct.img = sh.coef(output.FOD*mult);
+                    EDTI.WriteNifti(data_struct,[file_prefix '_CSD_FOD_scaled.nii']);
+                end
+            else
+                % multi-FOD case
+                for fod_id=1:SpherDec.n_anisotropic
+                    fod = sh.coef(output.FOD(:,:,:,1+(fod_id-1)*SpherDec.nDirections:fod_id*SpherDec.nDirections));
+
+                    if(isfield(SpherDec.data,'hdr'))
+                        DW_SaveVolumeLikeNii(fod,SpherDec.data,[file_prefix '_CSD_FOD_' num2str(fod_id)],0);
+                    else
+                        data_struct.img = fod;
+                        data_struct.VD = SpherDec.data.VD;
+                        EDTI.WriteNifti(data_struct,[file_prefix '_CSD_FOD_' num2str(fod_id) '.nii']);
+                    end
+                end
+                if(isfield(SpherDec.data,'hdr'))
+                    DW_SaveVolumeLikeNii(output.fractions,SpherDec.data,[file_prefix '_fractions'],0);
+                else
+                    data_struct.img = output.fractions;
+                    EDTI.WriteNifti(data_struct,[file_prefix '_fractions.nii']);
+                end
+            end
         end
         
         % Load diffusion data in the MRIToolkit format. Input:
@@ -1034,6 +1119,8 @@ end
 
 end
 
+% My implementation of the classic Richardson Lucy, inspired by the above.
+% Thanks to Flavio Dell'Acqua for help in drafting these methods.
 function fODF = RichardsonLucy(Signal, Kernel, Niter)
 
 fODF0 = ones(size(Kernel,2),1);

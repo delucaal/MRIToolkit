@@ -1,5 +1,7 @@
 %%%$ Included in MRIToolkit (https://github.com/delucaal/MRIToolkit) %%%%%% Alberto De Luca - alberto@isi.uu.nl $%%%%%% Distributed under the terms of LGPLv3  %%%
-%%% Distributed under the terms of LGPLv3  %%%
+
+
+
 function data = DW_LoadData(data_name,bvec_name,bval_name,mask_name,load_nii_instead,noise_map,round_small_bs_to_zero)
 if(exist('load_nii_instead','var') > 0 && load_nii_instead == 1)
     data = load_nii(data_name);

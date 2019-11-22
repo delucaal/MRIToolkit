@@ -1,5 +1,7 @@
 %%%$ Included in MRIToolkit (https://github.com/delucaal/MRIToolkit) %%%%%% Alberto De Luca - alberto@isi.uu.nl $%%%%%% Distributed under the terms of LGPLv3  %%%
-%%% Distributed under the terms of LGPLv3  %%%
+
+
+
 function deleteSuccessful = mbdelete(fileName, showWarnings, throwError)
 %MBDELETE  Delete file and check possible warnings.
 %   RESULT = MBDELETE(FILE) will check if file FILE is existing, try to
@@ -77,4 +79,3 @@ if existfile(fileName)
 else
   deleteSuccessful = true;
 end
-

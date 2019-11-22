@@ -1,5 +1,7 @@
 %%%$ Included in MRIToolkit (https://github.com/delucaal/MRIToolkit) %%%%%% Alberto De Luca - alberto@isi.uu.nl $%%%%%% Distributed under the terms of LGPLv3  %%%
-%%% Distributed under the terms of LGPLv3  %%%
+
+
+
 %  When you load any ANALYZE or NIfTI file with 'load_nii.m', and view
 %  it with 'view_nii.m', you may find that the image is L-R flipped.
 %  This is because of the confusion of radiological and neurological

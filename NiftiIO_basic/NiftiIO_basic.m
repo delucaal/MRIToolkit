@@ -1,0 +1,145 @@
+%%%$ Included in MRIToolkit (https://github.com/delucaal/MRIToolkit) %%%%%% Alberto De Luca - alberto@isi.uu.nl $%%%%%% Distributed under the terms of LGPLv3  %%%
+
+
+
+classdef NiftiIO_basic < handle
+   
+    methods (Static)
+        
+        function ConvertDicomFolder2Nifti(dicom_folder,output_folder)
+            global MRIToolkit;
+            if(isfield(MRIToolkit,'dcm2niix') && exist(MRIToolkit.dcm2niix,'file'))
+                cmd = [MRIToolkit.dcm2niix ' -o ' output_folder ' -b y -f %f_%p ' dicom_folder];
+                status = system(cmd);
+                if(status ~= 0)
+                    warning('Something went wrong in the DICOM conversion');
+                end
+            else
+                error('Cannot find dcm2niix or the location has not been specified in MRIToolkitDefineLocalVars.m');
+            end
+        end
+        
+        function OrganizeDataBIDSLike(dicom_folder,output_root)   
+            global MRIToolkit;
+            if(isempty(which('jsonread')))
+                if(isfield(MRIToolkit,'JSONio') && exist(MRIToolkit.JSONio,'dir') > 0)
+                    addpath(MRIToolkit.JSONio);
+                else
+                    error('This function needs the JSONio library to properly work. Configure MRIToolkitDefineLocalVars.m accordingly.');
+                end
+            end
+            
+            TempDirectory = fullfile(output_root,'TempProcessing');
+            RawFolder = fullfile(output_root,'RawNii');
+            OutputFolder = fullfile(output_root,'derivatives');
+
+            if(exist(RawFolder,'dir') < 1)
+                mkdir(RawFolder);
+            end
+
+            if(exist(OutputFolder,'dir') < 1)
+                mkdir(OutputFolder);
+            end
+
+            if(exist(TempDirectory,'dir') < 1)
+                mkdir(TempDirectory);
+            end
+
+            AcquisitionTypes = {};
+            AcquisitionCategories = {
+                {'t1','anat'},...
+                {'t2','anat'},...
+                {'flair','anat'},...
+                {'dwi','dwi'},...
+                {'dti','dwi'},...
+                {'dmri','dwi'},...
+                {'fmri','func'},...
+                {'bold','func'}
+            };
+
+            SubjectsFolder = dir(dicom_folder);
+            for subj_id=1:length(SubjectsFolder)
+                if(strcmp(SubjectsFolder(subj_id).name(1),'.'))
+                    continue
+                end
+                delete(fullfile(TempDirectory,'*'));
+                full_path = fullfile(dicom_folder,SubjectsFolder(subj_id).name);
+                full_out_path = fullfile(RawFolder,['sub-' SubjectsFolder(subj_id).name]);
+                npaths = length(dir([full_out_path '*']))+1;
+                full_out_path = strcat(full_out_path,['_ses-' num2str(npaths)]);
+                final_prefix = ['sub-' SubjectsFolder(subj_id).name '_ses-' num2str(npaths)];
+                
+                NiftiIO_basic.ConvertDicomFolder2Nifti(full_path,TempDirectory);
+
+                json_files = dir(fullfile(TempDirectory,'*.json'));
+                if(~isempty(json_files))
+                    for json_id=1:length(json_files)
+                       file_content = jsonread(fullfile(TempDirectory,json_files(json_id).name)); 
+                       seq_idx = StringInList(AcquisitionTypes,file_content.ProtocolName);
+                       if(isempty(seq_idx))
+                           AcquisitionTypes(end+1) = {file_content.ProtocolName};
+                           seq_idx = length(AcquisitionTypes);
+                       end
+                       acq_category = AcquisitionTypes{seq_idx};
+                       acq_sub_type = ForecastImgCategory(AcquisitionCategories,acq_category);
+                       bvals_or_bvecs = 0;
+                       if(strcmpi(acq_sub_type,'dwi'))
+                           bvals_or_bvecs = 1;
+                       else
+                           gradients_info = dir(fullfile(TempDirectory,[json_files(json_id).name(1:end-5) '.bval']));               
+                           if(~isempty(gradients_info))
+                               bvals_or_bvecs = 1;
+                               acq_sub_type = 'dwi';
+                           end
+                       end
+                       if(exist(fullfile(full_out_path,acq_sub_type),'dir') < 1)
+                           mkdir(fullfile(full_out_path,acq_sub_type));
+                       end
+%                        if(exist(fullfile(OutputFolder,acq_sub_type),'dir') < 1)
+%                            mkdir(fullfile(OutputFolder,acq_sub_type));
+%                        end
+                       dest_prefix = fullfile(full_out_path,acq_sub_type,final_prefix);
+                       dest_prefix = strcat(dest_prefix,['_' acq_category]);
+                       existing_outputs = length(dir([dest_prefix '*.nii*']))+1;
+                       dest_prefix = strcat(dest_prefix, ['_' num2str(existing_outputs)]);
+                       copyfile(fullfile(TempDirectory,json_files(json_id).name),[dest_prefix '.json']);
+                       corresponding_image = dir(fullfile(TempDirectory,[json_files(json_id).name(1:end-5) '.nii*']));
+                       [~,~,extension] = fileparts(corresponding_image.name);
+                       copyfile(fullfile(TempDirectory,corresponding_image.name),[dest_prefix extension]);
+                       if(bvals_or_bvecs == 1)
+                           bvals = fullfile(TempDirectory,[json_files(json_id).name(1:end-5) '.bval']);
+                           bvecs = fullfile(TempDirectory,[json_files(json_id).name(1:end-5) '.bvec']);
+                           try
+                              copyfile(bvals,[dest_prefix '.bval']);
+                              copyfile(bvecs,[dest_prefix '.bvec']);
+                           catch
+                           end
+                       end
+                    end
+                end
+            end
+        end
+ 
+    end
+    
+end
+
+function acq_type = ForecastImgCategory(categories,img_name)
+    acq_type = 'anat'; 
+    for ij=1:length(categories)
+        if(contains(img_name,categories{ij}{1},'IgnoreCase',true))
+           acq_type = categories{ij}{2};
+           return;
+        end
+    end
+end
+
+function idx = StringInList(the_list,the_string)
+    idx = [];
+    for ij=1:length(the_list)
+        if(strcmpi(the_list{ij},the_string))
+            idx = ij;
+            return;
+        end
+    end
+end

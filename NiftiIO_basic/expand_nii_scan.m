@@ -1,5 +1,7 @@
 %%%$ Included in MRIToolkit (https://github.com/delucaal/MRIToolkit) %%%%%% Alberto De Luca - alberto@isi.uu.nl $%%%%%% Distributed under the terms of LGPLv3  %%%
-%%% Distributed under the terms of LGPLv3  %%%
+
+
+
 %  Expand a multiple-scan NIFTI file into multiple single-scan NIFTI files
 %
 %  Usage: expand_nii_scan(multi_scan_filename, [img_idx], [path_to_save])

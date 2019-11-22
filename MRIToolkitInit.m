@@ -1,5 +1,7 @@
 %%%$ Included in MRIToolkit (https://github.com/delucaal/MRIToolkit) %%%%%% Alberto De Luca - alberto@isi.uu.nl $%%%%%% Distributed under the terms of LGPLv3  %%%
-%%% Distributed under the terms of LGPLv3  %%%
+
+
+
 % A. De Luca
 % This function adds the specified toolboxes to the path. If no input is
 % specified all toolboxes will be added
@@ -23,24 +25,31 @@ function MRIToolkitInit(SelectedToolboxes)
     global MRIToolkit;
     clear MRIToolkit;
     MRIToolkit.version = 1.0;
-
+    
     try
-       MRIToolkitDefineLocalVars();
+       MRIToolkitDefineLocalVars(); 
     catch
         disp('I cannot find a configuration file. Please define one');
     end
-
+    
     available_toolboxes = {
         {'NiftiIO_basic','Manages basic Nifti input/output',true},...
         {'DW_basic','Basic diffusion MRI utils',true},...
         {'ImageRegistrations','Elastix based registration utils',true},...
+        {'DW_IVIMDTDK_I','Diffusion MRI - IVIM, DT, DKI fit utils',true},...
+        {'Dicom_utils','Tools for unconventional or buggy DICOMs',true},...
+        {'MixedCodeUtils','Useful general purpose functions',true},...
+        {'VolumeViewer','A 3D viewer',true},...
         {'ThirdParty','Third party utilities',true},...
+        {'MRIfoundation','Classes for MRI sequences abstraction',true},...
         {'OptimizationMethods','Class for numeric optimization',true},...
         {'Relaxometry','Class for T1/T2 quantification',true},...
+        {'Diffusion_basic','Class for (basic) dMRI quantification',true},...
+        {'EPG_simulator','Classes for EPG simulations',true},...
         {'ExploreDTIInterface','ExploreDTI powered library',true},...
         {'SphericalDeconvolution','Methods to perform GRL/mFOD deconvolution',true}
         }; % Folder, Description, Load default
-
+    
     if(nargin > 0 && ~iscell(SelectedToolboxes))
         disp('Usage 1: MRIToolkitInit() -> load all toolboxes');
         disp('Usage 2: MRIToolkitInit({''Identifier1'',...)');
@@ -50,9 +59,9 @@ function MRIToolkitInit(SelectedToolboxes)
         end
         return
     end
-
+    
     run_folder = get_executed_file_path();
-
+    
     % Add all toolboxes if no input is specified
     if(nargin < 1)
         SelectedToolboxes = available_toolboxes;
@@ -83,7 +92,7 @@ function MRIToolkitInit(SelectedToolboxes)
            end
         end
     end
-
+    
     for tool_id=1:length(SelectedToolboxes)
         % Call the init function of each toolbox
         if(SelectedToolboxes{tool_id}{3} || override_default)
@@ -91,5 +100,5 @@ function MRIToolkitInit(SelectedToolboxes)
             run(fullfile(run_folder,SelectedToolboxes{tool_id}{1},'mk_init.m'));
         end
     end
-
+    
 end

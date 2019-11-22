@@ -1,5 +1,7 @@
 %%%$ Included in MRIToolkit (https://github.com/delucaal/MRIToolkit) %%%%%% Alberto De Luca - alberto@isi.uu.nl $%%%%%% Distributed under the terms of LGPLv3  %%%
-%%% Distributed under the terms of LGPLv3  %%%
+
+
+
 function tempDir2 = tempdir2
 %TEMPDIR2  Return temporary directory.
 %		DIR = TEMPDIR2 returns as a temporary directory the directory

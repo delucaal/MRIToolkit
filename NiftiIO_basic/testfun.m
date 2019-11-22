@@ -1,5 +1,7 @@
 %%%$ Included in MRIToolkit (https://github.com/delucaal/MRIToolkit) %%%%%% Alberto De Luca - alberto@isi.uu.nl $%%%%%% Distributed under the terms of LGPLv3  %%%
-%%% Distributed under the terms of LGPLv3  %%%
+
+
+
 function x = testfun(timeInSeconds, x)
 %TESTFUN  Do something stupid that takes some time to compute.
 %   Y = TESTFUN(TIME, X) does some computations that take TIME seconds long
