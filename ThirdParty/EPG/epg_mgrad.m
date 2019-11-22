@@ -1,5 +1,7 @@
+%%%$ Included in MRIToolkit (https://github.com/delucaal/MRIToolkit) %%%%%% Alberto De Luca - alberto@isi.uu.nl $%%%%%% Distributed under the terms of LGPLv3  %%%
 
-%%% Distributed under the terms of CC BY-NC-ND (https://creativecommons.org/licenses) %%%
+
+
 %
 %function [FpFmZ] = epg_mgrad(FpFmZ,noadd)
 %	Propagate EPG states through a *NEGATIVE* "unit" gradient.
@@ -32,4 +34,3 @@ FpFmZ(2,:) = circshift(FpFmZ(2,:),[0 1]);	% Shift Fm states.
 FpFmZ(1,:) = circshift(FpFmZ(1,:),[0 -1]);	% Shift Fp states.
 FpFmZ(1,end)=0;					% Zero highest Fp state.
 FpFmZ(2,1) = conj(FpFmZ(1,1));			% Fill in lowest Fm state.
-

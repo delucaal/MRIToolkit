@@ -1,5 +1,7 @@
+%%%$ Included in MRIToolkit (https://github.com/delucaal/MRIToolkit) %%%%%% Alberto De Luca - alberto@isi.uu.nl $%%%%%% Distributed under the terms of LGPLv3  %%%
 
-%%% Distributed under the terms of CC BY-NC-ND (https://creativecommons.org/licenses) %%%
+
+
 %MAT_INTO_HDR  The old versions of SPM (any version before SPM5) store
 %	an affine matrix of the SPM Reoriented image into a matlab file 
 %	(.mat extension). The file name of this SPM matlab file is the

@@ -1,5 +1,7 @@
+%%%$ Included in MRIToolkit (https://github.com/delucaal/MRIToolkit) %%%%%% Alberto De Luca - alberto@isi.uu.nl $%%%%%% Distributed under the terms of LGPLv3  %%%
 
-%%% Distributed under the terms of CC BY-NC-ND (https://creativecommons.org/licenses) %%%
+
+
 function userfeedback(packageName, calledFile, minNrOfCalls, minPeriodInDays)
 %USERFEEDBACK  Ask user for feedback after frequent function starts.
 %   USERFEEDBACK(packageName, calledFile) will open an input dialog asking
@@ -124,7 +126,6 @@ end
   end
 end
 
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 function feedbackdlg(Prompt, Title, NumLines, DefAns, sendfeedbackHandle)
 %FEEDBACKDLG Input dialog.
 % This is a modified version of Matlab function INPUTDLG. The modification
@@ -149,9 +150,6 @@ elseif (rw ~= NumQuest | cl > 2) %#ok
   error('MATLAB:inputdlg:IncorrectSize', 'NumLines size is incorrect.')
 end
 
-%%%%%%%%%%%%%%%%%%%%%%%
-%%% Create InputFig %%%
-%%%%%%%%%%%%%%%%%%%%%%%
 FigWidth=175;
 FigHeight=100;
 FigPos(3:4)=[FigWidth FigHeight];  %#ok
@@ -175,9 +173,6 @@ InputFig=dialog(                     ...
 set(InputFig, 'HandleVisibility', 'on', 'CloseRequestFcn', 'closereq');
 
 
-%%%%%%%%%%%%%%%%%%%%%
-%%% Set Positions %%%
-%%%%%%%%%%%%%%%%%%%%%
 DefOffset    = 5;
 DefBtnWidth  = 53;
 DefBtnHeight = 23;

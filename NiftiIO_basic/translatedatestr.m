@@ -1,5 +1,7 @@
+%%%$ Included in MRIToolkit (https://github.com/delucaal/MRIToolkit) %%%%%% Alberto De Luca - alberto@isi.uu.nl $%%%%%% Distributed under the terms of LGPLv3  %%%
 
-%%% Distributed under the terms of CC BY-NC-ND (https://creativecommons.org/licenses) %%%
+
+
 function dateStr = translatedatestr(dateStr)
 %TRANSLATEDATESTR  Translate german date string to english version.
 %		STR = TRANSLATEDATESTR(STR) converts a german date string like 

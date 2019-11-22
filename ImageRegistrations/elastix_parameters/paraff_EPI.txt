@@ -1,0 +1,49 @@
+(FixedInternalImagePixelType "float")
+(MovingInternalImagePixelType "float")
+
+(FixedImageDimension 3)
+(MovingImageDimension 3)
+
+(UseDirectionCosines "false")
+
+(Registration "MultiResolutionRegistration")
+(Interpolator "BSplineInterpolator")
+(ResampleInterpolator "FinalBSplineInterpolator")
+(Resampler "DefaultResampler")
+
+(FixedImagePyramid "FixedRecursiveImagePyramid")
+(MovingImagePyramid "MovingRecursiveImagePyramid")
+
+(Optimizer "AdaptiveStochasticGradientDescent")
+(Transform "AffineTransform")
+(Metric "AdvancedMattesMutualInformation")
+
+(AutomaticScalesEstimation "true")
+(AutomaticTransformInitialization "true")
+
+(HowToCombineTransforms "Compose")
+
+(NumberOfHistogramBins 32)
+
+(ErodeMask "false")
+
+(NumberOfResolutions 3)
+
+(MaximumNumberOfIterations 1000)
+
+(NumberOfSpatialSamples 5000)
+(CheckNumberOfSamples "false")
+(NewSamplesEveryIteration "true")
+(ImageSampler "Random")
+
+(BSplineInterpolationOrder 1)
+(FinalBSplineInterpolationOrder 3)
+(DefaultPixelValue 0)
+
+(WriteResultImage "true")
+
+// The pixel type and format of the resulting deformed moving image
+(ResultImagePixelType "float")
+(ResultImageFormat "nii.gz")
+
+(MaximumNumberOfSamplingAttempts 100)

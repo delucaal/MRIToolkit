@@ -1,5 +1,7 @@
+%%%$ Included in MRIToolkit (https://github.com/delucaal/MRIToolkit) %%%%%% Alberto De Luca - alberto@isi.uu.nl $%%%%%% Distributed under the terms of LGPLv3  %%%
 
-%%% Distributed under the terms of CC BY-NC-ND (https://creativecommons.org/licenses) %%%
+
+
 function startmulticoreslave(multicoreDir, settings)
 %STARTMULTICORESLAVE  Start multi-core processing slave process.
 %   STARTMULTICORESLAVE(DIRNAME) starts a slave process for function
@@ -27,7 +29,6 @@ function startmulticoreslave(multicoreDir, settings)
 
 
 
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 % Default settings/parameters. 
 % Note: Use second input argument to overwrite these settings.
@@ -55,7 +56,6 @@ settingsDefault.maxWarnTime   = 24 * 3600; % in seconds
 settingsDefault.debugMode    = 0;
 settingsDefault.showWarnings = 0;
 
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 
 
@@ -203,9 +203,7 @@ while 1
         formattime(etime(clock, lastEvalEndClock)), datestr(clock, 'mmm dd, HH:MM'));
     end
 
-    %%%%%%%%%%%%%%%%%%%%%
     % evaluate function %
-    %%%%%%%%%%%%%%%%%%%%%
     if settings.debugMode
       fprintf('Slave evaluates job nr %d.\n', fileNr);
       t0 = mbtime;
@@ -310,7 +308,6 @@ while 1
   end
 end
 
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 function timeString = formattime(time, mode)
 %FORMATTIME  Return formatted time string.
 %  STR = FORMATTIME(TIME) returns a formatted time string for the given
@@ -442,7 +439,6 @@ switch mode
 end
 
 
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 function fHandles = getFunctionHandleSlave(functionHandleCell, index)
 
 if isa(functionHandleCell, 'function_handle')
@@ -456,7 +452,6 @@ else
 end
 
 
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 function settings = combineSettings(settings, settingsDefault)
 
 % get settings
