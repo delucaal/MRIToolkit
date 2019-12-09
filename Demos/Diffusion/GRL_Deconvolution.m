@@ -20,6 +20,10 @@ GRL_Results = SD.PerformDeconv();
 % Export everything to NIFTI
 SphericalDeconvolution.SaveOutputToNii(SD,GRL_Results,'GRL_Test');
 
+% Run Fiber Tractography - needs to be adjusted
+EDTI.PerformFODBased_FiberTracking();
+% Constraint using the computed WM fraction
+SphericalDeconvolution.TerminateTractsWithFraction();
 %% Perform mFOD spherical deconvolution (https://www.biorxiv.org/content/10.1101/739136v1)
 
 mrt_data = EDTI.EDTI_Data_2_MRIToolkit('mat_file','mymat.mat');

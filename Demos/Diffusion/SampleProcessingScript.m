@@ -69,6 +69,11 @@ EDTI.PerformFODBased_FiberTracking('mat_file',[output_basename '.mat'],'fod_file
 
 %% Perform GRL fiber tractography
 
+% For memory reasons, I am going to apply the following to the original
+% resolution data
+
+output_basename = [fullfile(subj_dest_folder,dmri_acquisition{1},dmri_file_list.name(1:end-4)) '_FP_MD_C_native'];
+
 data = EDTI.EDTI_Data_2_MRIToolkit('mat_file',[output_basename '.mat']);
 SD = SphericalDeconvolution('data',data);
 
@@ -85,4 +90,16 @@ SD.setDeconvMethod('dRL'); % damped Richardson Lucy
 % Perform the actual deconvolution
 GRL_Results = SD.PerformDeconv();
 % Export everything to NIFTI
-SphericalDeconvolution.SaveOutputToNii(SD,GRL_Results,'GRL_Test');
+SphericalDeconvolution.SaveOutputToNii(SD,GRL_Results,[output_basename '_GRL_Test']);
+% Perform GRL-based fiber tractography
+EDTI.PerformFODBased_FiberTracking('mat_file',[output_basename '.mat'],'fod_file',[output_basename '_GRL_Test_CSD_FOD_scaled.nii'],'output',[output_basename '_Tracts_GRL.mat']);
+% Filter at the GM/WM interface
+SphericalDeconvolution.TerminateTractsWithFraction('mat_file',[output_basename '.mat'],'tract_file',[output_basename '_Tracts_GRL.mat'],...
+    'mask_mode','wm','fraction_file',[output_basename '_GRL_Test_fractions.nii'],'out_file',[output_basename '_Tracts_GRL_wmborder.mat']);
+% Filter at the GM/CSF interface
+SphericalDeconvolution.TerminateTractsWithFraction('mat_file',[output_basename '.mat'],'tract_file',[output_basename '_Tracts_GRL.mat'],...
+    'mask_mode','gm','fraction_file',[output_basename '_GRL_Test_fractions.nii'],'out_file',[output_basename '_Tracts_GRL_gmborder.mat']);
+
+
+
+
