@@ -1,10 +1,11 @@
- # MRIToolkit
+ # MRIToolkit [update 15-02-2020] 
 <span style='align:center'> <img src="img/MRIToolkitLogo.png" style="width:200px"/> </span>
  ## What is it?
- For my [my research](https://www.isi.uu.nl/people/alberto-de-luca/) I developed a set of scripts and tools to process (diffusion) magnetic resonance imaging (MRI) data, that are (slowly) being integrated in MRIToolkit, a MATLAB (R) toolbox.
+ A set of command line tools and a MATLAB (R) toolbox/library to process (diffusion) magnetic resonance imaging (MRI) data. The idea behind MRIToolkit is to serve as a stable distribution platform for the [methods I develop](https://www.isi.uu.nl/people/alberto-de-luca/) as well as to other state-of-the-art technologies in diffusion MRI and beyond. 
 
 ## Where do I find it?
-[Here](https://github.com/delucaal/MRIToolkit) on Github!
+- The MATLAB (R) toolbox is available [here](https://github.com/delucaal/MRIToolkit) on Github!
+- The command line tools will be uploaded soon!
 
 ## Short installation guide
 Please, see [this guide](img/MRIToolkitInstallationNotes.pdf)
@@ -12,13 +13,15 @@ Please, see [this guide](img/MRIToolkitInstallationNotes.pdf)
 Examples of some functionalities can be found in [Demos](demos)
 
 Main functionalities:
-- Complete diffusion MRI pre-processing (signal drift correction, Gibbs ringing correction, motion and eddy currents correction, B-matrix rotation, EPI correction, MPPCA denoising)
-- Diffusion Tensor Imaging (DTI) and Diffusion Kurtosis Imaging (DKI) fit;
-- Fiber tractography, both with DTI and Constrained Spherical Deconvolution (CSD);
-- Spherical deconvolution using the damped Richardson Lucy, the Generalized Richardson Lucy and mFOD methods;
+- Complete diffusion MRI pre-processing ([signal drift correction](https://onlinelibrary.wiley.com/doi/full/10.1002/mrm.26124), [Gibbs ringing correction](https://www.ncbi.nlm.nih.gov/pubmed/26142273), motion and eddy currents correction, [B-matrix rotation](https://www.ncbi.nlm.nih.gov/pubmed/19319973), EPI correction, MPPCA denoising)
+- Diffusion Tensor Imaging (DTI) and Diffusion Kurtosis Imaging (DKI) fit, including the [MK-curve method](https://www.ncbi.nlm.nih.gov/pubmed/30978492);
+- Fiber tractography, both with DTI and Constrained Spherical Deconvolution [(CSD)](https://www.ncbi.nlm.nih.gov/pubmed/18583153);
+- Spherical deconvolution using the [damped Richardson Lucy](https://www.ncbi.nlm.nih.gov/pubmed/19781650), the Generalized Richardson Lucy and mFOD methods;
 - T1 / T2 quantification
 
-## What's included
+I have coded most functions to accept Python-like name/value argument couples. To know which arguments to specify, just try the MATLAB help as, for instance,  "help EDTI.LoadNifti"
+
+## The MATLAB (R) toolbox
 ###### Ready to use:
 - [x] **'ExploreDTIInterface'**: I am pleased to announce that MRIToolkit now contains, distributes and develops many functions originally developed as part of [ExploreDTI](www.exploredti.com). They are here available as a consolidated library and are planned to also become command line tools. A big thank to [Alexander Leemans](http://providi-lab.org) and Ben Jeurissen for this! <br><img src="img/EDTICollaborationLogo.png" style="width:300px"/>
 - [x] **'SphericalDeconvolution'**: Methods used for two novel deconvolution methods we developed, namely the [Generalized Richardson Lucy](https://arxiv.org/abs/1910.05372) and [mFOD](https://www.biorxiv.org/content/10.1101/739136v1). Some of the functions here included have been taken from [Hardi Tools](https://www.neuroimagen.es/webs/hardi_tools/) of Erick Canales-Rodriguez.
@@ -28,22 +31,22 @@ Main functionalities:
 - [x] **'OptimizationMethods'**: Classes and functions for numeric optimisation methods
 - [x] **'Relaxometry'**: Classes for T1/T2 quantification using inversion-recovery / spin-echo multi-echo data
 - [x] **'ThirdParty'**: Utilities from third parties used in other scripts. Includes EPG code from [Brian Hargreaves](http://web.stanford.edu/~bah/software/epg/)
-- [x] **'ImageRegistrations'**: Image registration utils based on Elastix
+- [x] **'ImageRegistrations'**: Image registration utils based on [Elastix](https://www.ncbi.nlm.nih.gov/pubmed/19923044)
 - [x] **'Demos'**: Small examples showcasing functionalities of MRIToolkit.
 ###### Being integrated and coming soon:
 - [ ] **'Diffusion_basic'**: Class for (basic) dMRI quantification
-- [ ] **'DW_IVIMDTDK_I'**: Diffusion MRI fit utilities - IVIM, DT, DKI
+- [ ] **'DW_IVIMDTDK_I'**: Diffusion MRI fit utilities - IVIM, DT, DKI - used in [De Luca et al. 2017](https://www.ncbi.nlm.nih.gov/pubmed/27538923)
 - [ ] **'Dicom_utils'**: Tools for handling unconventional or buggy DICOMs
-- [ ] **'DW_Laplacian_NNLS'**: Tools for spectral multi-compartment fit (NNLS/L2NNLS/PL2NNLS)
+- [ ] **'DW_Laplacian_NNLS'**: Tools for spectral multi-compartment fit (NNLS/L2NNLS/PL2NNLS) used in [De Luca et al. 2018](https://onlinelibrary.wiley.com/doi/full/10.1002/nbm.3965)
 - [ ] **'MixedCodeUtils'**: 'Useful general purpose functions
 - [ ] **'MRIfoundation'**: Classes for MRI sequences abstraction
 - [ ] **'EPG_simulator'**: Classes for EPG simulations
 
-###### Not yet planned for release:
-- **'dfMRI'**,'Diffusion fMRI utilities
+###### Not yet planned for release (contact me directly if interested):
+- **'dfMRI'**, Diffusion fMRI utilities used in [De Luca et al. 2019](https://onlinelibrary.wiley.com/doi/full/10.1002/hbm.24758)
 
 ###### Working examples:
-- **'EPGFitT2Muscle.m'**: in Relaxometry, this function fits bi-exponential T2 (water/fat) with EPG
+- **'EPGFitT2Muscle.m'**: in Relaxometry, this function fits bi-exponential T2 (water/fat) with EPG - previously used in [Arrigoni et al. 2018](https://onlinelibrary.wiley.com/doi/abs/10.1002/mus.26189)
 - **'DESPOT12Fit.m'**: an example script to fit DESPOT1 and DESPOT2 as in [Deoni et al. 2005](https://www.ncbi.nlm.nih.gov/pubmed/15690526)
 - **'MultiEchoTFit.m'**: an example script to fit mono-exponential T2 with multi-echo data. More advanced fit approaches (bi-exponential, EPG) will come soon
 - **'InversionRecoveryT1Fit.m'**: an example script to fit T1 with inversion recovery data.
@@ -73,4 +76,4 @@ Main functionalities:
 - dMRI preprocessing - motion correction - eddy currents correction - EPI distortions correction
 - Fiber tractography - Constrained Spherical Deconvolution (CSD) - Generalized Richardson Lucy (GRL) - mFOD
 
-Alberto De Luca - 2019
+Alberto De Luca - First published in 2019

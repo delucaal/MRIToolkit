@@ -108,25 +108,22 @@ elseif(strcmp(deconv_method,'grl') || strcmp(deconv_method,'mfod'))
     for rf_id=1:length(aniso_rf)
         requested_rf = aniso_rf{rf_id};
         eigvals = requested_rf{2};
-        if(contains(requested_rf{1},'dki') > 0 && contains(eigvals,'auto'))
-            [eigvals,isok] = SphericalDeconvolution.Eigenval_IsoK_WM_FromData(mrt_data,other_props.FA,~isnan(other_props.FA));
+        if(contains(requested_rf{1},'dki') > 0 && ischar(eigvals))
+            if(contains(eigvals,'auto'))
+                [eigvals,isok] = SphericalDeconvolution.Eigenval_IsoK_WM_FromData(mrt_data,other_props.FA,~isnan(other_props.FA));
+            end
             SD.AddAnisotropicRF_DKI(eigvals,isok); % WM
         else
-            J = strsplit(eigvals,' ');
-            eigvals = [];
-            for ikk=1:length(J)
-               eigvals = [eigvals str2double(J{ikk})]; 
-            end
             if(contains(requested_rf{1},'dti'))
                 isok = 0;
-                eigvals = eigvals(1:3)*1e-3;
+                eigvals = eigvals(1:3)*10e-3;
                 SD.AddAnisotropicRF_DKI(eigvals,isok); % WM
             elseif(contains(requested_rf{1},'dki'))
                 isok = eigvals(4);
                 eigvals = eigvals(1:3)*1e-3;
                 SD.AddAnisotropicRF_DKI(eigvals,isok); % WM
             elseif(contains(requested_rf{1},'noddi'))
-                SD.AddAnisotropicRF_NODDI(eigvals);
+                SD.AddAnisotropicRF_NODDI(requested_rf{2});
             end
         end
     end
