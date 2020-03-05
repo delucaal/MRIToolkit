@@ -30,10 +30,10 @@ classdef SphericalDeconvolution < handle
     methods
         
         function obj = SphericalDeconvolution(varargin)
-        % Class constructor. Accepts only 1 optional argument:
-        % data, a structure with fields "img" (the 4D data matrix), "bvals"
-        % the b-values, "bvecs" the gradient vectors
-                    
+            % Class constructor. Accepts only 1 optional argument:
+            % data, a structure with fields "img" (the 4D data matrix), "bvals"
+            % the b-values, "bvecs" the gradient vectors
+            
             obj.data = [];
             obj.n_anisotropic = 0;
             obj.n_isotropic = 0;
@@ -59,12 +59,12 @@ classdef SphericalDeconvolution < handle
         end
         
         function setInnerShellWeighting(obj,weight)
-%       % How the inner shells are weighted in the deconvolution (0-1)
+            %       % How the inner shells are weighted in the deconvolution (0-1)
             obj.inner_shells_weight = weight;
         end
         
         function boolean = isInitialized(obj)
-        % Returns true if everything is set properly and ready to go
+            % Returns true if everything is set properly and ready to go
             boolean = (obj.n_anisotropic + obj.n_isotropic ~= 0) & ...
                 SphericalDeconvolution.isSupportedMethod(obj.deconv_method) & ~isempty(obj.data) & ...
                 ~isempty(obj.LRKernel) & ~isempty(obj.HRKernel) & obj.nDirections > 0;
@@ -74,10 +74,10 @@ classdef SphericalDeconvolution < handle
         end
         
         function obj = AddIsotropicRF(obj,D)
-        % Add an isotropic response function (i.e. CSF) to the
-        % deconvolution matrix. These should be add only after all
-        % anisotropic RFs have been added.
-
+            % Add an isotropic response function (i.e. CSF) to the
+            % deconvolution matrix. These should be add only after all
+            % anisotropic RFs have been added.
+            
             if(isempty(obj.data))
                 warning('Cannot initialize RFs if data has not been set. Bailing out.');
                 return
@@ -110,16 +110,16 @@ classdef SphericalDeconvolution < handle
         end
         
         function obj = ReshapeDataToOriginal(obj)
-        % After PerformDeconv is called, the data might be in vectorial
-        % format. If you need it in the original shape, this allows for it
+            % After PerformDeconv is called, the data might be in vectorial
+            % format. If you need it in the original shape, this allows for it
             obj.data = reshape(obj.data,obj.data_size);
         end
         
         function obj = AddAnisotropicRF_DKI(obj,EigenValues,MeanKurtosis)
-        % Add an anisotropic RF based on the DTI/DKI model. These can be
-        % added only before any isotropic RF. Eigenvalues is a vector
-        % containing the three main eigenvalues of the diffusion tensor,
-        % whereas meankurtosis is a scalar.
+            % Add an anisotropic RF based on the DTI/DKI model. These can be
+            % added only before any isotropic RF. Eigenvalues is a vector
+            % containing the three main eigenvalues of the diffusion tensor,
+            % whereas meankurtosis is a scalar.
             if(isempty(obj.data))
                 warning('Cannot initialize RFs if data has not been set. Bailing out.');
                 return
@@ -147,15 +147,15 @@ classdef SphericalDeconvolution < handle
         end
         
         function obj = AddAnisotropicRF_NODDI(obj,noddi_parameters)
-        % Add an anisotropic RF based on the NODDI model. These can be
-        % added only before any isotropic RF.
-        % noddi_parameters is a cell array containing elements (x), which should be specified as follows:
-        % x(1) is the volume fraction of the intracellular space.
-        % x(2) is the free diffusivity of the material inside and outside the cylinders.
-        % x(3) is the concentration parameter of the Watson's distribution.
-        % x(4) is the volume fraction of the isotropic compartment.
-        % x(5) is the diffusivity of the isotropic compartment.
-        % x(6) is the measurement at b=0.;        
+            % Add an anisotropic RF based on the NODDI model. These can be
+            % added only before any isotropic RF.
+            % noddi_parameters is a cell array containing elements (x), which should be specified as follows:
+            % x(1) is the volume fraction of the intracellular space.
+            % x(2) is the free diffusivity of the material inside and outside the cylinders.
+            % x(3) is the concentration parameter of the Watson's distribution.
+            % x(4) is the volume fraction of the isotropic compartment.
+            % x(5) is the diffusivity of the isotropic compartment.
+            % x(6) is the measurement at b=0.;
             
             if(isempty(obj.data))
                 warning('Cannot initialize RFs if data has not been set. Bailing out.');
@@ -182,18 +182,18 @@ classdef SphericalDeconvolution < handle
         end
         
         function obj = AutomaticDRLDamping(obj)
-        % Compute the automatic damping for the dRL method. Only needed if
-        % the deconvolution method is dRL.
-        obj.NN_L = get_drl_nn_heuristic(obj.LRKernel,max(obj.data.bvals),0.7e-3);
+            % Compute the automatic damping for the dRL method. Only needed if
+            % the deconvolution method is dRL.
+            obj.NN_L = get_drl_nn_heuristic(obj.LRKernel,max(obj.data.bvals),0.7e-3);
             obj.NN_H = get_drl_nn_heuristic(obj.HRKernel,max(obj.data.bvals),0.7e-3);
         end
         
         function output = PerformDeconv(obj,nof_workers,low_mem_mode)
-        % Actually perform the deconvolution. All parameters must be set
-        % before hand using the dedicated functions. Output is a structure
-        % with fields FOD and FOD_norm. FOD_norm is a rescaled version of the FOD 
-        % meant to be compatible with ExploreDTI-based fiber tractography.
-
+            % Actually perform the deconvolution. All parameters must be set
+            % before hand using the dedicated functions. Output is a structure
+            % with fields FOD and FOD_norm. FOD_norm is a rescaled version of the FOD
+            % meant to be compatible with ExploreDTI-based fiber tractography.
+            
             if(nargin < 2)
                 myCluster = parcluster('local');
                 nof_workers = myCluster.NumWorkers;
@@ -202,7 +202,7 @@ classdef SphericalDeconvolution < handle
             if(nargin < 3)
                 low_mem_mode = 0;
             end
-                
+            
             if(~obj.isInitialized())
                 warning('Not all conditions are met to perform the deconvolution. Make sure you setted all needed parameters.');
                 output = [];
@@ -222,7 +222,7 @@ classdef SphericalDeconvolution < handle
             nreconstruction_vertices = size(obj.HRKernel,2)-NC;
             nreconstruction_vertices_lr = size(obj.LRKernel,2)-NC;
             
-%             fprintf('Determining NN: %.3f for LR and %.3f for HR %s',obj.NN_L, obj.NN_H, newline);
+            %             fprintf('Determining NN: %.3f for LR and %.3f for HR %s',obj.NN_L, obj.NN_H, newline);
             
             shell_weight = zeros(size(obj.data.bvals));
             all_shells = (unique(obj.data.bvals));
@@ -263,7 +263,7 @@ classdef SphericalDeconvolution < handle
                 warning('Unsupported deconvolution method.');
                 return;
             end
-
+            
             TheTol = 1e-3;
             tic
             parfor (x=1:N,nof_workers)
@@ -292,12 +292,12 @@ classdef SphericalDeconvolution < handle
                 for iter=1:50 % 50 = max number of iterations but usually exits way before
                     
                     DS = max(Stot-weighted_LRKernel(:,end-NC+1:end)*piso,0); % Subtract GM and CSF contributions
-
+                    
                     if(DeconvMethodCode == 4)
-%                         fODFC = mat_dRL(DS, weighted_LRKernel(:,1:end-NC), 200, obj.NN_L, 8);
+                        %                         fODFC = mat_dRL(DS, weighted_LRKernel(:,1:end-NC), 200, obj.NN_L, 8);
                         fODFC = ADT_deconv_RLdamp_1D_noEP(DS, weighted_LRKernel(:,1:end-NC),200, obj.NN_H);
                     elseif(DeconvMethodCode == 3)
-%                         fODFC = mat_RL(DS, weighted_LRKernel(:,1:end-NC), 200);
+                        %                         fODFC = mat_RL(DS, weighted_LRKernel(:,1:end-NC), 200);
                         fODF = RichardsonLucy(DS, weighted_LRKernel(:,1:end-NC), 200);
                     elseif(DeconvMethodCode == 2)
                         fODFC = DW_RegularizedDeconv(weighted_LRKernel(:,1:end-NC),DS,op_e2,obj.L2LSQ_reg);
@@ -330,17 +330,17 @@ classdef SphericalDeconvolution < handle
                 
                 % NEW FINAL STEP 05/02/2018
                 DS = max(Stot - weighted_HRKernel(:,end-NC+1:end)*piso,0); % Subtract GM and CSF contributions
-
+                
                 if(DeconvMethodCode == 4)
-%                     fODF = mat_dRL(DS, weighted_HRKernel(:,1:end-NC),200, obj.NN_H, 8);
+                    %                     fODF = mat_dRL(DS, weighted_HRKernel(:,1:end-NC),200, obj.NN_H, 8);
                     fODF = ADT_deconv_RLdamp_1D_noEP(DS, weighted_HRKernel(:,1:end-NC),200, obj.NN_H);
                 elseif(DeconvMethodCode == 3)
-%                     fODF = mat_RL(DS, weighted_HRKernel(:,1:end-NC), 200);
+                    %                     fODF = mat_RL(DS, weighted_HRKernel(:,1:end-NC), 200);
                     fODF = RichardsonLucy(DS, weighted_HRKernel(:,1:end-NC), 200);
                 elseif(DeconvMethodCode == 2)
                     fODF = DW_RegularizedDeconv(weighted_HRKernel(:,1:end-NC),DS,op_e2, obj.L2LSQ_reg);
                 elseif(DeconvMethodCode == 1)
-                    fODF = lsqnonneg(weighted_HRKernel(:,1:end-NC),DS, op_e2);                    
+                    fODF = lsqnonneg(weighted_HRKernel(:,1:end-NC),DS, op_e2);
                 end
                 fODFC = fODF;
                 fODFC(fODFC < median(fODFC)) = 0;
@@ -355,7 +355,7 @@ classdef SphericalDeconvolution < handle
                     for kANC = 1:ANC
                         Y = [Y weighted_HRKernel(:,cindex:cindex+obj.nDirections-1)*fODFC(cindex:cindex+obj.nDirections-1)];
                         cindex = cindex+obj.nDirections;
-                %         if(sum(Y(:,1)) > 0) % i.e. if the FOD is non-zero
+                        %         if(sum(Y(:,1)) > 0) % i.e. if the FOD is non-zero
                         % changed for multi FOD
                         if(sum(Y(:,kANC)) > 0) % i.e. if the FOD is non-zero
                             Y(:,kANC) = Y(:,kANC)/max(Y(:,kANC)); % Normalize WM signal
@@ -395,28 +395,28 @@ classdef SphericalDeconvolution < handle
             clear WM_fod_normalized;
             
             obj.data.img = permute(obj.data.img,[2 1]);
-            obj.data.img = reshape(obj.data.img,siz); % st(133)* ~isnan(FA)          
+            obj.data.img = reshape(obj.data.img,siz); % st(133)* ~isnan(FA)
         end
         
         function setDeconvMethod(obj,method)
-        % Sets the deconvolution method. one between csd, mscsd, grl, mfod
+            % Sets the deconvolution method. one between csd, mscsd, grl, mfod
             if(~SphericalDeconvolution.isSupportedMethod(method))
-               warning('Unsupported deconvolution method.');
-               return;
-           end
-           obj.deconv_method = method; 
+                warning('Unsupported deconvolution method.');
+                return;
+            end
+            obj.deconv_method = method;
         end
         
         % Sets the L2 regularization value.
         function setL2REG(obj,reg_val)
-           obj.L2LSQ_reg = reg_val;           
+            obj.L2LSQ_reg = reg_val;
         end
-       
+        
     end
     
     methods(Static)
         function methods = SupportedMethods()
-        % List the supported deconvolution methods
+            % List the supported deconvolution methods
             methods = {'LSQ','L2LSQ','RL','dRL'};
         end
         
@@ -434,29 +434,29 @@ classdef SphericalDeconvolution < handle
         end
         
         function SaveOutputToNii(SpherDec,output,file_prefix)
-        % Save the content of a deconvolution data structure to nifti. SpherDec
-        % is an instance of this class, output is the structure returned
-        % from PerformDeconv. file_prefix is the name without extension of
-        % the desired outputs.
+            % Save the content of a deconvolution data structure to nifti. SpherDec
+            % is an instance of this class, output is the structure returned
+            % from PerformDeconv. file_prefix is the name without extension of
+            % the desired outputs.
             lmax = 16;
             super_scheme = gen_scheme(SpherDec.nDirections,lmax); % the reconstruction scheme. Change 300 to any number
             sh = SH(lmax,super_scheme.vert);
-
+            
             if(SpherDec.n_anisotropic == 1)
                 % Single FOD case
                 fod = sh.coef(output.FOD);
-
-    %             FOD_max = max(output.FOD,[],4);
-    %             FOD_scaled = output.FOD;
-    %             FOD_val = mean(FOD_max(output.fractions(:,:,:,1) > 0.7*max(FOD_max(:)))); % 20/12/2017
-    %             for ij=1:size(FOD_scaled,4)
-    %                 FOD_scaled(:,:,:,ij) = FOD_scaled(:,:,:,ij) / FOD_val;% .* fractions(:,:,:,1); % 20/12/2017
-    %             end
+                
+                %             FOD_max = max(output.FOD,[],4);
+                %             FOD_scaled = output.FOD;
+                %             FOD_val = mean(FOD_max(output.fractions(:,:,:,1) > 0.7*max(FOD_max(:)))); % 20/12/2017
+                %             for ij=1:size(FOD_scaled,4)
+                %                 FOD_scaled(:,:,:,ij) = FOD_scaled(:,:,:,ij) / FOD_val;% .* fractions(:,:,:,1); % 20/12/2017
+                %             end
                 mult = 1;
                 if(SpherDec.NN_H ~= 0)
                     mult = 0.1/SpherDec.NN_H;
                 end
-
+                
                 if(isfield(SpherDec.data,'hdr'))
                     DW_SaveVolumeLikeNii(fod,SpherDec.data,[file_prefix '_CSD_FOD'],0);
                     DW_SaveVolumeLikeNii(output.fractions,SpherDec.data,[file_prefix '_fractions'],0);
@@ -474,7 +474,7 @@ classdef SphericalDeconvolution < handle
                 % multi-FOD case
                 for fod_id=1:SpherDec.n_anisotropic
                     fod = sh.coef(output.FOD(:,:,:,1+(fod_id-1)*SpherDec.nDirections:fod_id*SpherDec.nDirections));
-
+                    
                     if(isfield(SpherDec.data,'hdr'))
                         DW_SaveVolumeLikeNii(fod,SpherDec.data,[file_prefix '_CSD_FOD_' num2str(fod_id)],0);
                     else
@@ -493,17 +493,17 @@ classdef SphericalDeconvolution < handle
         end
         
         function mrt_data = LoadNiiBvalBvec(varargin)
-        % Load diffusion data in the MRIToolkit format. Input:
-        % nii_file: the .nii(gz) data file
-        % bval: the .bval file
-        % bvec: the .bvec file
-        % mask: the associated mask (optional)
-
+            % Load diffusion data in the MRIToolkit format. Input:
+            % nii_file: the .nii(gz) data file
+            % bval: the .bval file
+            % bvec: the .bvec file
+            % mask: the associated mask (optional)
+            
             if( isempty(varargin))
                 help('SphericalDeconvolution.LoadNiiBvalBvec');
                 return;
             end
-
+            
             coptions = varargin;
             file_in = GiveValueForName(coptions,'nii_file');
             if(isempty(file_in))
@@ -518,11 +518,11 @@ classdef SphericalDeconvolution < handle
             bvec = GiveValueForName(coptions,'bvec');
             if(isempty(bvec))
                 error('Need to specify the input .bvec file');
-            end      
+            end
             mask = GiveValueForName(coptions,'mask');
             if(isempty(mask))
                 mask = '';
-            end      
+            end
             
             mrt_data = DW_LoadData(file_in,bvec,bval,mask);
             mrt_data.img = single(mrt_data.img);
@@ -532,15 +532,15 @@ classdef SphericalDeconvolution < handle
         end
         
         function [EigVal,IsoK] = EstimatedAverageEigval_IsoK(data)
-        % Estimate the average eigenvalues and isotropic kurtosis in a
-        % dataset to initialize the RF
+            % Estimate the average eigenvalues and isotropic kurtosis in a
+            % dataset to initialize the RF
             [sx,sy,sz,st] = size(data.img);
             signal_stack = reshape(data.img,sx*sy*sz,st);
-
+            
             [G,WG,GoodIndexes] = DW_BuildDTMat(data,unique(data.bvals),1);
             Gt = G;
             G = [Gt(:,1:6) 1/6*(data.bvals*1e-3).^2 Gt(:,end)];
-
+            
             msk = sum(signal_stack==0,2) == 0;
             p = zeros(length(signal_stack),8);
             K = zeros(length(signal_stack),1);
@@ -554,7 +554,7 @@ classdef SphericalDeconvolution < handle
                     continue
                 end
                 p1 = E_DTI_WLLS_WW(S,G)
-                p(ij,:) = p1;%G\log(S); 
+                p(ij,:) = p1;%G\log(S);
                 if(sum(~isfinite(p(ij,:))) > 0)
                     continue
                 end
@@ -562,35 +562,35 @@ classdef SphericalDeconvolution < handle
                 autovals(ij,:) = sort(autoval,'descend');
                 K(ij) = 1e-6*p1(end-1)/mean(autoval.^2);
             end
-
+            
             p = reshape(p,sx,sy,sz,8);
-
+            
             [~,m_FA,m_DEC,~,~,m_lambdas,eigenvectors] = DW_ComputeTensorMetrics(p,1:6);
-            U = m_FA(:) > 0.7 & data.mask(:) > 0; 
-
+            U = m_FA(:) > 0.7 & data.mask(:) > 0;
+            
             EigVal = mean(autovals(U > 0,:));
             EigVal(2:3) = mean(EigVal(2:3));
             IsoK = mean(K(U(:) > 0 & K(:) > 0 & K(:) < 4));
         end
-
-        function TerminateTractsWithFraction(varargin) 
-        % This function filters a .MAT fiber tractography result using the
-        % fractions estimated from the GRL method, to stop fiber
-        % tractography at the GM-WM interface, or GM-CSF. This code assumes GRL
-        % has been run with 3 classes (WM, GM, CSF). Input arguments
-        % are:
-        % mat_file: the reference ExploreDTI-like .MAT file
-        % tract_file: the tractography file in ExploreDTI-like .MAT format
-        % out_file: the desired output (.MAT)
-        % fraction_file: 'The tissue class fractions (.nii)'
-        % mask_mode: one between 'wm' (WM-GM interface) 'gm' (GM-CSF
-        % interface) 'gm_only' (only the GM part of a tract)
-
+        
+        function TerminateTractsWithFraction(varargin)
+            % This function filters a .MAT fiber tractography result using the
+            % fractions estimated from the GRL method, to stop fiber
+            % tractography at the GM-WM interface, or GM-CSF. This code assumes GRL
+            % has been run with 3 classes (WM, GM, CSF). Input arguments
+            % are:
+            % mat_file: the reference ExploreDTI-like .MAT file
+            % tract_file: the tractography file in ExploreDTI-like .MAT format
+            % out_file: the desired output (.MAT)
+            % fraction_file: 'The tissue class fractions (.nii)'
+            % mask_mode: one between 'wm' (WM-GM interface) 'gm' (GM-CSF
+            % interface) 'gm_only' (only the GM part of a tract)
+            
             if( isempty(varargin))
                 help('SphericalDeconvolution.TerminateTractsWithFraction');
                 return;
             end
-
+            
             coptions = varargin;
             mat_file = GiveValueForName(coptions,'mat_file');
             if(isempty(mat_file))
@@ -615,9 +615,9 @@ classdef SphericalDeconvolution < handle
             
             load(tract_file);
             load(mat_file,'FA','VDims');
-
+            
             [sx,sy,sz] = size(FA);
-
+            
             intersect_mask = EDTI.LoadNifti(fraction_file);
             intersect_mask = intersect_mask.img;
             [~,intersect_mask] = max(intersect_mask,[],4);
@@ -628,7 +628,7 @@ classdef SphericalDeconvolution < handle
             elseif(strcmp(mask_mode,'gm_only'))
                 intersect_mask = intersect_mask == 2 & ~isnan(FA);
             end
-
+            
             new_tracts = {};
             new_tracts_L = {};
             new_tracts_FA = {};
@@ -638,21 +638,21 @@ classdef SphericalDeconvolution < handle
             new_tracts_Lambdas = {};
             new_tracts_Angle = {};
             new_tracts_FOD = {};
-
+            
             extra_tracts = 0;
-
+            
             for tid=1:length(Tracts)
                 tract = Tracts{tid};
-
+                
                 points2keep = false(size(tract,1),1);
                 for l=1:size(tract,1)
                     point = round(tract(l,:)./VDims);
                     if(intersect_mask(point(1),point(2),point(3)))
-                       % This is a good point 
-                       points2keep(l) = true;
+                        % This is a good point
+                        points2keep(l) = true;
                     end
                 end
-
+                
                 if(sum(points2keep) > 0)
                     LabeledVector = LabelVector(points2keep);
                     for ij=2:max(LabeledVector)
@@ -660,7 +660,7 @@ classdef SphericalDeconvolution < handle
                         if(sum(points2keep_l > 0) < 2)
                             continue
                         end
-
+                        
                         new_tracts{end+1} = tract(points2keep_l,:);
                         new_tracts_L{end+1} = size(new_tracts{end},1);
                         new_tracts_FA{end+1} = TractFA{tid}(points2keep_l);
@@ -671,11 +671,11 @@ classdef SphericalDeconvolution < handle
                         new_tracts_FOD{end+1} = TractsFOD{tid}(points2keep_l);
                         new_tracts_Angle{end+1} = TractAng{tid}(points2keep_l);
                         extra_tracts = extra_tracts+1;
-
+                        
                     end
                     points2keep(LabeledVector > 1) = false;
-                end    
-
+                end
+                
                 if(sum(points2keep) < 2)
                     points2keep = false(size(points2keep));
                 end
@@ -689,16 +689,16 @@ classdef SphericalDeconvolution < handle
                 TractLambdas{tid} = TractLambdas{tid}(points2keep,:);
                 TractsFOD{tid} = TractsFOD{tid}(points2keep);
                 TractAng{tid} = TractAng{tid}(points2keep);
-
+                
             end
-
+            
             good_tracts = true(size(Tracts));
             for tract_id=1:length(Tracts)
-               if(TractL{tract_id} == 0)
-                   good_tracts(tract_id) = false;
-               end
+                if(TractL{tract_id} == 0)
+                    good_tracts(tract_id) = false;
+                end
             end
-
+            
             Tracts = Tracts(good_tracts);
             TractsFOD = TractsFOD(good_tracts);
             TractL = TractL(good_tracts);
@@ -708,8 +708,8 @@ classdef SphericalDeconvolution < handle
             TractGEO = TractGEO(good_tracts);
             TractLambdas = TractLambdas(good_tracts);
             TractMD = TractMD(good_tracts);
-
-
+            
+            
             Tracts(end+1:end+extra_tracts) = new_tracts;
             TractL(end+1:end+extra_tracts) = new_tracts_L;
             TractFA(end+1:end+extra_tracts) = new_tracts_FA;
@@ -720,23 +720,23 @@ classdef SphericalDeconvolution < handle
             TractAng(end+1:end+extra_tracts) = new_tracts_Angle;
             TractsFOD(end+1:end+extra_tracts) = new_tracts_FOD;
             FList = (1:length(Tracts))';
-
+            
             % clear new_tracts new_tracts_L new_tracts_FA new_tracts_MD new_tracts_FE new_tracts_GEO
-            % clear new_tracts_Lambdas new_tracts_Angle new_tracts_FOD points2keep tracts 
-
-%             disp(['Gated ' num2str(sum(good_tracts == true)) ' out of ' num2str(length(good_tracts)) ' ' ...
-%                 sprintf('%.2f',100*single(sum(good_tracts == true))/single(length(good_tracts))) '%']);
-
+            % clear new_tracts_Lambdas new_tracts_Angle new_tracts_FOD points2keep tracts
+            
+            %             disp(['Gated ' num2str(sum(good_tracts == true)) ' out of ' num2str(length(good_tracts)) ' ' ...
+            %                 sprintf('%.2f',100*single(sum(good_tracts == true))/single(length(good_tracts))) '%']);
+            
             save(out_file,'Tracts','TractsFOD','TractL','TractFA','TractFE','TractFE',...
                 'TractAng','TractGEO','TractLambdas','TractMD','FList','-v7.3');
         end
-
+        
         function [init_lambdas,init_K] = Eigenval_IsoK_WM_FromData(data,FA,mask)
             % Estimate the tensor eigenvalues and isotropic kurtosis from the data, in a mask where FA >= 0.7
             data.img = single(data.img);
             [sx,sy,sz,st] = size(data.img);
             signal_stack = reshape(data.img,sx*sy*sz,st);
-
+            
             [G,WG,GoodIndexes] = DW_BuildDTMat(data,unique(data.bvals),1);
             Gt = G;
             G = [Gt(:,1:6) 1/6*(data.bvals*1e-3).^2 Gt(:,end)]; % Extend for isotropic kurtosis
@@ -761,36 +761,299 @@ classdef SphericalDeconvolution < handle
                 autovals(ij,:) = sort(autoval,'descend');
                 K(ij) = 1e-6*p1(end-1)/mean(autoval.^2);
             end
-
+            
             p = reshape(p,sx,sy,sz,8);
-
+            
             U = FA(:) > 0.7 & mask(:) > 0;
-
+            
             init_lambdas = real(mean(autovals(U > 0,:)));
             init_lambdas(2:3) = mean(init_lambdas(2:3));
             init_K = real(mean(K(U(:) > 0 & K(:) > 0 & K(:) < 4)));
-
+            
             disp(['Calibrated lambdas are:' num2str(init_lambdas)]);
             disp(['Calibrated K is:' num2str(init_K)]);
-
+            
             data.img = reshape(data.img,sx,sy,sz,st);
-        
+            
         end
+        
+        function sh_matrix = SHFitMatrix(varargin)
+            % constructs the Spherical Harmonics fit matrices used in
+            % ExploreDTI, Dipy, mrtrix3.
+            % Input arguments:
+            % bvecs: the gradient orientations of the data on the unit
+            % sphere (file or vector)
+            % bvals: the corresponding diffusion weightings (file or
+            % matrix)
+            % bmat: exclusive with bvals/bvecs. Use the b-matrix from
+            % ExploreDTI instead (file or matrix)
+            % basis: one in "edti" (default), "dipy" (descoteaux et al.),
+            % "mrtrix" (tournier et al.)
+            % bvalue: the b-value to fit. If not specified, defaults to the
+            % maximum shell
+            % lmax: the maximum spherical harmonics order. default 8 or
+            % what is allowed by the protocol
+            bvals_file = GiveValueForName(varargin,'bvals');
+            bvecs_file = GiveValueForName(varargin,'bvecs');
+            txt_file = GiveValueForName(varargin,'bmat');
+            basis_type = GiveValueForName(varargin,'basis');
+            bvalue = GiveValueForName(varargin,'bvalue');
+            lmax = GiveValueForName(varargin,'lmax');
+
+            if(isempty(txt_file) && (isempty(bvals_file) || isempty(bvecs_file)))
+                error('Missing mandatory argument bvals/bvecs or txt');
+            end
+            
+            if(isempty(basis_type))
+                basis_type = 'edti';
+            end
+            
+            if(~isempty(txt_file))
+               if(ischar(txt_file))
+                   bmat = load(txt_file);
+               else
+                   bmat = txt_file;
+               end
+               [bvals,bvecs] = EDTI.bval_bvec_from_b_Matrix(bmat); 
+            else
+                if(ischar(bvals_file))
+                    bvals = load(bvals_file);
+                    bvals = bvals';
+                else
+                    bvals = bvals_file;
+                end
+                if(ischar(bvecs_file))
+                    bvecs = load(bvecs_file);
+                    bvecs = bvecs';
+                else
+                    bvecs = bvecs_file;
+                end
+            end
+            
+            if(isempty(bvalue))
+                bvalue = max(round(bvals));
+            end
+            
+            IX = abs(bvals-bvalue) < 0.1*bvalue;
+%             bvals = bvals(IX);
+            bvecs = bvecs(IX,:);
+                        
+            if(isempty(lmax))
+                lmax = min(2.*(floor((sqrt(1+8.*size(bvecs,1))-3)./4)),8);
+            end
+            LmaxCoeffs = (lmax+1).*(lmax+2)./2;
+            
+            angle_rep = c2s(bvecs);
+            sh_matrix = zeros(size(bvecs,1),LmaxCoeffs);
+            if(strcmp(basis_type,'dipy'))
+                bvecs_dipy = bvecs(:,[2 1 3]);
+                bvecs_dipy(:,1) = -bvecs_dipy(:,1);
+                angle_rep_dipy = c2s(bvecs_dipy);
+                for l_order=0:2:lmax
+                    order_legendre = legendre(l_order,cos(angle_rep_dipy(:,1)),'sch')';
+                    for m_phase=-l_order:l_order
+                        Ylm = (-1)^m_phase*sqrt((2*l_order+1)/(4*pi));
+                        Ylm = Ylm.*order_legendre(:,1+abs(m_phase)).*exp(1i*m_phase*angle_rep_dipy(:,2));
+                        index = (l_order^2+l_order+2)/2+m_phase;
+                        switch(sign(m_phase))
+                            case 0
+                                sh_matrix(:,index) = Ylm;
+                            case 1
+                                sh_matrix(:,index) = imag(Ylm);
+                            case -1
+                                sh_matrix(:,index) = real(Ylm);
+                        end
+                    end
+                end
+            elseif(strcmp(basis_type,'edti'))
+                for l_order=0:2:lmax
+                    index = l_order*(l_order+1)/2 + 1;
+                    order_legendre = legendre(l_order,cos(angle_rep(:,1)),'sch')';
+                    for m_phase=0:l_order
+                        Ylm = (-1)^m_phase*sqrt((2*l_order+1)/(4*pi));
+                        Ylm = Ylm.*order_legendre(:,1+abs(m_phase)).*exp(1i*m_phase*angle_rep(:,2));
+                        if(m_phase == 0)
+                            sh_matrix(:,index) = Ylm;
+                        else
+                            sh_matrix(:,index-m_phase) = imag(Ylm);
+                            sh_matrix(:,index+m_phase) = real(Ylm);
+                        end
+                    end
+                end
+            elseif(strcmp(basis_type,'mrtrix'))
+%                 bvecs_mrtrix = bvecs;
+                bvecs_mrtrix = bvecs(:,[2 1 3]);
+                bvecs_mrtrix(:,1) = -bvecs_mrtrix(:,1);
+                angle_rep_mrtrix = c2s(bvecs_mrtrix);
+                for l_order=0:2:lmax
+                    index = l_order*(l_order+1)/2 + 1;
+                    order_legendre = legendre(l_order,cos(angle_rep_mrtrix(:,1)),'sch')';
+                    for m_phase=0:l_order
+                        Ylm = (-1)^m_phase*sqrt((2*l_order+1)/(4*pi));
+                        Ylm = Ylm.*order_legendre(:,1+abs(m_phase)).*exp(1i*m_phase*angle_rep_mrtrix(:,2));
+                        if(m_phase == 0)
+                            sh_matrix(:,index) = Ylm;
+                        else
+                            sh_matrix(:,index-m_phase) = imag(Ylm);
+                            sh_matrix(:,index+m_phase) = real(Ylm);
+                        end
+                    end
+                end
+            else
+                error('Unknown basis type');
+            end
+
+        end
+        
+        function SHFittedData = dMRI_2_SH(varargin)
+            % Converts dMRI data to the SH representation of ExploreDTI,
+            % Dipy or mrtrix3.
+            % Input arguments:
+            % data: the input data structure. 
+            % basis: the desired SH basis, one in
+            % "edti" (default),"dipy","mrtrix"
+            % bvalue: which b-value to fit. Defaults to the maximum
+            data = GiveValueForName(varargin,'data');
+            basis = GiveValueForName(varargin,'basis');
+            bvalue = GiveValueForName(varargin,'bvalue');
+            if(isempty(data))
+                error('Missing mandatory input data');
+            end
+            if(isempty(basis))
+                basis = 'edti';
+            end
+            if(isempty(bvalue))
+                bvalue = max(round(data.bvals));
+            end      
+            
+            IX = abs(data.bvals-bvalue)<0.1*bvalue;
+            data.bvals = data.bvals(IX);
+            data.bvecs = data.bvecs(IX,:);
+            if(~ismatrix(data.img))
+                data.img = data.img(:,:,:,IX);
+            else
+                data.img = data.img(IX);
+            end
+            
+            [sx,sy,sz,st] = size(data.img);
+            if(~ismatrix(data.img))
+                data.img = reshape(data.img,sx*sy*sz,st);
+            else
+                data.img = data.img';
+            end
+            SHB = SphericalDeconvolution.SHFitMatrix('basis',basis,'bvals',data.bvals,...
+                'bvecs',data.bvecs);
+            SHFittedData = SHB\data.img';
+            if(sx ~= 1 && sy ~= 1)
+                SHFittedData = reshape(SHFittedData',sx,sy,sz,size(SHFittedData,1));
+            end
+        end
+        
+        function data = SH_2_dMRI(varargin)
+            % Converts ExploreDTI, Dipy or mrtrix3 SH coefficients to
+            % another program. Input arguments:
+            % shcoeffs: the input representation
+            % basis: the SH basis type, one in
+            % "edti" (default),"dipy","mrtrix"
+            % bvecs: the gradient orientations (variable or file)
+            % bvals: the corresponding diffusion weightings (variable or
+            % file)
+            % bmat: alternatively, the b-matrix (variable or file)    
+            % bvalue: the shell b-value. Defaults to the max
+            bvals = GiveValueForName(varargin,'bvals');
+            bvecs = GiveValueForName(varargin,'bvecs');
+            basis = GiveValueForName(varargin,'basis');
+            bvalue = GiveValueForName(varargin,'bvalue');
+            bmat = GiveValueForName(varargin,'bmat');
+            shcoeffs = GiveValueForName(varargin,'shcoeffs');
+            if(isempty(shcoeffs))
+                error('Missing mandatory input shcoeffs');
+            end
+            
+            if(isempty(basis))
+                basis = 'edti';
+            end
+            
+            if(isempty(bvals))
+               [bvals,bvecs] = EDTI.bval_bvec_from_b_Matrix(bmat); 
+            end
+            
+            if(ischar(bvals))
+                bvals = load(bvals);
+                bvecs = load(bvecs);
+                bvals = bvals';
+                bvecs = bvecs';
+            end                
+            
+            if(isempty(bvalue))
+                bvalue = max(round(bvals));
+            end      
+            
+            IX = abs(bvals-bvalue)<0.1*bvalue;
+            bvals = bvals(IX);
+            bvecs = bvecs(IX,:);
+            
+            SHB = SphericalDeconvolution.SHFitMatrix('basis',basis,'bvals',bvals,...
+                'bvecs',bvecs,'bmat',bmat);
+
+            [sx,sy,sz,st] = size(shcoeffs);
+            if(~ismatrix(shcoeffs))
+                shcoeffs = reshape(shcoeffs,sx*sy*sz,st)';
+            end
+            data.img = SHB*shcoeffs;           
+
+            data.bvals = bvals;
+            data.bvecs = bvecs;
+            
+            if(sx ~= 1 && sy ~= 1)
+                data.img = data.img';
+                data.img = reshape(data.img,sx,sy,sz,size(bvals,1));
+            end
+        end
+        
+        function SHCoeffs = SH_2_SH(varargin)
+            % Converts ExploreDTI, Dipy or mrtrix3 SH coefficients to
+            % another program. Input arguments:
+            % shcoeffs: the input representation
+            % basis_in: the input basis type, one in
+            % "edti","dipy","mrtrix"
+            % basis_out: the output basis type
+            % bvecs: the gradient orientations (variable or file)
+            % bvals: the corresponding diffusion weightings (variable or
+            % file)
+            % bmat: alternatively, the b-matrix (variable or file)
+            bvals = GiveValueForName(varargin,'bvals');
+            bvecs = GiveValueForName(varargin,'bvecs');
+            basis_in = GiveValueForName(varargin,'basis_in');
+            basis_out = GiveValueForName(varargin,'basis_out');
+            bmat = GiveValueForName(varargin,'bmat');
+            shcoeffs = GiveValueForName(varargin,'shcoeffs');
+            if(isempty(shcoeffs))
+                error('Missing mandatory input shcoeffs');
+            end
+            
+            data = SphericalDeconvolution.SH_2_dMRI('bvals',bvals,...
+                'bvecs',bvecs,'basis',basis_in,'bmat',bmat,'shcoeffs',shcoeffs);
+            SHCoeffs = SphericalDeconvolution.dMRI_2_SH('data',data,'basis',...
+                basis_out);
+            
+        end
+        
     end
 end
 
 % Private function to parse input parameters
 function keys = ParseInputKeys(input)
-    keys = {};
-    if(mod(length(input),2) ~= 0)
-        warning('Incorrect input pairs');
-        return;
-    end
-    keys = cell(length(input)/2,2);
-    for key_id=1:2:length(input)
-        keys(key_id,1) = {input{key_id}};
-        keys(key_id,2) = {input{key_id+1}};
-    end
+keys = {};
+if(mod(length(input),2) ~= 0)
+    warning('Incorrect input pairs');
+    return;
+end
+keys = cell(length(input)/2,2);
+for key_id=1:2:length(input)
+    keys(key_id,1) = {input{key_id}};
+    keys(key_id,2) = {input{key_id+1}};
+end
 end
 
 % Helper: finds a parameter by name when using varargin
@@ -806,14 +1069,14 @@ end
 
 % Helper function
 function LabeledVector = LabelVector(LabeledVector)
-    LabeledVector = uint32(LabeledVector);
-    CLabel = 1;
-    for ij=2:length(LabeledVector)
-        if(LabeledVector(ij) > 0 && LabeledVector(ij-1) == 0)
-            CLabel = CLabel + 1;
-        end
-        LabeledVector(ij) = LabeledVector(ij)*CLabel;
+LabeledVector = uint32(LabeledVector);
+CLabel = 1;
+for ij=2:length(LabeledVector)
+    if(LabeledVector(ij) > 0 && LabeledVector(ij-1) == 0)
+        CLabel = CLabel + 1;
     end
+    LabeledVector(ij) = LabeledVector(ij)*CLabel;
+end
 end
 
 % From ExploreDTI: Weighted least squares
@@ -866,40 +1129,40 @@ end
 % Private function to select a subset of b-values
 function fitted_indexes = DW_GetFittedIndexes(data,fitted_bvalues)
 
-    fitted_indexes = [];
-    for j=1:length(fitted_bvalues)
-        fitted_indexes = [fitted_indexes;ascolumn(find(data.bvals==fitted_bvalues(j)))];
-    end
-    
+fitted_indexes = [];
+for j=1:length(fitted_bvalues)
+    fitted_indexes = [fitted_indexes;ascolumn(find(data.bvals==fitted_bvalues(j)))];
 end
 
-% Generate a b-matrix from bval/bvec 
+end
+
+% Generate a b-matrix from bval/bvec
 function [G,WG,GoodIndexes] = DW_BuildDTMat(data,bvalues,fit_S0)
-    if(nargin < 2)
-        bvalues_range = [min(data.bvals(data.bvals>=1)) max(data.bvals)];
-    end
-    GoodIndexes = DW_GetFittedIndexes(data,bvalues);
-    G = [data.bvecs(GoodIndexes,1).^2 data.bvecs(GoodIndexes,1).*data.bvecs(GoodIndexes,2) data.bvecs(GoodIndexes,1).*data.bvecs(GoodIndexes,3) ...
-        data.bvecs(GoodIndexes,2).^2 data.bvecs(GoodIndexes,2).*data.bvecs(GoodIndexes,3) data.bvecs(GoodIndexes,3).^2];
+if(nargin < 2)
+    bvalues_range = [min(data.bvals(data.bvals>=1)) max(data.bvals)];
+end
+GoodIndexes = DW_GetFittedIndexes(data,bvalues);
+G = [data.bvecs(GoodIndexes,1).^2 data.bvecs(GoodIndexes,1).*data.bvecs(GoodIndexes,2) data.bvecs(GoodIndexes,1).*data.bvecs(GoodIndexes,3) ...
+    data.bvecs(GoodIndexes,2).^2 data.bvecs(GoodIndexes,2).*data.bvecs(GoodIndexes,3) data.bvecs(GoodIndexes,3).^2];
 %     G = [data.bvecs(GoodIndexes,1).^2 2*data.bvecs(GoodIndexes,1).*data.bvecs(GoodIndexes,2) 2*data.bvecs(GoodIndexes,1).*data.bvecs(GoodIndexes,3) ...
 %         data.bvecs(GoodIndexes,2).^2 2*data.bvecs(GoodIndexes,2).*data.bvecs(GoodIndexes,3) data.bvecs(GoodIndexes,3).^2];
-    for j=1:6
-       G(:,j) = -G(:,j).*data.bvals(GoodIndexes); 
-    end
-    if(nargin > 2 && fit_S0 == 1)
-%         G = [G data.bvals(GoodIndexes)==0];
-        G = [G ones(size(G,1),1)];
-    end
+for j=1:6
+    G(:,j) = -G(:,j).*data.bvals(GoodIndexes);
+end
+if(nargin > 2 && fit_S0 == 1)
+    %         G = [G data.bvals(GoodIndexes)==0];
+    G = [G ones(size(G,1),1)];
+end
 %     bvals = data.bvals(GoodIndexes);
 %     bvecs = data.bvecs(GoodIndexes,:);
-    if(nargout > 1)
-       WG = G;
-       for h=1:6%size(WG,2)
-          WG(:,h) = WG(:,h).*(data.bvals(GoodIndexes)); 
-          WG(isnan(WG)) = 0;
-          WG(~isfinite(WG)) = 0;
-       end
+if(nargout > 1)
+    WG = G;
+    for h=1:6%size(WG,2)
+        WG(:,h) = WG(:,h).*(data.bvals(GoodIndexes));
+        WG(isnan(WG)) = 0;
+        WG(~isfinite(WG)) = 0;
     end
+end
 end
 
 % Private function assembling the DTI/DKI kernels
@@ -1005,7 +1268,7 @@ else
     for l=1:length(isoDs)
         LRKernel(:,length(phi_LR)+l) = create_signal_multi_tensor([0 0], 1, [isoDs(l) isoDs(l) isoDs(l)], ...
             bmat{1}(:,4), bmat{1}(:,1:3), 1, 0, 0);
-    end    
+    end
 end
 
 end
@@ -1015,7 +1278,7 @@ function [bmat,LRKernel,HRKernel,super_scheme] = mDRLMT_MakeNODDIKernel_multicom
 if(isempty(which('SynthMeasWatsonSHStickTortIsoV_B0')))
     error('Cannot find the NODDI toolbox. Please, add it to the MATLAB path');
 end
-    
+
 shells = single(unique(int16(round(data.bvals)/1)*1)); % automatic detection of number of shells.
 % This shell splitting works only for b-value spaced more than 100. To be fixed for other datasets.
 ndirections = zeros(length(shells),1);
@@ -1098,7 +1361,7 @@ if(shell_data > 0)
                 E = SynthMeasWatsonSHStickTortIsoV_B0(noddi_values{aniso_comp}, NODDI_protocol, fibredir);
                 Kernel{ij}(:,i+hr_index_columns) = E;
             end
-
+            
             % LR
             for i=1:length(phi_LR{aniso_comp})
                 fibredir = lr_scheme{aniso_comp}.vert(i,:)';
@@ -1115,7 +1378,7 @@ if(shell_data > 0)
         for l=1:length(isoDs)
             Kernel{ij}(:,end+1) = create_signal_multi_tensor([0 0], 1, [isoDs(l) isoDs(l) isoDs(l)], ...
                 bmat{ij}(:,4), bmat{ij}(:,1:3), 1, 0, 0);
-        end        
+        end
         
         % LR
         for l=1:length(isoDs)
@@ -1136,7 +1399,7 @@ else
     bmat{1} = zeros(N,4);
     bmat{1}(:,1:3) = data.bvecs;
     bmat{1}(:,4) = data.bvals;
-
+    
     % ANISOTROPIC PART
     hr_index_columns = 0;
     lr_index_columns = 0;
@@ -1156,7 +1419,7 @@ else
         end
         
         hr_index_columns = hr_index_columns + size(super_scheme{aniso_comp}.vert,1);
-        lr_index_columns = lr_index_columns + size(lr_scheme{aniso_comp}.vert,1);        
+        lr_index_columns = lr_index_columns + size(lr_scheme{aniso_comp}.vert,1);
     end
     % ISOTROPIC PART
     % HR
@@ -1168,25 +1431,25 @@ else
     for l=1:length(isoDs)
         LRKernel(:,lr_index_columns+l) = create_signal_multi_tensor([0 0], 1, [isoDs(l) isoDs(l) isoDs(l)], ...
             bmat{1}(:,4), bmat{1}(:,1:3), 1, 0, 0);
-    end    
+    end
 end
 
 end
 
 % The following functions have been included from "hardi_tools", which is
-% available as follows: 
+% available as follows:
 % Original authors:
 %% Project:   High Angular Resolution Diffusion Imaging Tools
 % Available at: https://www.neuroimagen.es/webs/hardi_tools/
 % Function to create a simulated signal from the multi-tensor diffusion model.
-% Rician noise can be added.                                                                        
-%                                                                                                
+% Rician noise can be added.
+%
 %   Language:  MATLAB(R)
 %   Author:  Erick Canales-Rodríguez, Lester Melie-García, Yasser Iturria-Medina, Yasser Alemán-Gómez
-%   Date: 2013, Version: 1.2          
-% 
+%   Date: 2013, Version: 1.2
+%
 % See also test_DSI_example, test_DOT_example, test_QBI_example,
-% test_DOT_R1_example, test_DOT_R2_vs_CSA_QBI_example.                           
+% test_DOT_R1_example, test_DOT_R2_vs_CSA_QBI_example.
 
 % Modifications have been performed where needed for compatibility (from
 % A. De Luca)
@@ -1270,13 +1533,13 @@ phi = phi*c;
 theta = theta*c;
 
 Rz = [ cos(phi)  -sin(phi)  0
-       sin(phi)   cos(phi)  0
-           0         0      1];
+    sin(phi)   cos(phi)  0
+    0         0      1];
 
 
 Ry = [cos(theta)   0   sin(theta)
-          0        1         0
-     -sin(theta)   0   cos(theta)];
+    0        1         0
+    -sin(theta)   0   cos(theta)];
 
 R =  Rz*Ry;
 return
@@ -1287,34 +1550,34 @@ function scheme = gen_scheme(N, lmax)
 % function scheme = gen_scheme(N, lmax)
 %
 % Generate a set of orientations in the required format, along
-% with the corresponding SH transform information up to 
+% with the corresponding SH transform information up to
 % harmonic order 'lmax'.
 %
 % If N is a string, it will attempt to load the specified
 % file.
 %
 % If N is a number, a scheme with the specified number of
-% directions will be generated using the equidistribute.m 
+% directions will be generated using the equidistribute.m
 % script (note that these are not perfectly uniformly
 % distributed).
 %
 % If N is a nx3 matrix, it will assume that each row provides
 % an [ x y z ] vector pointing along the desired direction.
-% 
+%
 
 if ischar(N)
-  N = load(N);
+    N = load(N);
 end
 
 if size(N,1) == 1 & size(N,2) == 1
-  P = c2s(equidistribute(N));
+    P = c2s(equidistribute(N));
 elseif size(N,2) >= 3
-  n = sqrt(sum(N(:,1:3).^2,2));
-  k = find(n);
-  X = N(k,1:3)./repmat(n(k),1,3);
-  P = c2s(X);
+    n = sqrt(sum(N(:,1:3).^2,2));
+    k = find(n);
+    X = N(k,1:3)./repmat(n(k),1,3);
+    P = c2s(X);
 else
-  P = N;
+    P = N;
 end
 
 scheme.el = P(:,1);
@@ -1324,7 +1587,7 @@ scheme.sh = [];
 scheme.lmax = lmax;
 
 for l = 0:2:lmax
-  scheme.sh = [ scheme.sh eval_SH(l, scheme.el, scheme.az)' ];
+    scheme.sh = [ scheme.sh eval_SH(l, scheme.el, scheme.az)' ];
 end
 
 scheme.vert= s2c([ scheme.el scheme.az 1+0*scheme.az]);
@@ -1338,14 +1601,14 @@ function s = eval_ALP(l, el)
 % evaluates the Associated Legendre Polynomial at elevations 'el'
 % for harmonic order l.
 
-  s = legendre(l, cos(el'));
-  for m = 0:l
+s = legendre(l, cos(el'));
+for m = 0:l
     s(m+1,:) = s(m+1,:).*sqrt((2*l+1)*factorial(l-m) / ((4*pi)*factorial(l+m)));
-  end
+end
 
-  if l
+if l
     s = [ s(end:-1:2,:); s ];
-  end
+end
 end
 
 function s = eval_SH(l, el, az)
@@ -1357,8 +1620,8 @@ function s = eval_SH(l, el, az)
 
 s = ones(size(az,1),1);
 
-if l > 0  
-  s = [ sqrt(2)*sin(az*(l:-1:1)) s sqrt(2)*cos(az*(1:l)) ];
+if l > 0
+    s = [ sqrt(2)*sin(az*(l:-1:1)) s sqrt(2)*cos(az*(1:l)) ];
 end
 
 s = eval_ALP(l, el).*s';
@@ -1369,7 +1632,7 @@ function X = equidistribute(N)
 % uses the formula in [saff:dmp:1997] to generate equidistributed
 % points on the sphere.
 % INPUT: N is the number of points, default=12
-% 
+%
 % OUTPUT: X is the set of points as a Nxd matrix, one point per row
 %         if no output is specified, the points are plotted using scatter3.
 % REFERENCE
@@ -1387,26 +1650,26 @@ function X = equidistribute(N)
 X = zeros(N,3);
 
 for k=1:N
-  h = -1 + 2*(k-1)/(N-1);
-  theta(k) = acos(h);
-  if k==1 | k==N 
-    phi(k) = 0;
-  else 
-    phi(k) = mod(phi(k-1) + 3.6/sqrt(N*(1-h^2)),2*pi);
-  end;
-  X(k,:) = [ cos(phi(k))*sin(theta(k)), ...
-	     sin(phi(k))*sin(theta(k)), ...
-	     cos(theta(k)) ];
+    h = -1 + 2*(k-1)/(N-1);
+    theta(k) = acos(h);
+    if k==1 | k==N
+        phi(k) = 0;
+    else
+        phi(k) = mod(phi(k-1) + 3.6/sqrt(N*(1-h^2)),2*pi);
+    end;
+    X(k,:) = [ cos(phi(k))*sin(theta(k)), ...
+        sin(phi(k))*sin(theta(k)), ...
+        cos(theta(k)) ];
 end;
 
 %if nargout == 0
-  %Z = zeros(size(X));
-  %[SX,SY,SZ] = sphere;
-  %scatter3(X(:,1),X(:,2),X(:,3),'filled')
-  %hold on
-  %sph2 = surf(SX,SY,SZ);
-  %set(sph2, 'FaceColor', [ 1 1 0 ]);
-  %axis vis3d
+%Z = zeros(size(X));
+%[SX,SY,SZ] = sphere;
+%scatter3(X(:,1),X(:,2),X(:,3),'filled')
+%hold on
+%sph2 = surf(SX,SY,SZ);
+%set(sph2, 'FaceColor', [ 1 1 0 ]);
+%axis vis3d
 %end
 end
 
@@ -1470,11 +1733,11 @@ end
 end
 
 function nn_val = get_drl_nn_heuristic(bh,bvalue,tgt_diffusivity)
-    if(nargin < 3)
-        tgt_diffusivity = 0.7e-3;
-    end
-    S = exp(-bvalue*tgt_diffusivity)*ones(size(bh,1),1);
-    K = RichardsonLucy(S,bh,200);
-    nn_val = max(K)*2;
+if(nargin < 3)
+    tgt_diffusivity = 0.7e-3;
+end
+S = exp(-bvalue*tgt_diffusivity)*ones(size(bh,1),1);
+K = RichardsonLucy(S,bh,200);
+nn_val = max(K)*2;
 end
 

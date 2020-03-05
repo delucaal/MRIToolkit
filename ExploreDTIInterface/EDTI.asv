@@ -9863,10 +9863,10 @@ function mkcurve_fit_mat(input_file,output_file)
 
     [sx,sy,sz,st] = size(data.img);
 
-%     MK_Q = zeros(size(data.img(:,:,:,1)));
-%     FA_Q = zeros(size(data.img(:,:,:,1)));
-%     MD_Q = zeros(size(data.img(:,:,:,1)));
-%     KA_Q = zeros(size(data.img(:,:,:,1)));
+    MK_Q = zeros(size(data.img(:,:,:,1)));
+    FA_Q = zeros(size(data.img(:,:,:,1)));
+    MD_Q = zeros(size(data.img(:,:,:,1)));
+    KA_Q = zeros(size(data.img(:,:,:,1)));
     NEW_S0 = zeros(size(data.img(:,:,:,1)));
     DT_Q = E_DTI_DWI_cell2mat(DT);
     KT_Q = E_DTI_DWI_cell2mat(KT);
@@ -9881,14 +9881,14 @@ function mkcurve_fit_mat(input_file,output_file)
 
     data.img = reshape(data.img,sx*sy*sz,st);
     
-    for x=1:size(data.img,1)
+    parfor x=1:size(data.img,1)
         So = squeeze(data.img(x,:));
         if((So(1) < min_val) || any(~isfinite(So)))
             continue
         end
         s0_val = mean(So(1:gradient_info.NrB0));
         s0_range = linspace(0.5*s0_val,s0_val*2,100);
-%         [~,C_IX] = min(abs(s0_range-s0_val));
+        [~,C_IX] = min(abs(s0_range-s0_val));
 
         MK = zeros(length(s0_range),1);
 
@@ -9936,16 +9936,16 @@ function mkcurve_fit_mat(input_file,output_file)
             zeromks = zeromks(index);
         end
 
-%         MK(1:zeromks) = NaN;
+        MK(1:zeromks) = NaN;
 
-%         corr_mk = C_IX;
+        corr_mk = C_IX;
         corr_s0 = s0_val;
 
         if((~isempty(zeromks) && ~isempty(maxmks)) && zeromks < maxmks)
             corr_s0 = (1-lambda)*s0_range(zeromks)+lambda*s0_range(maxmks);
-%             if(s0_val < corr_s0)
-%                 [~,corr_mk] = min(abs(s0_range-corr_s0));
-%             end
+            if(s0_val < corr_s0)
+                [~,corr_mk] = min(abs(s0_range-corr_s0));
+            end
         end
 
         S(1:gradient_info.NrB0) = corr_s0;
@@ -9958,40 +9958,37 @@ function mkcurve_fit_mat(input_file,output_file)
         KT_Q(x,:) = KT;
         DT_Q(x,:) = DT;
 
-%         dt = DT([1 4 6 2 3 5]);
-%         MDsq = MD^2;
+        dt = DT([1 4 6 2 3 5]);
+        MDsq = MD^2;
 
-%         for i=gradient_info.NrB0+1:size(g,1)
-% 
-%             dum_adc = (B(i,:)*dt).^2;
-%             dum_kt = A(i,:)*KT;
-%             dum = (MDsq.*dum_kt)./dum_adc(:);
+        for i=gradient_info.NrB0+1:size(g,1)
 
-%             MK_Q(x) = MK_Q(x) + dum;
-%             KA_Q(x) = KA_Q(x) + dum^2;
-%         end
-%         MK_Q(x) = MK_Q(x)/size(g,1);    
-%         KA_Q(x) = KA_Q(x)/size(g,1);    
+            dum_adc = (B(i,:)*dt).^2;
+            dum_kt = A(i,:)*KT;
+            dum = (MDsq.*dum_kt)./dum_adc(:);
 
-%         DT = [DT(1) DT(2)/2 DT(3)/2;
-%               DT(2)/2 DT(4) DT(5)/2;
-%               DT(3)/2 DT(5)/2 DT(6)];
-%         [EVEC,EVAL] = eig(DT);
-%         EVAL = diag(EVAL);
-%         FA_Q(x) = sqrt(1.5*sum((EVAL-mean(EVAL)).^2)./sum(EVAL.^2));
-%         MD_Q(x) = MD;
+            MK_Q(x) = MK_Q(x) + dum;
+            KA_Q(x) = KA_Q(x) + dum^2;
+        end
+        MK_Q(x) = MK_Q(x)/size(g,1);    
+        KA_Q(x) = KA_Q(x)/size(g,1);    
 
-%         if(isnan(MK(corr_mk)))
-%             MK_Q(x) = MK(end);
-%         end
-%         KA_Q(x) = sqrt(abs(KA_Q(x)-MK_Q(x)^2));
+        DT = [DT(1) DT(2)/2 DT(3)/2;
+              DT(2)/2 DT(4) DT(5)/2;
+              DT(3)/2 DT(5)/2 DT(6)];
+        [EVEC,EVAL] = eig(DT);
+        EVAL = diag(EVAL);
+        FA_Q(x) = sqrt(1.5*sum((EVAL-mean(EVAL)).^2)./sum(EVAL.^2));
+        MD_Q(x) = MD;
+
+        if(isnan(MK(corr_mk)))
+            MK_Q(x) = MK(end);
+        end
+        KA_Q(x) = sqrt(abs(KA_Q(x)-MK_Q(x)^2));
         NEW_S0(x) = corr_s0;
     end
     toc
 
-    DT_Q = reshape(DT_Q,sx,sy,sz,size(DT_Q,2));
-    KT_Q = reshape(KT_Q,sx,sy,sz,size(KT_Q,2));
-    
     DT = E_DTI_DWI_mat2cell(DT_Q);
     KT = E_DTI_DWI_mat2cell(KT_Q);
     DWIB0 = NEW_S0;
