@@ -36,7 +36,7 @@ classdef ReportMaker < handle
           end
        end
        
-       function me = AddImage2Scan(me,label,rel_path_to_file,search_string,axial_coronal_sagittal,link_to_viewer,make_gif,multi_slice,colormap,overlay_on)
+       function me = AddImage2Scan(me,label,rel_path_to_file,search_string,axial_coronal_sagittal,link_to_viewer,make_gif,multi_slice,colormap,overlay_on,stride)
             img.label = label;
             img.rel_path_to_file = rel_path_to_file;
             img.search_string = search_string;
@@ -46,6 +46,7 @@ classdef ReportMaker < handle
             img.multi_slice = multi_slice;
             img.colormap = colormap;
             img.overlay_on = overlay_on;
+            img.stride = stride;
             me.images2scan(end+1) = {img};
        end
        
@@ -133,7 +134,7 @@ classdef ReportMaker < handle
                           end
                        else
                           if(cel.link_to_viewer == 0)
-                              html_code = concat_html(html_code,make_gif(img_name,nii_name,ax_or_coronal,width_in_px,cmap));
+                              html_code = concat_html(html_code,make_gif(img_name,nii_name,ax_or_coronal,width_in_px,cmap,cel.stride));
                           else
                               overlay_img = 0;
                               if(cel.overlay_on ~= 0)
@@ -141,7 +142,7 @@ classdef ReportMaker < handle
                                  [~,tfn,~] = fileparts(tfile.name);
                                  overlay_img = ['Niftis/' spf '_' tfn '.nii'];
                               end
-                              html_code = concat_html(html_code,make_gif_3dviewer(img_name,nii_name,ax_or_coronal,width_in_px,'Niftis',cmap,overlay_img));
+                              html_code = concat_html(html_code,make_gif_3dviewer(img_name,nii_name,ax_or_coronal,width_in_px,'Niftis',cmap,overlay_img,cel.stride));
                           end
                        end
 
@@ -251,10 +252,11 @@ function html_code = html_img_tag_3dviewer(img_name,nii_name,ax_or_coronal,width
     print(gcf,img_name,'-dpng','-r150');
 end
 
-function html_code = make_gif(img_name,nii_file,ax_or_coronal,width_in_px,cmap)
+function html_code = make_gif(img_name,nii_file,ax_or_coronal,width_in_px,cmap,stride)
     if(nargin < 4)
         width_in_px = 300;
         cmap = colormap;
+        stride = 1;
     end
     img = E_DTI_read_nifti_file(nii_file);
     img = single(img);
@@ -262,7 +264,7 @@ function html_code = make_gif(img_name,nii_file,ax_or_coronal,width_in_px,cmap)
     if(ax_or_coronal == 1)
       % Capture the plot as an image 
       if(ndims(img) == 3)
-          for z=1:size(img,3)
+          for z=1:stride:size(img,3)
               imagesc(img(:,:,z),[0 1]);
               axis image;
               axis off;
@@ -278,7 +280,7 @@ function html_code = make_gif(img_name,nii_file,ax_or_coronal,width_in_px,cmap)
               end  
           end
       elseif(ndims(img) == 4)
-          for z=1:size(img,4)
+          for z=1:stride:size(img,4)
               imagesc(img(:,:,round(end/2),z),[0 1]);
               colormap(cmap);
               axis image;
@@ -302,11 +304,12 @@ function html_code = make_gif(img_name,nii_file,ax_or_coronal,width_in_px,cmap)
     
 end
 
-function html_code = make_gif_3dviewer(img_name,nii_file,ax_or_coronal,width_in_px,nifti_folder,cmap,overlay_img)
+function html_code = make_gif_3dviewer(img_name,nii_file,ax_or_coronal,width_in_px,nifti_folder,cmap,overlay_img,stride)
     if(nargin < 4)
         width_in_px = 300;
         cmap = colormap;
         overlay_img = 0;
+        stride = 1;
     end
     img = E_DTI_read_nifti_file(nii_file);
     img = single(img);
@@ -314,7 +317,7 @@ function html_code = make_gif_3dviewer(img_name,nii_file,ax_or_coronal,width_in_
     if(ax_or_coronal == 1)
       % Capture the plot as an image 
       if(ndims(img) == 3)
-          for z=1:size(img,3)
+          for z=1:stride:size(img,3)
               imagesc(img(:,:,z),[0 1]);
               axis image;
               axis off;
@@ -330,7 +333,7 @@ function html_code = make_gif_3dviewer(img_name,nii_file,ax_or_coronal,width_in_
               end  
           end
       elseif(ndims(img) == 4)
-          for z=1:size(img,4)
+          for z=1:stride:size(img,4)
               imagesc(img(:,:,round(end/2),z),[0 1]);
               axis image;
               axis off;
