@@ -128,7 +128,8 @@ classdef ReportMaker < handle
                                   html_code = concat_html(html_code,html_img_tag_3dviewer(img_name,nii_name,ax_or_coronal,width_in_px,'Niftis',cmap,overlay_img));
                               end
                           else
-                              Vol3D = E_DTI_read_nifti_file(nii_name);
+                              Vol3D = EDTI.LoadNifti(nii_name);
+                              Vol3D = Vol3D.img;
                               html_code = concat_html(html_code,html_img_tag_multislice(img_name,Vol3D,width_in_px,cmap));
                               clear Vol3D;
                           end
@@ -203,7 +204,8 @@ function html_code = html_img_tag_multislice(img_name,Vol3D,width_in_px)
 end
 
 function html_code = html_img_tag(img_name,nii_name,ax_or_coronal,width_in_px,cmap)
-    img = E_DTI_read_nifti_file(nii_name);
+    img = EDTI.LoadNifti(nii_name);
+    img = img.img;
     img = single(img);
     img = img/prctile(img(:),99);
     if(nargin < 4)
@@ -221,7 +223,8 @@ function html_code = html_img_tag(img_name,nii_name,ax_or_coronal,width_in_px,cm
 end
 
 function html_code = html_img_tag_3dviewer(img_name,nii_name,ax_or_coronal,width_in_px,nifti_folder,cmap,overlay_img)
-    img = E_DTI_read_nifti_file(nii_name);
+    img = EDTI.LoadNifti(nii_name);
+    img = img.img;
     img = single(img);
     img = img/prctile(img(:),99);
     if(nargin < 4)
@@ -258,7 +261,8 @@ function html_code = make_gif(img_name,nii_file,ax_or_coronal,width_in_px,cmap,s
         cmap = colormap;
         stride = 1;
     end
-    img = E_DTI_read_nifti_file(nii_file);
+    img = EDTI.LoadNifti(nii_name);
+    img = img.img;
     img = single(img);
     img = img/prctile(img(:),99);
     if(ax_or_coronal == 1)
@@ -311,7 +315,8 @@ function html_code = make_gif_3dviewer(img_name,nii_file,ax_or_coronal,width_in_
         overlay_img = 0;
         stride = 1;
     end
-    img = E_DTI_read_nifti_file(nii_file);
+    img = EDTI.LoadNifti(nii_name);
+    img = img.img;
     img = single(img);
     img = img/prctile(img(:),99);
     if(ax_or_coronal == 1)
