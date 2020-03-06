@@ -96,13 +96,15 @@ classdef ReportMaker < handle
                        if(ischar(cmap))
                            cmap = colormap(cmap);
                        end
+                       
+                       html_code = concat_html(html_code,'<th>');
+                      
                        file = dir(fullfile(me.datafolder,the_folder,cel.rel_path_to_file,cel.search_string));
                        if(isempty(file) || length(file) > 1)
                            warning('CHECK 1');
+                           html_code = concat_html(html_code,'</th>');
                            continue
                        end
-
-                       html_code = concat_html(html_code,'<th>');
 
                        [~,fn,~] = fileparts(file.name);
                        if(cel.make_gif == 0)

@@ -761,6 +761,9 @@ classdef EDTI < handle
             end
             CLL = E_DTI_Complete_List_var;
             [fp,fn] = fileparts(mat_file_in);
+            if(isempty(fp))
+                fp = pwd;
+            end
             E_DTI_Convert_mat_2_nii(mat_file_in,fp,CLL(list2export));
         end
         
@@ -9881,9 +9884,9 @@ function mkcurve_fit_mat(input_file,output_file)
 
     data.img = reshape(data.img,sx*sy*sz,st);
     
-    for x=1:size(data.img,1)
-        So = squeeze(data.img(x,:));
-        if((So(1) < min_val) || any(~isfinite(So)))
+    parfor x=1:size(data.img,1)
+        So = squeeze(data.img(x,:))';
+        if((So(1) < min_val) || any(~isfinite(So)) || isnan(tensors.FA(x)))
             continue
         end
         s0_val = mean(So(1:gradient_info.NrB0));
