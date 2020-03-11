@@ -373,27 +373,7 @@ classdef SphericalDeconvolution < handle
                 end
                 toc
             else
-                parfor (x=1:N,nof_workers)
-                    %     if(mod(x,progressStepSize) == 0)
-                    %         ppm.increment();
-                    %     end
-                    if(obj.data.mask(x) < 1)
-                        continue
-                    end
-
-                    Stot = double(obj.data.img(:,x));
-
-                    % This normalization assumes there is some b=0s/mm2 data. It is not
-                    % essential to do it as long as fractions is normalized at the end
-                    NormFactor = mean(Stot(obj.data.bvals<100));
-                    S0(x) = NormFactor;
-                    Stot = Stot/NormFactor;
-                    
-                    fractions(x,1) = 1;
-                    FOD = ADT_deconv_RLdamp_1D_noEP(Stot, weighted_HRKernel,200, obj.NN_H);
-                    WM_fod(x,:) = single(FOD);
-                    RSS(x) = sum((Stot-weighted_HRKernel*FOD).^2);
-                end
+                
             end
             % Restructure data
             

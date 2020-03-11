@@ -22,14 +22,15 @@ classdef EDTI < handle
         % data_file: the .nii file to load
         % apply_intensity_scale: use the slope/intercept specified in the
         % nifti header
-        if(nargin < 2)
+            if(nargin < 2)
                 apply_intensity_scale = 0;
             end
             [I,VD,~,hdr] = E_DTI_read_nifti_file(data_file);
             data.img = I;
             data.VD = VD;
             
-            if(apply_intensity_scale == 1)
+            if(apply_intensity_scale == 1 && hdr.dime.scl_slope ~= 0 && ...
+                    isfinite(hdr.dime.scl_slope) && isfinite(hdr.dime.scl_inter))
                 data.img = single(data.img)*hdr.dime.scl_slope+hdr.dime.scl_inter;
             end
         end
@@ -578,10 +579,10 @@ classdef EDTI < handle
         % SeedMask: A mask to perform the seeding. If empty, the whole
         %   volume is used
         % Default parameters:
-        %  SeedPointRes: [3 3 3]
+        %  SeedPointRes: [2 2 2]
         %             StepSize: 1
-        %          AngleThresh: 45
-        %     FiberLengthRange: [50 500]
+        %          AngleThresh: 30
+        %     FiberLengthRange: [30 500]
         %     FODThresh: 0.1
 
             if(isempty(varargin))
