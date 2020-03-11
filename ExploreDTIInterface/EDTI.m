@@ -7133,7 +7133,7 @@ end
 % determine the maximum lmax supported by each shell
 lmax = zeros(1, nshells);
 for x=1:nshells
-    lmax(x) = n2lmax(size(shells{x}, 1));
+    lmax(x) = E_DTI_n2lmax(size(shells{x}, 1));
 end
 
 lmax = floor(lmax/2)*2;
@@ -7344,6 +7344,305 @@ for x=1:nitts
     end
 end
 
+end
+
+% From ExploreDTI: helper function to perform MSCSD
+function [r_sh,sel_voxels] = E_DTI_HARDI_CSD_FOD_RC_MuSh_mask(dwi,grad4,bvals,lmax)
+
+    % modified from E_DTI_Get_HARDI_CSD_FOD_RC
+    % being called by MS_CSD_deconvolution
+    % tic
+    % load(fin, 'DWI', 'g', 'FA', 'NrB0','b')
+    % load(fin,'DWI','VDims','NrB0','b','g','FA','bval','MDims')
+    
+    % Chantal's recursive calibration code
+    % disp('CSD with recursive RF calibration...')
+    it = 10;  % maximum iteration times
+    
+    % try
+    %     pctRunOnAll warning off all
+    % catch
+    %     warning off all
+    % end
+    
+    % h_f = findobj('Tag','MainExploreDTI');
+    % data = get(h_f, 'userdata');
+    
+    t = 0.01; % data.HARDI_GL.RF.RC.PR;
+    % lmax = data.HARDI_GL.RF.RC.lmax;
+    % suf = data.HARDI_GL.RF.RC.suf;
+    
+    % DWI = E_DTI_DWI_mat2cell(DWI);
+    % 
+    % B0s = E_DTI_Clean_up_B0s_2(DWI, ~isnan(FA), NrB0);
+    % DWI(1:NrB0)=B0s;
+    % clear B0s;
+    % 
+    % % mask = ~isnan(FA);
+    % mask = FA/sqrt(3)>0.01;
+    % 
+    % bvals=round(sum(b(:,[1 4 6]),2)/100)*100;
+    % grad=[[zeros(NrB0,3);g],bvals];
+    % 
+    % dwi=vec(E_DTI_DWI_cell2mat(DWI),mask); clear DWI;
+    % dwi = single(dwi);
+    % 
+    % M=FA/sqrt(3);
+    % M=vec(M,mask);
+    % 
+    % % l=true(size(b,1),1);
+    % % dwi = double(dwi(l,:));
+    % % grad = grad(l,:);
+    % 
+    % % Select voxels
+    % sf_mask=(double(M)>0.01); clear M;
+    % % sf_mask = ~isnan(M); clear M;
+    % 
+    % fim = find(sf_mask==1);
+    % 
+    % % if suf>length(fim)/500
+    %     suf = round(length(fim)/500);
+    % % end
+    % 
+    % fim = fim(1:suf:end);
+    % sf_mask(:)=0;
+    % sf_mask(fim)=1;
+    % 
+    % dwi = dwi(:,sf_mask);
+    % 
+    % % select single shell without b0
+    % dwi = dwi(NrB0+1:end,:);
+    % grad = grad(NrB0+1:end,1:3);
+    
+    % dwi in SH
+    %%%%%%%%%%%%%%%%%%%% sh = SH(grad,lmax);
+    grad = grad4(:,1:3);
+    
+    sh = SH(lmax,grad);
+    
+    dwi_sh = sh.coef(dwi);
+    
+    % axial symmetric RF in z direction for every voxel, FA tensor = 0.05,(0.15)
+    % werkt voor lmax = 6 en 8
+    
+    r_sh = zeros(SH.lmax2n(lmax),size(dwi,2)); % initialization
+    
+    shcoef = E_DTI_create_initial_RF_RC(lmax,bvals,0.15,2.1*10^(-3));
+    
+    for i=1:length(shcoef(:))
+       
+        r_sh(i,:) = shcoef(i,1);
+        
+    end
+    
+    % r_sh(1,:)=1;r_sh(4,:)=-0.0792131438242680;r_sh(11,:)=0.00274230814218417;r_sh(22,:)=-6.26530606143104e-05;
+    
+    SHPrecomp.init(lmax); % always perform this initialization first
+    
+    I = cell(1);
+    
+    for i = 1:it
+    %     disp(num2str(i))
+        % total RF
+        I{i}.nvox = size(r_sh,2); % amount of voxels
+        r_shtot = mean(r_sh,2);
+        I{i}.r_shtot = r_shtot;
+        % amp = sh.amp(r_shtot);
+        % plot_odf_Chantal([amp;amp],[grad;-grad]);
+        
+        % create CSD object
+        csd = CSD(r_shtot,lmax); clear r_shtot
+        
+        % perform constrained deconvolution on SH coefficients
+        csd_fod_sh = csd.deconv(dwi_sh);
+        
+        % peak extraction
+        %%%%%%%%%%     [dirs, vals] = SHPrecomp.all_peaks(csd_fod_sh, init_dir, 0, 2);
+        [dirs_, vals_] = SHPrecomp.all_peaks(csd_fod_sh, 0, 2);
+        
+        vals = zeros(2,length(vals_));
+        
+        for k = 1:length(vals_)
+            if isempty(vals_{k})
+                vals_{k}(1) = nan;
+            end
+            vals(1,k) = vals_{k}(1);
+            if length(vals_{k})>1
+                vals(2,k) = vals_{k}(2);
+            else
+                vals(2,k) = nan;
+            end
+        end
+        
+        dirs = zeros(3,length(vals_));
+        
+        for k = 1:length(vals_)
+            if isempty(dirs_{k})
+                dirs_{k} = [nan nan nan]';
+            end
+            dirs(1,k) = dirs_{k}(1,1);
+            dirs(2,k) = dirs_{k}(2,1);
+            dirs(3,k) = dirs_{k}(3,1);
+        end
+        
+        I{i}.vals = vals;
+        peak_mask = ((vals(2,:)./vals(1,:)<t | isnan(vals(2,:))) & ~isnan(vals(1,:)));
+        I{i}.peak_mask = peak_mask;
+        dwi_sh = dwi_sh(:,peak_mask);
+        r_sh = zeros(SH.lmax2n(lmax),size(dwi_sh,2));
+        dirs = dirs(:,peak_mask);
+        dwi = dwi(:,peak_mask);
+        
+        for j = 1:size(dwi_sh,2)
+            fe = dirs(1:3,j);
+            nullsp = null(fe');
+            se = nullsp(:,1);
+            te = nullsp(:,2);
+            rot_grad = zeros(size(grad,1),3);
+            rot = [te se fe];
+            for k = 1:size(grad,1)
+                rot_grad(k,:) = grad(k,:)*rot;
+            end
+            r_sh(:,j) = (SH.eval(lmax,c2s(rot_grad))\dwi(:,j));
+        end
+        
+        j = 0;
+        for l_ = 0:2:lmax
+            for m = -l_:l_
+                j = j + 1;
+                if m ~= 0
+                    r_sh(j,:) = 0;
+                end
+            end
+        end
+        
+    %     if i==1
+    %     save([fin(1:end-4),'_iterations.mat'],'I');
+    %     disp('saving iterations...')
+    %     end
+        %     if i>1
+        %         if (abs(I{i}.r_shtot-I{i-1}.r_shtot)./I{i-1}.r_shtot)<0.01
+        %             break
+        %         end
+        %     end
+        
+        if i>1
+    %        save([fin(1:end-4),'_iterations.mat'],'I','-append');
+            change = abs(I{i}.r_shtot-I{i-1}.r_shtot)./I{i-1}.r_shtot;
+            if  all(change(~isnan(change))<0.01)
+                break
+            end
+        end
+        
+        
+    end
+    %%%%%%%% save I %%%%
+    
+    % build sf_mask
+    sel_voxels = I{i}.peak_mask;
+    for It = length(I)-1:-1:1
+        new_mask = zeros(I{It}.nvox,1);
+        new_mask(I{It}.peak_mask) = sel_voxels;
+        sel_voxels = new_mask;
+    end
+    
+    % save([p1 filesep p2 '_I.mat'],'I');
+    % disp('saving I...')
+    
+    % create sf_mask
+    
+    % masks = zeros(size(I,2),I{1,1}.nvox);
+    % 
+    % five_masks = zeros(size(I,2),length(find(sf_mask)));
+    % 
+    % 
+    % for i = 1:size(I,2)
+    %     m = ones(1,I{i}.nvox);
+    %     for j = (i-1):-1:1
+    %         m = unvec_Chantal(m,I{j}.peak_mask);
+    %     end
+    %     m = ~isnan(m);
+    %     masks(i,m) = 1;
+    % end
+    % 
+    % % %% sf_mask = sum(unvec(masks,mask),4); %save([directory,tag,'mask.mat'],'ma');
+    % five_masks(:,1:suf:end) = masks(:,:);
+    % 
+    % sf = unvec(five_masks,mask);
+    % % sf = unvec(masks,mask);
+    % sf_mask_end = sf(:,:,:,length(I));
+    
+    % % sf_mask(isnan(sf_mask)) = 0;
+    % save([p1 filesep p2 '_sf_mask.mat'],'sf_mask_end','sf');
+    % disp('saving sf_mask...')
+    
+    % E_DTI_write_nifti_file(sf,VDims,fn_sf);
+    
+    % Plot mean PR and nr of voxels over iteration
+    % % nvox=[];
+    % % ratiovals=[];
+    
+    r_shtot=[];
+    
+    for i = 1:size(I,2)
+    %     nvox=[nvox,I{i}.nvox];
+    %     ratiovals=[ratiovals,mean([I{i}.vals(2,~isnan(I{i}.vals(2,:)))/I{i}.vals(1,~isnan(I{i}.vals(2,:))),zeros(1,length(I{i}.vals(2,isnan(I{i}.vals(2,:)))))])];
+        r_shtot = [r_shtot,I{i}.r_shtot];
+    end
+    
+    % figure
+    % plot(nvox), xlabel Iteration, ylabel('Number of voxels used for RF calculation'); saveas(gcf,[directory,tag,'_nvoxels.png']);
+    % figure
+    % plot(ratiovals), xlabel Iteration, ylabel('Mean ratio magnitude second peak / first peak'); saveas(gcf,[directory,tag,'_meanratio.png']);
+    %
+    % f = load(['icosahedron4.mat']);
+    % g2 = f.Expression1;
+    % %%% sh2 = SH(g2, lmax); 
+    % sh2 = SH(lmax, g2);
+    
+    % Load DTI.mat file
+    % load([directory,file],'DWI','VDims','b','g','NrB0','MDims','FEFA','FA','FE','SE','eigval','DT');
+    % load(fin,'DWI','VDims','NrB0','b','g','FA','bval','MDims')
+    
+    % % bvals = sum(b(:,[1 4 6]),2);
+    % bvals = round(sum(b(:,[1 4 6]),2)/100)*100;
+    % grad = [[zeros(NrB0,3);g],bvals];
+    % dwi = vec(E_DTI_DWI_cell2mat(DWI),mask); clear DWI;
+    % dwi = single(dwi);
+    
+    % Do CSD for iteration(s) iter, mostly last iteration
+    iter = size(I,2);
+    
+    % % select single shell
+    % dwi = dwi(NrB0+1:end,:);
+    % % b = b(NrB0+1:end,:); 
+    % grad = grad(NrB0+1:end,1:3); 
+    
+    % create SH object
+    % % sh = SH(grad, lmax); 
+    % sh = SH(lmax, grad);
+    % 
+    % % estimate SH coefficients
+    % dwi_sh = sh.coef(dwi);
+    
+    for i = iter
+    %     disp(num2str(i))
+        r_sh = r_shtot(:,i);
+    end
+    
+    %%%%%%% save RF to a folder
+    
+    % if ~exist([p1 '_RF'], 'dir')
+    %   mkdir([p1 '_RF']);
+    % end
+    % 
+    % dirname_RF = [p1 '_RF'];
+    % 
+    % save([dirname_RF filesep p2 '_RF.mat'],'r_sh');
+    % disp('saving RF...')
+    % toc
+    
+    end
 end
 
 % Helper function for multi-shell deconvolution
@@ -10005,4 +10304,8 @@ function mkcurve_fit_mat(input_file,output_file)
     end
     save(output_file,'DT','KT','DWIB0','-append');
 
+end
+
+function lmax = E_DTI_n2lmax(n)
+    lmax = 2*(floor((sqrt(1+8*n)-3)/4));
 end
