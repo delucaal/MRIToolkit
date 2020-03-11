@@ -1002,6 +1002,8 @@ classdef SphericalDeconvolution < handle
             if(isempty(shcoeffs))
                 error('Missing mandatory input shcoeffs');
             end
+            SHC = EDTI.LoadNifti(shcoeffs);
+            shcoeffs = SHC.img;
             
             if(isempty(basis))
                 basis = 'edti';
