@@ -7642,7 +7642,6 @@ function [r_sh,sel_voxels] = E_DTI_HARDI_CSD_FOD_RC_MuSh_mask(dwi,grad4,bvals,lm
     % disp('saving RF...')
     % toc
     
-    end
 end
 
 % Helper function for multi-shell deconvolution
