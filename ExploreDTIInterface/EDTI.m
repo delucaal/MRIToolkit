@@ -263,8 +263,8 @@ classdef EDTI < handle
                         
             data = EDTI.LoadNifti(file_in);
             
-            data.img = E_DTI_resample_nii_file(data.img, tgt_res, data.VDims);
-            data.res = tgt_res;
+            data.img = E_DTI_resample_nii_file(data.img, tgt_res, data.VD);
+            data.VD = tgt_res;
             
             EDTI.WriteNifti(data,file_out);
             
@@ -1011,6 +1011,9 @@ classdef EDTI < handle
                 return;
             end
             
+            enforce_niigz = MRIToolkit.EnforceNiiGz;
+            EDTI.EnforceNiiGz(false);
+            
             TS = tic;
             for i=1:length(DTI_files)
                 disp('Processing file:')
@@ -1019,6 +1022,8 @@ classdef EDTI < handle
                 disp('Done!')
             end
             
+            EDTI.EnforceNiiGz(enforce_niigz);
+
             disp('Processing finished!')
             
             t=toc(TS);

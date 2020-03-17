@@ -1,4 +1,6 @@
-%%%$ Included in MRIToolkit (https://github.com/delucaal/MRIToolkit) %%%%%% Alberto De Luca - alberto@isi.uu.nl $%%%%%% Distributed under the terms of LGPLv3  %%%
+%%%$ Included in MRIToolkit (https://github.com/delucaal/MRIToolkit) %%%
+%%% Alberto De Luca - alberto@isi.uu.nl $%%%
+%%% Distributed under the terms of LGPLv3  %%%
 
 
 
@@ -7,6 +9,9 @@ function DW_Elastix_Register(moving,fixed,regparlist,output_dir,mMask,fMask,outf
     if(isfield(MRIToolkit,'Elastix'))
         elastix_path = MRIToolkit.Elastix.Location;
         elastix_cmd = MRIToolkit.Elastix.ElastixCMD;
+        if(~ispc)
+            elastix_cmd = ['LD_LIBRARY_PATH=' elastix_path ' ' elastix_cmd];
+        end
     else
         elastix_path = '/Users/alb/Desktop/M_Code_ExploreDTI_v4.8.6/Source/MD_cor_E/macOSX64/';
         elastix_cmd = ['LD_LIBRARY_PATH=' elastix_path ' ' elastix_path 'elastix_Mac_64'];
