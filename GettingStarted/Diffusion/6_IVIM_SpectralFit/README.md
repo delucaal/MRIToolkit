@@ -9,5 +9,8 @@ The method developed in [De Luca et al. 2018](https://pubmed.ncbi.nlm.nih.gov/30
 
 Try the method as follows:
 ```matlab
-MRTD.PerformSpectralDeconvolution('nii_file','sub-MRI_ses-1_dMRI_B2500_S15_MB2_v2_1_FP_denoised_MD_C_trafo_DWIs.nii','bval_file','sub-MRI_ses-1_dMRI_B2500_S15_MB2_v2_1_FP_denoised_MD_C_trafo.bval','bvec_file','sub-MRI_ses-1_dMRI_B2500_S15_MB2_v2_1_FP_denoised_MD_C_trafo.bvec','output','SpectralFit','min_bval',0.1,'max_bval',1100,'mask_file','sub-MRI_ses-1_dMRI_B2500_S15_MB2_v2_1_FP_denoised_MD_C_trafo_FA.nii.gz')
+MRTD.PerformSpectralDeconvolution('nii_file','sub-MRI_ses-1_dMRI_B2500_S15_MB2_v2_1_FP_denoised_MD_C_trafo_DWIs.nii','bval_file',...
+'sub-MRI_ses-1_dMRI_B2500_S15_MB2_v2_1_FP_denoised_MD_C_trafo.bval','bvec_file',...
+'sub-MRI_ses-1_dMRI_B2500_S15_MB2_v2_1_FP_denoised_MD_C_trafo.bvec','output','SpectralFit','min_bval',0.1,...
+'max_bval',1100,'mask_file','sub-MRI_ses-1_dMRI_B2500_S15_MB2_v2_1_FP_denoised_MD_C_trafo_FA.nii.gz')
 ```

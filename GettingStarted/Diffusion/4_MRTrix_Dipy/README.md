@@ -33,7 +33,7 @@ The opposite is of course possible: FODs from Dipy or MRtrix can be imported wit
 By default, MRIToolkit generates .mat files containing the streamlines representation according to the ExploreDTI convention. MRIToolkit can currently convert between the own .mat format and MRtrix .tck, and viceversa. Support for VTK and .trk is ready and will soon be added.
 To convert to tck, type:
 ```matlab
-SphericalDeconvolution.ConvertTCKTractography2Mat('tck_file','mrtrix_tracking.tck','output','mrtrix_tracking.mat','nii_file','sub-MRI_ses-1_dMRI_B2500_S15_MB2_v2_1_FP_denoised_MD_C_trafo_FA.nii')
+SphericalDeconvolution.ConvertMatTractography2TCK('mat_file','GRL_deconv_Tracking.mat','output','GRL_deconv_Tracking.tck')
 ```
 and viceversa:
 ```matlab
