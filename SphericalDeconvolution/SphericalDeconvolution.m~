@@ -373,7 +373,27 @@ classdef SphericalDeconvolution < handle
                 end
                 toc
             else
-                
+                parfor (x=1:N,nof_workers)
+                    %     if(mod(x,progressStepSize) == 0)
+                    %         ppm.increment();
+                    %     end
+                    if(obj.data.mask(x) < 1)
+                        continue
+                    end
+
+                    Stot = double(obj.data.img(:,x));
+
+                    % This normalization assumes there is some b=0s/mm2 data. It is not
+                    % essential to do it as long as fractions is normalized at the end
+                    NormFactor = mean(Stot(obj.data.bvals<100));
+                    S0(x) = NormFactor;
+                    Stot = Stot/NormFactor;
+                    
+                    fractions(x,1) = 1;
+                    FOD = ADT_deconv_RLdamp_1D_noEP(Stot, weighted_HRKernel,200, obj.NN_H);
+                    WM_fod(x,:) = single(FOD);
+                    RSS(x) = sum((Stot-weighted_HRKernel*FOD).^2);
+                end
             end
             % Restructure data
             
@@ -852,7 +872,7 @@ classdef SphericalDeconvolution < handle
             bvecs = bvecs(IX,:);
                         
             if(isempty(lmax))
-                lmax = min(2.*(floor((sqrt(1+8.*size(bvecs,1))-3)./4)),8);
+                lmax = min(2.*(floor((sqrt(1+8.*size(bvecs,1))-3)./4)),32);
             end
             LmaxCoeffs = (lmax+1).*(lmax+2)./2;
             
@@ -926,9 +946,11 @@ classdef SphericalDeconvolution < handle
             % basis: the desired SH basis, one in
             % "edti" (default),"dipy","mrtrix"
             % bvalue: which b-value to fit. Defaults to the maximum
+            % lmax: the order of the spherical harmonics
             data = GiveValueForName(varargin,'data');
             basis = GiveValueForName(varargin,'basis');
             bvalue = GiveValueForName(varargin,'bvalue');
+            lmax = GiveValueForName(varargin,'lmax');
             if(isempty(data))
                 error('Missing mandatory input data');
             end
@@ -1045,10 +1067,120 @@ classdef SphericalDeconvolution < handle
                 error('Missing mandatory input shcoeffs');
             end
             
+            if(ischar(shcoeffs))
+                img = EDTI.LoadNifti(shcoeffs);
+                shcoeffs = img.img;
+                clear img;
+            end
+            
+            if(isempty(bvals) && isempty(bmat))
+               bvals = 3000*ones(300,1); 
+               Q = gen_scheme(300,4);
+               bvecs = Q.vert;
+            end
+            
+            if(isempty(basis_in))
+                error('Missing mandatory argument basis_in');
+            end
+            if(isempty(basis_out))
+                error('Missing mandatory argument basis_out');
+            end
+            
             data = SphericalDeconvolution.SH_2_dMRI('bvals',bvals,...
                 'bvecs',bvecs,'basis',basis_in,'bmat',bmat,'shcoeffs',shcoeffs);
             SHCoeffs = SphericalDeconvolution.dMRI_2_SH('data',data,'basis',...
                 basis_out);
+            
+        end
+        
+        function ConvertMatTractography2TCK(varargin)
+            % Converts ExploreDTI tractography 2 the TCK format
+            % input arguments:
+            % mat_file: the input tractography mat file
+            % output: the output tck file
+            mat_file = GiveValueForName(varargin,'mat_file');
+            if(isempty(mat_file))
+                error('Missing mandatory argument mat_file');
+            end
+            output = GiveValueForName(varargin,'output');
+            if(isempty(output))
+                error('Missing mandatory argument output');
+            end
+           
+            T = load(mat_file,'Tracts','TractMask','VDims');
+            tracks.max_num_tracks = num2str(length(T.Tracts));
+            tracks.unidirectional = 0;
+            tracks.data = cell(1,length(T.Tracts));
+            shift = round(size(T.TractMask).*T.VDims)/2;
+            for ij=1:length(T.Tracts)
+               TR = T.Tracts{ij}(:,[2 1 3]);
+               TR(:,1) = -TR(:,1)+shift(2);
+               TR(:,2) = -TR(:,2)+shift(1);
+               TR(:,3) = TR(:,3) - shift(3);
+               tracks.data(ij) = {TR}; 
+            end
+            write_mrtrix_tracks(tracks,output);
+        end
+     
+        function ConvertTCKTractography2Mat(varargin)
+            % Converts TCK tractography 2 the ExploreDTI format
+            % input arguments:
+            % tck_file: the input tractography mat file
+            % nii_file: a reference .nii file in the same space of the tck
+            % output: the output tck file            
+            tck_file = GiveValueForName(varargin,'tck_file');
+            if(isempty(tck_file))
+                error('Missing mandatory argument tck_file');
+            end
+            output = GiveValueForName(varargin,'output');
+            if(isempty(output))
+                error('Missing mandatory argument output');
+            end
+            nii_file = GiveValueForName(varargin,'nii_file');            
+            if(isempty(nii_file))
+                error('Missing mandatory argument nii_file');
+            end
+            tracks = read_mrtrix_tracks(tck_file);
+            tracks.max_num_tracks = length(tracks.data);
+            Tracts = cell(1,tracks.max_num_tracks);
+            TractL = cell(1,tracks.max_num_tracks);
+            TractFA = cell(1,tracks.max_num_tracks);
+            TractMD = cell(1,tracks.max_num_tracks);
+            TractFE = cell(1,tracks.max_num_tracks);
+            TractGEO = cell(1,tracks.max_num_tracks);
+            TractAng = cell(1,tracks.max_num_tracks);
+            TractLambdas = cell(1,tracks.max_num_tracks);
+            FList = (1:length(Tracts))';
+            
+            ref = EDTI.LoadNifti(nii_file);
+            VDims = ref.VD;
+            TractMask = ones(size(ref.img));
+            TractMask = permute(TractMask,[2 1 3]);
+            shift = round(size(TractMask).*VDims)/2;
+            for tid=1:length(tracks.data)
+               T = tracks.data{tid}; 
+               T(:,3) = T(:,3) + shift(3);
+               T(:,2) = -T(:,2) + shift(2);
+               T(:,1) = -T(:,1) + shift(1);
+               T = T(:,[2 1 3]);
+               
+               Tracts(tid) = {T};
+               TractFA(tid) = {ones(size(T,1),1)};
+               TractMD(tid) = {ones(size(T,1),1)};
+               TractAng(tid) = {ones(size(T,1),1)};
+               TractFE(tid) = {ones(size(T,1),3)};
+               for pid=2:size(T,1)
+                  D = abs(T(pid,:)-T(pid-1,:));
+                  D = D/norm(D);
+                  TractFE{tid}(pid,:) = (D);
+               end
+               TractGEO(tid) = {ones(size(T,1),1)};
+               TractLambdas(tid) = {ones(size(T,1),3)};
+               TractL(tid) = {size(T,1)};
+            end
+            
+            save(output,'Tracts','TractL','TractFA','TractFE','TractFE',...
+                'TractAng','TractGEO','TractLambdas','TractMD','FList','TractMask','VDims','-v7.3');
             
         end
         
@@ -1754,3 +1886,140 @@ K = RichardsonLucy(S,bh,200);
 nn_val = max(K)*2;
 end
 
+
+% Taken from the MRtrix package
+function tracks = read_mrtrix_tracks (filename)
+
+% function: tracks = read_mrtrix_tracks (filename)
+%
+% returns a structure containing the header information and data for the MRtrix 
+% format track file 'filename' (i.e. files with the extension '.tck'). 
+% The track data will be stored as a cell array in the 'data' field of the
+% return variable.
+
+f = fopen (filename, 'r');
+assert(f ~= -1, 'error opening %s', filename);
+L = fgetl(f);
+if ~strncmp(L, 'mrtrix tracks', 13)
+  fclose(f);
+  error('%s is not in MRtrix format', filename);
+end
+
+tracks = struct();
+
+while 1
+  L = fgetl(f);
+  if ~ischar(L), break, end;
+  L = strtrim(L);
+  if strcmp(L, 'END'), break, end;
+  d = strfind (L,':');
+  if isempty(d)
+    disp (['invalid line in header: ''' L ''' - ignored']);
+  else
+    key = lower(strtrim(L(1:d(1)-1)));
+    value = strtrim(L(d(1)+1:end));
+    if strcmp(key, 'file')
+      file = value;
+    elseif strcmp(key, 'datatype')
+      tracks.datatype = value;
+    else 
+      tracks = add_field (tracks, key, value);
+    end
+  end
+end
+fclose(f);
+
+assert(exist('file') && isfield(tracks, 'datatype'), ...
+  'critical entries missing in header - aborting');
+
+[ file, offset ] = strtok(file);
+assert(strcmp(file, '.'), ...
+  'unexpected file entry (should be set to current ''.'') - aborting');
+
+assert(~isempty(offset), 'no offset specified - aborting');
+offset = str2num(char(offset));
+
+datatype = lower(tracks.datatype);
+byteorder = datatype(end-1:end);
+
+if strcmp(byteorder, 'le')
+  f = fopen (filename, 'r', 'l');
+  datatype = datatype(1:end-2);
+elseif strcmp(byteorder, 'be')
+  f = fopen (filename, 'r', 'b');
+  datatype = datatype(1:end-2);
+else
+  error('unexpected data type - aborting');
+end
+
+assert(f ~= -1, 'error opening %s', filename);
+
+fseek (f, offset, -1);
+data = fread(f, inf, datatype);
+fclose (f);
+
+N = floor(prod(size(data))/3);
+data = reshape (data, 3, N)';
+k = find (~isfinite(data(:,1)));
+
+tracks.data = {};
+pk = 1;
+for n = 1:(prod(size(k))-1)
+  tracks.data{end+1} = data(pk:(k(n)-1),:);
+  pk = k(n)+1;
+end
+end
+
+% Taken from MRtrix
+function image = add_field (image, key, value)
+  if isfield (image, key)
+    previous = getfield (image, key);
+    if iscell (previous)
+      image = setfield (image, key, [ previous {value} ]);
+    else
+      image = setfield (image, key, { previous, value });
+    end
+  else
+    image = setfield (image, key, value);
+  end
+end
+
+% taken from MRtrix
+function write_mrtrix_tracks (tracks, filename)
+
+% function: write_mrtrix_tracks (tracks, filename)
+%
+% writes the track data stored as a cell array in the 'data' field of the
+% tracks variable to the MRtrix format track file 'filename'. All other fields
+% of the tracks variable will be written as text entries in the header, and are
+% expected to supplied as character arrays.
+
+assert(isfield(tracks, 'data'), ...
+  'input tracks variable does not contain required ''data'' field');
+
+assert(iscell(tracks.data), ...
+  'input tracks.data variable should be a cell array');
+
+f = fopen (filename, 'w', 'ieee-le');
+assert(f ~= -1, 'error opening %s', filename);
+
+fprintf (f, 'mrtrix tracks\ndatatype: Float32LE\ncount: %d\n', prod(size(tracks.data)));
+names = fieldnames(tracks);
+for i=1:size(names)
+  if strcmpi (names{i}, 'data'), continue; end
+  if strcmpi (names{i}, 'count'), continue; end
+  if strcmpi (names{i}, 'datatype'), continue; end
+  fprintf (f, '%s: %s\n', names{i}, getfield(tracks, names{i}));
+end
+data_offset = ftell (f) + 20;
+fprintf (f, 'file: . %d\nEND\n', data_offset);
+
+fwrite (f, zeros(data_offset-ftell(f),1), 'uint8');
+for i = 1:prod(size(tracks.data))
+  fwrite (f, tracks.data{i}', 'float32');
+  fwrite (f, [ nan nan nan ], 'float32');
+end
+
+fwrite (f, [ inf inf inf ], 'float32');
+fclose (f);
+end

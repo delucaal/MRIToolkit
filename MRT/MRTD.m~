@@ -451,8 +451,8 @@ OUTLIERS = ones(size(data.img));
 op_lp = optimset('TolX',1e-2);
 op_hp = optimset('TolX',1e-8);
 if(parameters.ExtraSens == 1)
-    op_lp = optimset('TolX',1e-4);
-    op_hp = optimset('TolX',1e-16);    
+    op_lp = optimset('TolX',1e-2);
+    op_hp = optimset('TolX',1e-8);    
 end
 op_e16 = optimset('TolX',1e-16);
 
@@ -472,14 +472,14 @@ for z=1:size(data.img,3)
     NoisySimulatedSignal = NoisySimulatedSignal/mean(NoisySimulatedSignal(data.bvals <= 5));
     
     % This solution is more sensitive to small components but also to noise 
-    [LSQNONNEG_CL_DECONV,goodpoints] = DW_RobustDeconvFinal(Dictionary,NoisySimulatedSignal,3,op_hp);
+    [LSQNONNEG_CL_DECONV,goodpoints] = DW_RobustDeconvFinal(Dictionary,NoisySimulatedSignal,3,op_e16);
     OUTLIERS(x,y,z,:) = goodpoints;
     
     LSQNONNEG_CL_AVG_PROFILE(x,y,z,:) = LSQNONNEG_CL_DECONV;
    
     % This solution is much more robust to noise, and used to identify the
     % number of classes to sum up the fractions
-    LSQNONNEG_AVG_PROFILE(x,y,z,:) = DW_RobustDeconvFinal(Dictionary,NoisySimulatedSignal,3,op_lp);
+    LSQNONNEG_AVG_PROFILE(x,y,z,:) = DW_RobustDeconvFinal(Dictionary,NoisySimulatedSignal,3,op_e4);
 end
 end
 end
@@ -585,7 +585,7 @@ for x=1:size(data.img,1)
 disp(['Total: ' num2str(x/size(data.img,1)*100) '%']);
 for y=1:size(data.img,2)
 for z=1:size(data.img,3) 
-    if(data.mask(x,y,z) == 0 || isnan(data.mask(x,y,z)))
+    if(data.mask(x,y,z) < 1)
         continue
     end
         deconv = squeeze(TARGET(x,y,z,:))';

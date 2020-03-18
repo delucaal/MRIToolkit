@@ -821,47 +821,12 @@ classdef EDTI < handle
         
         function EDTI_Data_2_Nii(varargin)
         % This function loads the content of an ExploreDTI-like .mat file
-        % and converts it to .nii/.bval/.bvec 
-        % Input arguments:
+        % and converts it to .nii/.bval/.bvec. mrt_data
+        % is a struct with fields "img" (the 4D matrix), "bvals" (the b-values),
+        % "bvecs" (the diffusion gradients), % "mask" (a mask derived from
+        % EDTI). Input arguments:
         % mat_file: the .mat file to import
-        % output: the output prefix (adds .nii/.bval/.bvec)
-            if(isempty(varargin))
-                help('EDTI.EDTI_Data_2_MRIToolkit');
-                return;
-            end  
             
-            coptions = varargin;
-            file_in = GiveValueForName(coptions,'mat_file');
-            if(isempty(file_in))
-                error('Need to specify the input .mat file');
-            end
-            
-            output = GiveValueForName(coptions,'output');
-            if(isempty(output))
-                error('Need to specify the output prefix');
-            end
-            
-            mrt_data = EDTI.EDTI_Data_2_MRIToolkit('mat_file',file_in);
-            EDTI.WriteNifti(mrt_data,[output '.nii']);
-            
-            bval = mrt_data.bvals';
-            bvec = mrt_data.bvecs';
-            
-            fb = fopen([output '.bval'],'wt');
-            for ij=1:length(bval)
-               fprintf(fb,'%f ', bval(ij)); 
-            end
-            fclose(fb);
-            
-            fb = fopen([output '.bvec'],'wt');
-            for ik=1:size(bvec,1)
-                for ij=1:size(bvec,2)
-                   fprintf(fb,'%f ',bvec(ik,ij)); 
-                end
-                fprintf(fb,'%s',newline);
-            end
-            fclose(fb);
-        
         end
 
         function PerformMocoEPI(varargin)

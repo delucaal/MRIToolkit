@@ -261,7 +261,7 @@ function html_code = make_gif(img_name,nii_file,ax_or_coronal,width_in_px,cmap,s
         cmap = colormap;
         stride = 1;
     end
-    img = EDTI.LoadNifti(nii_name);
+    img = EDTI.LoadNifti(nii_file);
     img = img.img;
     img = single(img);
     img = img/prctile(img(:),99);
@@ -315,7 +315,7 @@ function html_code = make_gif_3dviewer(img_name,nii_file,ax_or_coronal,width_in_
         overlay_img = 0;
         stride = 1;
     end
-    img = EDTI.LoadNifti(nii_name);
+    img = EDTI.LoadNifti(nii_file);
     img = img.img;
     img = single(img);
     img = img/prctile(img(:),99);
