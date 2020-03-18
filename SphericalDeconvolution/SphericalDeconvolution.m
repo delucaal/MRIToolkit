@@ -872,7 +872,7 @@ classdef SphericalDeconvolution < handle
             bvecs = bvecs(IX,:);
                         
             if(isempty(lmax))
-                lmax = min(2.*(floor((sqrt(1+8.*size(bvecs,1))-3)./4)),8);
+                lmax = min(2.*(floor((sqrt(1+8.*size(bvecs,1))-3)./4)),32);
             end
             LmaxCoeffs = (lmax+1).*(lmax+2)./2;
             
@@ -946,9 +946,11 @@ classdef SphericalDeconvolution < handle
             % basis: the desired SH basis, one in
             % "edti" (default),"dipy","mrtrix"
             % bvalue: which b-value to fit. Defaults to the maximum
+            % lmax: the order of the spherical harmonics
             data = GiveValueForName(varargin,'data');
             basis = GiveValueForName(varargin,'basis');
             bvalue = GiveValueForName(varargin,'bvalue');
+            lmax = GiveValueForName(varargin,'lmax');
             if(isempty(data))
                 error('Missing mandatory input data');
             end
@@ -975,7 +977,7 @@ classdef SphericalDeconvolution < handle
                 data.img = data.img';
             end
             SHB = SphericalDeconvolution.SHFitMatrix('basis',basis,'bvals',data.bvals,...
-                'bvecs',data.bvecs);
+                'bvecs',data.bvecs,'lmax',lmax);
             SHFittedData = SHB\data.img';
             if(sx ~= 1 && sy ~= 1)
                 SHFittedData = reshape(SHFittedData',sx,sy,sz,size(SHFittedData,1));
@@ -993,11 +995,13 @@ classdef SphericalDeconvolution < handle
             % file)
             % bmat: alternatively, the b-matrix (variable or file)    
             % bvalue: the shell b-value. Defaults to the max
+            % lmax: the order of the spherical harmonics
             bvals = GiveValueForName(varargin,'bvals');
             bvecs = GiveValueForName(varargin,'bvecs');
             basis = GiveValueForName(varargin,'basis');
             bvalue = GiveValueForName(varargin,'bvalue');
             bmat = GiveValueForName(varargin,'bmat');
+            lmax = GiveValueForName(varargin,'lmax');
             shcoeffs = GiveValueForName(varargin,'shcoeffs');
             if(isempty(shcoeffs))
                 error('Missing mandatory input shcoeffs');
@@ -1027,7 +1031,7 @@ classdef SphericalDeconvolution < handle
             bvecs = bvecs(IX,:);
             
             SHB = SphericalDeconvolution.SHFitMatrix('basis',basis,'bvals',bvals,...
-                'bvecs',bvecs,'bmat',bmat);
+                'bvecs',bvecs,'bmat',bmat,'lmax',lmax);
 
             [sx,sy,sz,st] = size(shcoeffs);
             if(~ismatrix(shcoeffs))
@@ -1055,21 +1059,53 @@ classdef SphericalDeconvolution < handle
             % bvals: the corresponding diffusion weightings (variable or
             % file)
             % bmat: alternatively, the b-matrix (variable or file)
+            % lmax: the order of the spherical harmonics
+            % output: the output .nii file (optional) - only valid if
+            % specifying the input as file
             bvals = GiveValueForName(varargin,'bvals');
             bvecs = GiveValueForName(varargin,'bvecs');
             basis_in = GiveValueForName(varargin,'basis_in');
             basis_out = GiveValueForName(varargin,'basis_out');
             bmat = GiveValueForName(varargin,'bmat');
             shcoeffs = GiveValueForName(varargin,'shcoeffs');
+            lmax = GiveValueForName(varargin,'lmax');
+            output = GiveValueForName(varargin,'output');
             if(isempty(shcoeffs))
                 error('Missing mandatory input shcoeffs');
             end
             
-            data = SphericalDeconvolution.SH_2_dMRI('bvals',bvals,...
-                'bvecs',bvecs,'basis',basis_in,'bmat',bmat,'shcoeffs',shcoeffs);
-            SHCoeffs = SphericalDeconvolution.dMRI_2_SH('data',data,'basis',...
-                basis_out);
+            VD = [];
+            if(ischar(shcoeffs))
+                img = EDTI.LoadNifti(shcoeffs);
+                shcoeffs = img.img;
+                VD = img.VD;
+                clear img;
+            end
             
+            if(isempty(bvals) && isempty(bmat))
+               bvals = 3000*ones(300,1); 
+               Q = gen_scheme(300,4);
+               bvecs = Q.vert;
+            end
+            
+            if(isempty(basis_in))
+                error('Missing mandatory argument basis_in');
+            end
+            if(isempty(basis_out))
+                error('Missing mandatory argument basis_out');
+            end
+            
+            data = SphericalDeconvolution.SH_2_dMRI('bvals',bvals,...
+                'bvecs',bvecs,'basis',basis_in,'bmat',bmat,'shcoeffs',shcoeffs,'lmax',lmax);
+            SHCoeffs = SphericalDeconvolution.dMRI_2_SH('data',data,'basis',...
+                basis_out,'lmax',lmax);
+            
+            if(~isempty(VD) && ~isempty(output))
+               out.VD = VD;
+               out.img = SHCoeffs;
+               clear data SHCoeffs
+               EDTI.WriteNifti(out,output); 
+            end
         end
         
         function ConvertMatTractography2TCK(varargin)
