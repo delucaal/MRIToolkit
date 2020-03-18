@@ -11,7 +11,7 @@ MRIToolkit attempts to full compatibility with other tools such as [MRtrix3](www
 To export the data contained in an ExploreDTI-like .mat file (for example after preprocessing), run the following:
 ```matlab
 EDTI.EDTI_Data_2_Nii('mat_file','sub-MRI_ses-1/dwi/sub-MRI_ses-1_dMRI_B2500_S15_MB2_v2_1_FP_denoised_MD_C_trafo.mat',...
-'output',''sub-MRI_ses-1/dwi/preprocessed_data')
+'output','sub-MRI_ses-1/dwi/preprocessed_data')
 ```
 This will create a .nii(gz)/.bval/.bvec. 
 
