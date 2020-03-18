@@ -1,6 +1,6 @@
 <p align="center">
 <a href="https://github.com/delucaal/MRIToolkit"> 
-<img src="../../../img/MRIToolkitLogo.png" /> 
+<img src="../../../img/MRIToolkitLogo.png" height="150"/> 
  </a> 
  </p>
 
