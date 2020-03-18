@@ -1,6 +1,8 @@
+<p align="center">
 <a href="https://github.com/delucaal/MRIToolkit"> 
-<span style='align:center'> <img src="img/MRIToolkitLogo.png" style="width:200px;  display: block;  margin-left: auto;  margin-right: auto;"/> </span>
+<img src="../../../img/MRIToolkitLogo.png" height="150"/> 
  </a> 
+ </p>
  
  # [MRIToolkit](https://github.com/delucaal/MRIToolkit) [update 14-03-2020] 
 
@@ -14,7 +16,7 @@ The idea behind MRIToolkit is to integrate [methods I develop](https://www.isi.u
 - The compiled [command line tools](https://github.com/delucaal/MRIToolkit/tree/master/CommandLine) will be uploaded soon!
 
 ## Explore the main functionalities:
-<a href="https://github.com/delucaal/tree/master/GettingStarted"> 
+<a href="GettingStarted"> 
 <span style='align:center'> <img src="img/MRIToolkitBanner.png" style="width:300px;  display: block;  margin-left: auto;  margin-right: auto;"/> </span>
  </a> 
 
@@ -28,19 +30,22 @@ Examples of some functionalities can be found in [here](https://github.com/deluc
 
 ###### Requirements:
 - MRIToolkit relies on a couple of third party dependencies:
-  - Elastix: 1) Either compile your own version or grab the executables for your platform [here](https://surfdrive.surf.nl/files/index.php/s/v8YMk8M49rCMB2q). 2) Copy the file "TemplateMRIToolkitDefineLocalVars.m" to your MATLAB default folder (user/MATLAB or Documents/MATLAB), rename the file as "MRIToolkitDefineLocalVars.m". 3) Edit the script, adjusting the variable MRIToolkit.Elastix.Location as needed.
+  - Elastix: 
+    - 1) Either compile your own version or grab the executables for your platform [here](https://surfdrive.surf.nl/files/index.php/s/v8YMk8M49rCMB2q). 
+    - 2) Copy the file "TemplateMRIToolkitDefineLocalVars.m" to your MATLAB default folder (user/MATLAB or Documents/MATLAB), rename the file as "MRIToolkitDefineLocalVars.m". 
+    - 3) Edit the script, adjusting the variable MRIToolkit.Elastix.Location as needed.
   - NODDI toolbox: if you would like to try the mFOD method, you will need to add the [NODDI toolbox](http://mig.cs.ucl.ac.uk/index.php?n=Tutorial.NODDImatlab) to the MATLAB path.
   - ExploreDTI: While MRIToolkit is entirely self-sufficient (e.g. all needed ExploreDTI functions are bundled and adapted), the visualization of fiber tractograhy and other results will need ExploreDTI. Get it for free from [Alexander Leemans](www.exploredti.com).
 
 ###### Notes:
-- MRIToolkit is NOT approved for clinical use
+- **MRIToolkit is NOT approved for clinical use**
 - This code is a work in progress. It will be updated without notice to ensure bug-fixes and the inclusion of best available methods
 
 ###### License:
 - This software is distributed under the LGPLv3 license (https://opensource.org/licenses/lgpl-3.0.html).
 
 ## References:
-The toolbox is referenced for the first time in [Guo et al.](https://arxiv.org/abs/1910.05372). Please cite the original works corresponding to the steps you are including: 
+The toolbox is referenced for the first time in [Guo et al.](https://arxiv.org/abs/1910.05372). Additionally, please cite the original works corresponding to the steps you use: 
 - [ExploreDTI](http://www.exploredti.com): Leemans, A., Jeurissen, B., Sijbers, J., & Jones, D. K. (2009). ExploreDTI: a graphical toolbox for processing, analyzing, and visualizing diffusion MR data. 17th Annual Meeting of the International Society for Magnetic Resonance in Medicine, Honolulu, Hawaii, USA, 3537.
 - Diffusion MRI pre-processing: ([signal drift correction](https://onlinelibrary.wiley.com/doi/full/10.1002/mrm.26124), [Gibbs ringing correction](https://www.ncbi.nlm.nih.gov/pubmed/26142273), motion and eddy currents correction, [B-matrix rotation](https://www.ncbi.nlm.nih.gov/pubmed/19319973), EPI correction, MPPCA denoising)
 - [Diffusion Tensor Imaging (DTI)](https://pubmed.ncbi.nlm.nih.gov/8130344/) and [Diffusion Kurtosis Imaging (DKI)](https://pubmed.ncbi.nlm.nih.gov/15906300/) fit including the [MK-curve method](https://www.ncbi.nlm.nih.gov/pubmed/30978492);
@@ -82,10 +87,6 @@ The toolbox is referenced for the first time in [Guo et al.](https://arxiv.org/a
 ###### Not yet planned for release (contact me directly if interested):
 - **'dfMRI'**, Diffusion fMRI utilities used in [De Luca et al. 2019](https://onlinelibrary.wiley.com/doi/full/10.1002/hbm.24758)
 
-###### Working examples:
-
-- **'InversionRecoveryT1Fit.m'**: an example script to fit T1 with inversion recovery data.
-- **'CSD_Tractography_Script.m'**: an example script showcasing how to use the ExploreDTIInterface toolbox.
-- More examples will come in the next days.
-
+<p align="center">
 Alberto De Luca - First published in 2019
+</p>
