@@ -1,6 +1,6 @@
 <p align="center">
 <a href="https://github.com/delucaal/MRIToolkit"> 
-<img src="../../../img/MRIToolkitLogo.png" style="width:200px;  display: block;  margin-left: auto;  margin-right: auto;"/> 
+<img src="../../../img/MRIToolkitLogo.png" /> 
  </a> 
  </p>
 
@@ -9,7 +9,7 @@ The Brain Imaging Data Structure [(BIDS)](https://en.wikipedia.org/wiki/Brain_Im
 
 To start, create a root folder for the project with a subfolder *DICOM*. In *DICOM*, copy (or link) all the DICOM folders of the subjects, as in this example:
 <p align="center">
-<img src="../../../img/img_bids.png" style="width:300px; display: block; margin-left:auto;margin-right: auto">
+<img src="../../../img/img_bids.png" width="300">
 </p>
 
 Then, type the following:
