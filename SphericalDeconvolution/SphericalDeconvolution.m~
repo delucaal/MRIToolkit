@@ -1149,9 +1149,7 @@ classdef SphericalDeconvolution < handle
                TractAng(tid) = {ones(size(T,1),1)};
                TractFE(tid) = {ones(size(T,1),3)};
                for pid=2:size(T,1)
-                  D = abs(T(pid,:)-T(pid-1,:));
-                  D = D/norm(D);
-                  TractFE{tid}(pid,:) = (D);
+                  D = T(pid,:)-T(pid-1,:); 
                end
                TractGEO(tid) = {ones(size(T,1),1)};
                TractLambdas(tid) = {ones(size(T,1),3)};

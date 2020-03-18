@@ -14,7 +14,6 @@ The script [Example1_Preprocessing.m](Example1_Preprocessing.m) shows how to app
 EDTI.EnforceNiiGz(true);
 ```
 - 4 Generate a .txt b-matrix file. This is required by the ExploreDTI engine (which carries out many of these calls):
-% Generate a bmat .txt file from .bval - .bvec
 ```matlab
 EDTI.b_Matrix_from_bval_bvec('bval_file','sub-MRI_ses-1/dwi/sub-MRI_ses-1_dMRI_B2500_S15_MB2_v2_1.bval',...
     'output','sub-MRI_ses-1/dwi/sub-MRI_ses-1_dMRI_B2500_S15_MB2_v2_1.txt');
