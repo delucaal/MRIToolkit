@@ -1183,7 +1183,11 @@ classdef SphericalDeconvolution < handle
             if(isempty(peak_threshold))
                 peak_threshold = 0.1;
             end
-                      
+            parallel = GiveValueForName(varargin,'parallel');
+            if(isempty(parallel))
+                parallel = 1;
+            end
+            
             SHPrecomp.init(lmax,300);
             c = parcluster('local');
             max_cores = c.NumWorkers;
