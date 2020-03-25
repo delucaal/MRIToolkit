@@ -1108,6 +1108,111 @@ classdef SphericalDeconvolution < handle
             end
         end
         
+        function [fod_amp, vertices] = SH_FOD_2_Sphere(varargin)
+            % Projects an FOD in Spherical Harmonics (in ExploreDTI basis) on the unit sphere
+            % input arguments:
+            % fod: the input FOD or the corresponding file
+            % nvertices: the number of desired vertices
+            % lmax: the spherical harmonics order
+            fod_file = GiveValueForName(varargin,'fod');
+            if(isempty(fod_file))
+                error('Missing mandatory argument fod');
+            end
+            nvert = GiveValueForName(varargin,'nvertices');
+            if(isempty(nvert))
+                nvert = 720;
+            end
+
+            if(ischar(fod_file))
+                DATA = EDTI.LoadNifti(fod_file);
+            else
+                DATA.img = fod_file;
+                clear fod_file
+            end
+            lmax = GiveValueForName(varargin,'lmax');
+            if(isempty(lmax))
+                lmax = 16;
+                switch(size(DATA.img,4))
+                    case 15
+                        lmax = 4;
+                    case 28
+                        lmax = 6;
+                    case 45
+                        lmax = 8;
+                    case 163
+                        lmax = 16;
+                end
+            end            
+            
+            SV = gen_scheme(nvert,4);
+            vertices = SV.vert;
+            
+            mySH = SH(lmax,SV.vert);
+            fod_amp = mySH.amp(DATA.img);
+            
+        end
+        
+        function [peak_dir,peak_amp,AFD,NuFO] = FODPeaksAndMetrics(varargin)
+            % Determine the FOD peaks and their amplitude. Can also return
+            % the AFD and NuFO metrics
+            % input arguments:
+            % fod: the input FOD or file reference
+            % lmax: the SH order (default 8)
+            % peak_threshold: minimum amplitude of a "genuine" peak
+            % (default 0.1)
+            % max_peaks: maximum allowed number of peaks (default 3)
+            % parallel: allow parallel computing (default 1)
+            fod = GiveValueForName(varargin,'fod');
+            if(isempty(fod))
+                error('Missing mandatory argument fod');
+            end
+            if(ischar(fod))
+                C = EDTI.LaodNifti(fod);
+                fod = C.img;
+                clear C
+            end
+            lmax = GiveValueForName(varargin,'lmax');
+            if(isempty(lmax))
+                lmax = 8;
+            end
+            max_peaks = GiveValueForName(varargin,'max_peaks');
+            if(isempty(max_peaks))
+                max_peaks = 3;
+            end
+            peak_threshold = GiveValueForName(varargin,'peak_threshold');
+            if(isempty(peak_threshold))
+                peak_threshold = 0.1;
+            end
+                      
+            SHPrecomp.init(lmax,300);
+            c = parcluster('local');
+            max_cores = c.NumWorkers;
+            if(parallel == 0)
+                max_cores = 1;
+            end
+            
+            [peak_dir,peak_amp] = SHPrecomp.all_peaks(fod,peak_threshold,max_peaks,max_cores,lmax,300);
+            
+            if(nargout > 2)
+               NuFO = zeros(size(peak_dir));
+               AFD = zeros(size(peak_dir));
+                           
+                for x=1:size(AFD,1)
+                    for y=1:size(AFD,2)
+                        for z=1:size(AFD,3)
+                            if(isempty(peak_dir{x,y,z}))
+                                continue
+                            end
+                            NuFO(x,y,z) = size(peak_dir{x,y,z},2);
+                            AFD(x,y,z) = peak_amp{x,y,z}(1);
+                        end
+                    end
+                end
+               
+            end
+            
+        end
+        
         function ConvertMatTractography2TCK(varargin)
             % Converts ExploreDTI tractography 2 the TCK format
             % input arguments:
@@ -1142,7 +1247,7 @@ classdef SphericalDeconvolution < handle
             % input arguments:
             % tck_file: the input tractography mat file
             % nii_file: a reference .nii file in the same space of the tck
-            % output: the output tck file            
+            % output: the output MAT file            
             tck_file = GiveValueForName(varargin,'tck_file');
             if(isempty(tck_file))
                 error('Missing mandatory argument tck_file');
@@ -1197,6 +1302,100 @@ classdef SphericalDeconvolution < handle
             save(output,'Tracts','TractL','TractFA','TractFE','TractFE',...
                 'TractAng','TractGEO','TractLambdas','TractMD','FList','TractMask','VDims','-v7.3');
             
+        end
+        
+        function [mx,my,mz] = ConvertMatTractographt2VTK(varargin)
+            % Converts MAT tractography 2 the VTK format
+            % The output mx,my,mz are the shifts from the EDTI space to the
+            % Slicer space
+            % input arguments:
+            % mat_file: the input tractography mat file
+            % output: the output vtk file            
+            mat_file = GiveValueForName(varargin,'mat_file');
+            if(isempty(mat_file))
+                error('Missing mandatory argument mat_file');
+            end
+            output = GiveValueForName(varargin,'output');
+            if(isempty(output))
+                error('Missing mandatory argument output');
+            end
+            [mx,my,mz] = E_DTI_Convert_tracts_mat_2_vtk_lines(mat_file, output);
+        end
+        
+        function VTKTractography2Mat(varargin)
+            % Converts VTK tractography 2 the ExploreDTI format
+            % input arguments:
+            % vtk_file: the input tractography mat file
+            % nii_file: a reference .nii file in the same space of the tck
+            % output: the output MAT file
+            
+            vtk_file = GiveValueForName(varargin,'vtk_file');
+            if(isempty(vtk_file))
+                error('Missing mandatory argument vtk_file');
+            end
+            output = GiveValueForName(varargin,'output');
+            if(isempty(output))
+                error('Missing mandatory argument output');
+            end
+            nii_file = GiveValueForName(varargin,'nii_file');            
+            if(isempty(nii_file))
+                error('Missing mandatory argument nii_file');
+            end
+            
+            REF = EDTI.LoadNifti(nii_file);
+            
+            try
+                [Points,Lines] = VTKImport_test(fullfile(vtk_files(vid).folder,vtk_files(vid).name));
+            catch 
+                disp('Error trying to read the VTK file');
+                return
+            end
+            Points(:,1) = Points(:,1) + mx;
+            Points(:,2) = Points(:,2) + my;
+            Points(:,3) = Points(:,3) + mz;
+            Points(:,1) = size(REF.img,2) - Points(:,1); 
+            Points(:,2) = size(REF.img,1) - Points(:,2); 
+            Points = Points(:,[2 1 3]); 
+            Tracts.VDims = REF.VD;
+            Tracts.Tracts = cell(1,length(Lines));
+            Tracts.TractAng = cell(1,length(Lines));
+            Tracts.TractFA = cell(1,length(Lines));
+            Tracts.TractFE = cell(1,length(Lines));
+            Tracts.TractGEO = cell(1,length(Lines));
+            Tracts.TractL = cell(1,length(Lines));
+            Tracts.TractLambdas = cell(1,length(Lines));
+            Tracts.TractMD = cell(1,length(Lines));
+            Tracts.TractMask = ones(size(REF.img));
+            Tracts.TractMask = permute(Tracts.TractMask,[2 1 3]);
+            Tracts.FList = (1:length(Tracts.Tracts))';
+            for tid=1:length(Tracts.Tracts)
+                PL = Points(Lines{tid}+1,:);
+                Tracts.Tracts(tid) = {PL};
+                cTractFA = zeros([size(PL,1),1]);
+                cTractFE = zeros([size(PL,1),3]);
+                cTractGEO = zeros([size(PL,1),1]);
+                cTractAng = zeros([size(PL,1),1]);
+                cTractL = size(PL,1);
+                cTractLambdas = zeros([size(PL,1),3]);
+                cTractMD = zeros([size(PL,1),1]);
+                for point=1:size(PL,1)
+                   P = PL(point,:)./REF.VD; 
+                   PC = floor(P)+1;
+                   cTractFA(point) = DIFF_PROP.FA(PC(1),PC(2),PC(3))/sqrt(3);
+                   cTractFE(point,:) = abs(squeeze(DIFF_PROP.FE(PC(1),PC(2),PC(3),:)));
+                   cTractLambdas(point,:) = squeeze(DIFF_PROP.eigval(PC(1),PC(2),PC(3),:));
+                   cTractMD(point) = mean(cTractLambdas(point,:));
+                end
+                Tracts.TractAng(tid) = {cTractAng};
+                Tracts.TractFA(tid) = {cTractFA};
+                Tracts.TractFE(tid) = {cTractFE};
+                Tracts.TractGEO(tid) = {cTractGEO};
+                Tracts.TractLambdas(tid) = {cTractLambdas};
+                Tracts.TractMD(tid) = {cTractMD};       
+                Tracts.TractL(tid) = {cTractL};
+            end
+            save(output,'-struct','Tracts');
+
         end
         
     end
@@ -2037,4 +2236,167 @@ end
 
 fwrite (f, [ inf inf inf ], 'float32');
 fclose (f);
+end
+
+% Function to convert from MAT 2 VTK. Original implementation in
+% ExploreDTI, adapted and fixed from A. De Luca
+function [mx,my,mz] = E_DTI_Convert_tracts_mat_2_vtk_lines(filename, filename_out)
+
+try
+    warning off all
+    load(filename,'Tracts','TractMask')
+    warning on all
+catch
+    return;
+end
+
+if ~exist('Tracts','var') || ~iscell(Tracts)
+    return;
+end
+
+Tract_dir = E_DTI_Get_tract_dir(Tracts);
+
+for i=1:length(Tract_dir)
+    Tract_dir{i} = abs(Tract_dir{i});    
+end
+
+num_tracts = length(Tracts);
+TL = zeros(num_tracts,1);
+
+for i=1:num_tracts
+    TL(i)=size(Tracts{i},1);
+end
+
+CTL = [0; cumsum(TL)];
+CTL_c = [0; cumsum(TL+1)];
+
+Total_P = sum(TL);
+Points = repmat(single(0),[Total_P 3]);
+% Colors = repmat(single(1),[Total_P 4]);
+Colors = repmat(single(1),[Total_P 3]);
+
+for i=1:num_tracts
+    Points(CTL(i)+1:CTL(i+1),:) = single(Tracts{i});
+    Points(CTL(i)+1:CTL(i+1),[2 1 3]) = single(Tracts{i}); % mod ADL
+    Points(CTL(i)+1:CTL(i+1),1) = size(TractMask,2) - Points(CTL(i)+1:CTL(i+1),1); % mod ADL
+    Points(CTL(i)+1:CTL(i+1),2) = size(TractMask,1) - Points(CTL(i)+1:CTL(i+1),2); % mod ADL
+
+    Colors(CTL(i)+1:CTL(i+1),[2 1 3]) = single(Tract_dir{i});
+end
+
+mx = mean(Points(:,1));
+my = mean(Points(:,2))+40;
+mz = mean(Points(:,3))-10;
+
+Points(:,1) = Points(:,1) - mx;
+Points(:,2) = Points(:,2) - my;
+Points(:,3) = Points(:,3) - mz;
+
+conn = repmat(single(0),[1 num_tracts + Total_P]);
+
+for i=1:num_tracts
+    conn(CTL_c(i)+1) = TL(i);
+    conn(CTL_c(i)+2:CTL_c(i+1)) = (CTL(i):CTL(i+1)-1);
+end
+
+if nargin==1
+    [PATHSTR,NAME,EXT] = fileparts(filename);
+    save_name = [PATHSTR filesep NAME '.vtk'];
+else
+    save_name = filename_out;
+end
+
+try
+    
+    fid = fopen(save_name,'w+t');
+    
+    fprintf(fid, '%s\n','# vtk DataFile Version 3.0');
+    fprintf(fid, '%s\n','vtk output');
+    fprintf(fid, '%s\n','ASCII');
+    fprintf(fid, '%s\n','DATASET POLYDATA');
+    fprintf(fid, ['POINTS ' '%d' ' float' '\n'], Total_P);
+    fprintf(fid,'%f %f %f\n',Points');
+   
+    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    fprintf(fid, '\n');
+    fprintf(fid, ['LINES ' '%d %d\n'], [num_tracts num_tracts + Total_P]);
+    fprintf(fid,'%d ',conn);
+    fprintf(fid, '\n\n');
+    fprintf(fid, ['POINT_DATA ' '%d' '\n'], Total_P);
+    % fprintf(fid, '%s\n','COLOR_SCALARS Vertex_colors 4');
+    % fprintf(fid,'%f %f %f %f\n',Colors');
+    fprintf(fid, '%s\n','COLOR_SCALARS rgb_colors 3');
+    fprintf(fid,'%f %f %f\n',Colors');
+    fclose(fid);
+    
+catch
+    disp('Problems writing data... check permissions...')
+    return;
+end
+
+end
+
+% Helper function from EDTI
+function Tract_dir = E_DTI_Get_tract_dir(Tracts)
+
+if length(Tracts)==0
+    Tract_dir = cell(1,0);
+end
+
+for i=1:length(Tracts)
+    
+    Tract_dir{i} = Tracts{i};
+    
+    if size(Tracts{i},1)>2
+        dummy = Tract_dir{i}(2:end,:)-Tract_dir{i}(1:end-1,:);
+        Tract_dir{i}(2:end-1,:) = (dummy(1:end-1,:)+dummy(2:end,:))/2;
+        Tract_dir{i}(1,:) = dummy(1,:);
+        Tract_dir{i}(end,:) = dummy(end,:);
+    else
+        dummy = Tract_dir{i}(2,:)-Tract_dir{i}(1,:);
+        Tract_dir{i}(1,:) = dummy;
+        Tract_dir{i}(2,:) = dummy;
+    end
+    
+    
+    NT = sqrt(sum(Tract_dir{i}.^2,2));
+    
+    Tract_dir{i} = Tract_dir{i}./[NT NT NT];
+    
+    
+end
+end
+
+% A simple VTK read function
+function [points_list,lines] = VTKImport_test(file_in)
+
+fid = fopen(file_in,'rb');
+
+str = fgets(fid);
+str = fgets(fid);
+str = fgets(fid);
+str = fgets(fid);
+str = fgets(fid);
+nvert = sscanf(str,'%*s %d %*s', 1);
+sp = ftell(fid);
+% read vertices
+A = single(fread(fid,nvert*3,'float','b'));
+mp = ftell(fid);
+
+str = fgets(fid);
+str = fgets(fid);
+nlines = sscanf(str,'%*s %d %d');
+lines = cell(1,1);
+for ij=1:nlines
+    K = fread(fid,1,'int','b');
+    lines(ij) = {fread(fid,K,'*int','b')};
+end
+% B = fread(fid,[nlines(1) 4],'*uint8','b');
+pstr = fgets(fid);
+mmp = ftell(fid);
+
+fclose(fid);
+
+A = reshape(A,3,nvert);
+points_list = A';
 end
