@@ -1167,7 +1167,7 @@ classdef SphericalDeconvolution < handle
                 error('Missing mandatory argument fod');
             end
             if(ischar(fod))
-                C = EDTI.LaodNifti(fod);
+                C = EDTI.LoadNifti(fod);
                 fod = C.img;
                 clear C
             end
