@@ -459,6 +459,8 @@ op_e16 = optimset('TolX',1e-16);
 % Step 1 - perform voxel-wise NNLS to learn the prior (with outlier
 % rejection)
 
+min_b = min(data.bvals);
+
 disp('Warning - tolerances have been changed');
 
 for x=1:size(data.img,1)
@@ -469,7 +471,10 @@ for z=1:size(data.img,3)
         continue
     end
     NoisySimulatedSignal = double(squeeze(data.img(x,y,z,:)));
-    NoisySimulatedSignal = NoisySimulatedSignal/mean(NoisySimulatedSignal(data.bvals <= 5));
+    if(sum(NoisySimulatedSignal == 0) > 1)
+        continue
+    end
+    NoisySimulatedSignal = NoisySimulatedSignal/mean(NoisySimulatedSignal(data.bvals <= min_b));
     
     % This solution is more sensitive to small components but also to noise 
     [LSQNONNEG_CL_DECONV,goodpoints] = DW_RobustDeconvFinal(Dictionary,NoisySimulatedSignal,3,op_hp);
@@ -502,8 +507,8 @@ LOW_PRIOR = LOW_PRIOR/sum(LOW_PRIOR);
 
 % CHANGE
 % disp('Different assignment')
-if(parameters.use_low_prior == 0)
-    LOW_PRIOR = PRIOR; 
+if(parameters.use_low_prior == 1)
+    PRIOR = LOW_PRIOR; 
 end
 
 % Heuristics to subdivide the number of classes, also taking into account
@@ -522,7 +527,11 @@ for z=1:size(data.img,3)
         continue
     end
     NoisySimulatedSignal = double(squeeze(data.img(x,y,z,:)));
-    NoisySimulatedSignal = NoisySimulatedSignal/mean(NoisySimulatedSignal(data.bvals <= 5));
+    if(sum(NoisySimulatedSignal == 0) > 1)
+        continue
+    end
+    
+    NoisySimulatedSignal = NoisySimulatedSignal/mean(NoisySimulatedSignal(data.bvals <= min_b));
     
     goodpoints = squeeze(OUTLIERS(x,y,z,:))==1;
    

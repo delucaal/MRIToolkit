@@ -393,7 +393,9 @@ classdef EDTI < handle
                             3 1 2];
                 sign_list = [1 1 1; -1 1 1; 1 -1 1; 1 1 -1];
                if(isempty(flips))
-                   warning('Failed to determine the coordinate systems. Please check your results / specify it manually.');
+                   if(~isdeployed)
+                       warning('Failed to determine the coordinate systems. Please check your results / specify it manually.');
+                   end
                    perm = 2;
                    flip = 2;
                else
@@ -817,7 +819,7 @@ classdef EDTI < handle
             mrt_data.bvecs = bvecs;
             mrt_data.mask = mask;
             mrt_data.VD = VDims;
-        end
+        end        
         
         function EDTI_Data_2_Nii(varargin)
         % This function loads the content of an ExploreDTI-like .mat file
@@ -1030,9 +1032,11 @@ classdef EDTI < handle
             par.Interpol = 1;
             
             if isempty(par.E_path) || isempty(par.T_path)
-                par.suc=0;
-                disp('Cannot find an appropriate Elastix build...')
-                return;
+                if(~isdeployed)
+                    par.suc=0;
+                    disp('Cannot find an appropriate Elastix build...')
+                    return;
+                end
             end
             
             par.out_folder = out_folder;            
@@ -1055,7 +1059,11 @@ classdef EDTI < handle
                 return;
             end
             
-            enforce_niigz = MRIToolkit.EnforceNiiGz;
+            if(isfield(MRIToolkit,'EnforceNiiGz'))
+                enforce_niigz = MRIToolkit.EnforceNiiGz;
+            else
+                enforce_niigz = false;
+            end
             EDTI.EnforceNiiGz(false);
             
             TS = tic;
@@ -1273,7 +1281,48 @@ classdef EDTI < handle
             E_DTI_write_nifti_file(data,VD,output);
         end
         
+        function DiscardEmptyVolumes(varargin)
+        % Checks a 4D .nii for empty volumes and discards them
+        % arguments:
+        % nii_file: the (d)MRI .nii file
+        % bmat: the corresponding b-matrix in .txt
+        % output: the output .nii file
+        
+            if(isempty(varargin))
+                help('EDTI.DiscardEmptyVolumes');
+                return;
+            end 
+            coptions = varargin;
+            nii_file = GiveValueForName(coptions,'nii_file');
+            if(isempty(nii_file))
+                error('Missing mandatory argument nii_file');
+            end
+            bmat = GiveValueForName(coptions,'bmat');
+            if(~isempty(bmat))
+                bmat = load(bmat);
+            end
+            output = GiveValueForName(coptions,'output');
+            if(isempty(output))
+                error('Missing mandatory argument output');
+            end
 
+            data = EDTI.LoadNifti(nii_file);
+            [sx,sy,sz,st] = size(data.img);
+            data.img = reshape(data.img,sx*sy*sz,st);
+            V = sum(data.img);
+            BI = V == 0;
+            data.img = reshape(data.img,sx,sy,sz,st);
+            if(sum(BI) ~= 0)
+                data.img(:,:,:,BI == 1) = [];
+                if(~isempty(bmat))
+                   bmat(BI == 1,:) = [];
+                   save([output(1:end-4) '.txt'],'bmat','-ascii');
+                end
+                EDTI.WriteNifti(data,output);
+            end
+            
+        end
+        
         function res = AverageNormalizedResiduals(varargin)
         % Compute voxel-wise residuals using the DTI/DKI model. Input
         % arguments:
@@ -1411,10 +1460,16 @@ if ispc
 else
     try
     [dir_e,el] = fileparts(E_path);
-    sys_c = ['./' el];
-    tedi = cd(dir_e);
-    [r,st]=system(sys_c);
-    cd(tedi)
+%     sys_c = ['./' el];
+%     tedi = cd(dir_e);
+%     [r,st]=system(sys_c);
+%     cd(tedi)
+    if(ismac)
+        sys_c = ['DYLD_LIBRARY_PATH="' dir_e '" "' fullfile(dir_e,el) '"'];
+    else
+        sys_c = ['LD_LIBRARY_PATH=' dir_e ' ' fullfile(dir_e,el)];
+    end
+    [r,st] = system(sys_c);
     catch me
         disp('Debugging info for Alexander (please, email to: Alexander@isi.uu.nl)')
         disp(['E_path: ' E_path])
@@ -1438,10 +1493,16 @@ if ispc
     [r,st]=system(sys_c);
 else
     [dir_e,tra] = fileparts(T_path);
-    sys_c = ['./' tra];
-    tedi = cd(dir_e);
-    [r,st]=system(sys_c);
-    cd(tedi)
+%     sys_c = ['./' tra];
+%     tedi = cd(dir_e);
+%     [r,st]=system(sys_c);
+%     cd(tedi)
+    if(ismac)
+        sys_c = ['DYLD_LIBRARY_PATH="' dir_e '" "' fullfile(dir_e,tra) '"'];
+    else
+        sys_c = ['LD_LIBRARY_PATH="' dir_e '" "' fullfile(dir_e,tra) '"'];
+    end
+    [r,st] = system(sys_c);
 end
 if r~=0
     suc = 0;
@@ -1902,17 +1963,29 @@ if par.R2D.type~=3
         [r,st]=system(sys_c);
         
     else
-        
+       
         [dir_e,el] = fileparts(par.E_path);
-        sys_c = ['./' el ' -f ' fn_fixed ...
+%         sys_c = ['./' el ' -f ' fn_fixed ...
+%             ' -fMask ' fn_fixed_mask ...
+%             ' -m ' fn_moving ...
+%             ' -out ' for_trafo.dir_temp ...
+%             ' -p ' fn_par_trafo_rigid];
+        if(ismac)
+        sys_c = ['DYLD_LIBRARY_PATH="' dir_e '" "' par.E_path '" -f ' fn_fixed ...
             ' -fMask ' fn_fixed_mask ...
             ' -m ' fn_moving ...
             ' -out ' for_trafo.dir_temp ...
-            ' -p ' fn_par_trafo_rigid];
-        
-        tedi = cd(dir_e);
+            ' -p ' fn_par_trafo_rigid];      
+        else
+            sys_c = ['LD_LIBRARY_PATH="' dir_e '" "' par.E_path '" -f ' fn_fixed ...
+            ' -fMask ' fn_fixed_mask ...
+            ' -m ' fn_moving ...
+            ' -out ' for_trafo.dir_temp ...
+            ' -p ' fn_par_trafo_rigid]; 
+        end
+%         tedi = cd(dir_e);
         [r,st]=system(sys_c);
-        cd(tedi)
+%         cd(tedi)
     end
     
 else
@@ -1944,16 +2017,30 @@ else
     else
         
         [dir_e,el] = fileparts(par.E_path);
-        sys_c = ['./' el ' -f ' fn_fixed ...
+%         sys_c = ['./' el ' -f ' fn_fixed ...
+%             ' -fMask ' fn_fixed_mask ...
+%             ' -m ' fn_moving ...
+%             ' -out ' for_trafo.dir_temp ...
+%             ' -p ' fn_par_trafo_rigid ...
+%             ' -p ' fn_par_trafo_non_rigid];
+        if(ismac)
+            sys_c = ['DYLD_LIBRARY_PATH="' dir_e '" "' par.E_path '" -f ' fn_fixed ...
             ' -fMask ' fn_fixed_mask ...
             ' -m ' fn_moving ...
             ' -out ' for_trafo.dir_temp ...
             ' -p ' fn_par_trafo_rigid ...
-            ' -p ' fn_par_trafo_non_rigid];
-        
-        tedi = cd(dir_e);
+            ' -p ' fn_par_trafo_non_rigid]; 
+        else
+            sys_c = ['LD_LIBRARY_PATH="' dir_e '" "' par.E_path '" -f ' fn_fixed ...
+            ' -fMask ' fn_fixed_mask ...
+            ' -m ' fn_moving ...
+            ' -out ' for_trafo.dir_temp ...
+            ' -p ' fn_par_trafo_rigid ...
+            ' -p ' fn_par_trafo_non_rigid]; 
+        end
+%         tedi = cd(dir_e);
         [r,st]=system(sys_c);
-        cd(tedi)
+%         cd(tedi)
     end
     
     
@@ -2720,15 +2807,27 @@ else
 %      par.Par_SMEC = replace(par.Par_SMEC,' ','\ ');
     
     [dir_e,el] = fileparts(par.E_path);
-    sys_c = ['./' el ' -f ' par.fixed_SMEC_fn ...
-        ' -fMask ' par.fixed_SMEC_fn_mask ...
-        ' -m ' f_moving ...
-        ' -out ' dir_temp_i ...
-        ' -p ' par.Par_SMEC];
-    
-    tedi = cd(dir_e);
+%     sys_c = ['./' el ' -f ' par.fixed_SMEC_fn ...
+%         ' -fMask ' par.fixed_SMEC_fn_mask ...
+%         ' -m ' f_moving ...
+%         ' -out ' dir_temp_i ...
+%         ' -p ' par.Par_SMEC];
+    if(ismac)
+        sys_c = ['DYLD_LIBRARY_PATH="' dir_e '" "' par.E_path '" -f ' par.fixed_SMEC_fn ...
+            ' -fMask ' par.fixed_SMEC_fn_mask ...
+            ' -m ' f_moving ...
+            ' -out ' dir_temp_i ...
+            ' -p ' par.Par_SMEC];
+    else
+        sys_c = ['LD_LIBRARY_PATH="' dir_e '" "' par.E_path '" -f ' par.fixed_SMEC_fn ...
+            ' -fMask ' par.fixed_SMEC_fn_mask ...
+            ' -m ' f_moving ...
+            ' -out ' dir_temp_i ...
+            ' -p ' par.Par_SMEC];
+    end
+%     tedi = cd(dir_e);
     [r,st]=system(sys_c);
-    cd(tedi)
+%     cd(tedi)
 end
 
 if r~=0
@@ -2759,12 +2858,21 @@ else
 %     f_moving = replace(f_moving,' ','\ ');
     
     [dir_e,tra] = fileparts(par.T_path);
-    sys_c = ['./' tra ' -in ' f_moving ...
+%     sys_c = ['./' tra ' -in ' f_moving ...
+%         ' -out ' dir_temp_i ...
+%         ' -tp ' tra_file];
+    if(ismac)
+        sys_c = ['DYLD_LIBRARY_PATH="' dir_e '" "' par.T_path '" -in ' f_moving ...
         ' -out ' dir_temp_i ...
         ' -tp ' tra_file];
-    tedi = cd(dir_e);
+    else
+        sys_c = ['LD_LIBRARY_PATH="' dir_e '" "' par.T_path '" -in ' f_moving ...
+        ' -out ' dir_temp_i ...
+        ' -tp ' tra_file];
+    end
+    %     tedi = cd(dir_e);
     [r,st]=system(sys_c);
-    cd(tedi)
+%     cd(tedi)
     
 end
 
@@ -4528,7 +4636,7 @@ end
 function [bval, grad] =  E_DTI_GetGradientsandBval_SC(bmat, NrB0)
 
 bmat = double(bmat);
-bval = mean(sum(bmat(NrB0+1:end,[1 4 6]),2));
+bval = (sum(bmat(NrB0+1:end,[1 4 6]),2));
 
 % x~=0
 BSign_x = sign(sign(bmat(:,1:3)) + 0.0001);   % Adding 0.0001 avoids getting zeros here

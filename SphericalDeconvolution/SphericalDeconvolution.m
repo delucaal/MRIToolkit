@@ -684,14 +684,15 @@ classdef SphericalDeconvolution < handle
                         if(sum(points2keep_l > 0) < 2)
                             continue
                         end
-                        
-                        TP = tract(points2keep_l,:);
-                        TL = 0;
-                        for tpid=2:size(TP,1)
-                            TL = TL + norm(TP(tpid,:)-TP(tpid-1,:));
-                        end
-                        if(TL < Parameters.Length_range(1))
-                            continue
+                        if(~strcmp(mask_mode,'gm_only'))
+                            TP = tract(points2keep_l,:);
+                            TL = 0;
+                            for tpid=2:size(TP,1)
+                                TL = TL + norm(TP(tpid,:)-TP(tpid-1,:));
+                            end
+                            if(TL < Parameters.Length_range(1))
+                                continue
+                            end
                         end
                         
                         new_tracts{end+1} = TP;
@@ -1059,6 +1060,8 @@ classdef SphericalDeconvolution < handle
             % bvals: the corresponding diffusion weightings (variable or
             % file)
             % bmat: alternatively, the b-matrix (variable or file)
+            % nvert: if gradients are not specified - the number of points
+            % on the unit sphere (default 300)
             % lmax: the order of the spherical harmonics
             % output: the output .nii file (optional) - only valid if
             % specifying the input as file
@@ -1070,6 +1073,7 @@ classdef SphericalDeconvolution < handle
             shcoeffs = GiveValueForName(varargin,'shcoeffs');
             lmax = GiveValueForName(varargin,'lmax');
             output = GiveValueForName(varargin,'output');
+            nvert = GiveValueForName(varargin,'nvert');
             if(isempty(shcoeffs))
                 error('Missing mandatory input shcoeffs');
             end
@@ -1083,8 +1087,11 @@ classdef SphericalDeconvolution < handle
             end
             
             if(isempty(bvals) && isempty(bmat))
-               bvals = 3000*ones(300,1); 
-               Q = gen_scheme(300,4);
+                if(isempty(nvert))
+                    nvert = 300;
+                end
+               bvals = 3000*ones(nvert,1); 
+               Q = gen_scheme(nvert,4);
                bvecs = Q.vert;
             end
             

@@ -1,9 +1,12 @@
 function mrtd_deconv_fod(varargin)
-disp('mrtd_deconv_fod');
-coptions = varargin;
-%     disp(varargin)
+    disp('mrtd_deconv_fod');
+    coptions = varargin;
+    if(length(varargin{1}) > 1)
+        coptions = varargin{1};
+    end
+    %     disp(varargin)
 
-if(isempty(varargin) || strcmpi(varargin{1},'-help'))
+    if(isempty(coptions) || isempty(coptions{1}) || strcmpi(coptions{1},'-help'))
     help = 'This tool performs spherical deconvolution of (multi-shell) diffusion MRI data';
     help = [help newline];
     help = [help newline 'usage: mrtd_deconv_fod -method chosen_method -nii file.nii -bval file.bval -bvec file.bvec -out corrected_file.nii (other_options)'];

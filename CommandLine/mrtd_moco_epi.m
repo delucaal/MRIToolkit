@@ -1,11 +1,13 @@
 function mrtd_moco_epi(varargin)
     disp('mrtd_moco_epi');
-    coptions = varargin;
     global MRIToolkit;
-%     disp(varargin)
+    coptions = varargin;
+    if(iscell(varargin{1}) && length(varargin{1}) > 1)
+        coptions = varargin{1};
+    end
+    %     disp(varargin)
 
-    file_in = GiveValueForName(coptions,'-help');
-    if(~isempty(file_in) || isempty(varargin))
+    if(isempty(coptions) || isempty(coptions{1}) || strcmpi(coptions{1},'-help'))
         help = 'This tools perform motion correction / Eddy currents correction / EPI distorion correction (optional) of diffusion MRI data';
         help = [help newline 'The gradient b-matrix is automatically reoriented.'];
         help = [help newline];

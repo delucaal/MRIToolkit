@@ -1,10 +1,12 @@
 function mrtd_coordsys_fix(varargin)
     disp('mrtd_coordsys_fix');
     coptions = varargin;
-%     disp(varargin)
+    if(length(varargin{1}) > 1)
+        coptions = varargin{1};
+    end
+    %     disp(varargin)
 
-    file_in = GiveValueForName(coptions,'-help');
-    if(~isempty(file_in) || isempty(varargin))
+    if(isempty(coptions) || isempty(coptions{1}) || strcmpi(coptions{1},'-help'))
         help = 'This tools can be used to check whether spatial dimension flip / permute are needed to properly process the given diffusion MRI data';
         help = [help newline];
         help = [help newline 'usage: mrtd_coordsys_fix -nii file.nii -bval file.bval -bvec file.bvec -out screenshot_file_no_extension (other_options)'];

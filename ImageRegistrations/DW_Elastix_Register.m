@@ -10,11 +10,19 @@ function DW_Elastix_Register(moving,fixed,regparlist,output_dir,mMask,fMask,outf
         elastix_path = MRIToolkit.Elastix.Location;
         elastix_cmd = MRIToolkit.Elastix.ElastixCMD;
         if(~ispc)
-            elastix_cmd = ['LD_LIBRARY_PATH=' elastix_path ' ' elastix_cmd];
+            if(~ismac)
+                elastix_cmd = ['LD_LIBRARY_PATH=' elastix_path ' ' elastix_cmd];
+            else
+                elastix_cmd = ['DYLD_LIBRARY_PATH=' elastix_path ' ' elastix_path 'elastix_Mac_64'];
+            end
         end
     else
         elastix_path = '/Users/alb/Desktop/M_Code_ExploreDTI_v4.8.6/Source/MD_cor_E/macOSX64/';
-        elastix_cmd = ['LD_LIBRARY_PATH=' elastix_path ' ' elastix_path 'elastix_Mac_64'];
+        if(~ismac)
+            elastix_cmd = ['LD_LIBRARY_PATH=' elastix_path ' ' elastix_path 'elastix_Mac_64'];
+        else
+            elastix_cmd = ['DYLD_LIBRARY_PATH=' elastix_path ' ' elastix_path 'elastix_Mac_64'];
+        end
     end
     sentence = [elastix_cmd ' -m ' moving ' -f ' fixed ' -out ' output_dir];
     if(exist('mMask','var') > 0 && ~isempty(mMask))
