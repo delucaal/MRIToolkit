@@ -1,0 +1,3 @@
+global MRIToolkit;
+mcc('-m','mrtcmd.m','-d',pwd,'-v','-a',MRIToolkit.Elastix.Location,...
+    '-a',MRIToolkit.dcm2niix,'-a',which('Grad_dirs_1024.txt'))
