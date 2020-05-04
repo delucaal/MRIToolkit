@@ -257,6 +257,7 @@ classdef SphericalDeconvolution < handle
             
             N = sm;
             op_e2 = optimset('TolX',1e-2);
+            op = optimset();
             
             [~,DeconvMethodCode] = SphericalDeconvolution.isSupportedMethod(obj.deconv_method); % -1 = failure; 1 = LSQNONNEG; 2 = DW_RegularizedDeconv; 3 = dRL
             if(DeconvMethodCode == -1)
@@ -266,6 +267,8 @@ classdef SphericalDeconvolution < handle
             
             TheTol = 1e-3;
             tic
+            
+            min_bval = min(obj.data.bvals);
             
             if(NC > 0)
                 parfor (x=1:N,nof_workers)
@@ -280,7 +283,7 @@ classdef SphericalDeconvolution < handle
 
                     % This normalization assumes there is some b=0s/mm2 data. It is not
                     % essential to do it as long as fractions is normalized at the end
-                    NormFactor = mean(Stot(obj.data.bvals<100));
+                    NormFactor = mean(Stot(obj.data.bvals<=min_bval));
                     S0(x) = NormFactor;
                     Stot = Stot/NormFactor;
 
@@ -301,10 +304,10 @@ classdef SphericalDeconvolution < handle
                         elseif(DeconvMethodCode == 3)
                             %                         fODFC = mat_RL(DS, weighted_LRKernel(:,1:end-NC), 200);
                             fODF = RichardsonLucy(DS, weighted_LRKernel(:,1:end-NC), 200);
-                        elseif(DeconvMethodCode == 2)
-                            fODFC = DW_RegularizedDeconv(weighted_LRKernel(:,1:end-NC),DS,op_e2,obj.L2LSQ_reg);
-                        elseif(DeconvMethodCode == 1)
-                            fODFC = lsqnonneg(weighted_LRKernel(:,1:end-NC),DS,op_e2);
+%                         elseif(DeconvMethodCode == 2)
+%                             fODFC = DW_RegularizedDeconv(weighted_LRKernel(:,1:end-NC),DS,op_e2,obj.L2LSQ_reg);
+                        elseif(DeconvMethodCode == 2 || DeconvMethodCode == 1)
+                            fODFC = lsqnonneg(weighted_LRKernel(:,1:end-NC),DS);
                         end
                         % This line is quite tricky. It comes out of some trial and error
                         % but actually has the intent of eliminating 1) small contributions
@@ -319,7 +322,7 @@ classdef SphericalDeconvolution < handle
                             Y(:,1) = Y(:,1)/max(Y(:,1)); % Normalize WM signal
                         end
 
-                        p = lsqnonneg(Y,Stot./shell_weight,op_e2); % Compute the signal fractions
+                        p = lsqnonneg(Y,Stot./shell_weight); % Compute the signal fractions
                         piso = p(end-NC+1:end);
 
                         % if nothing changed compared to previous iter, exit. (Tol may need to be
@@ -340,9 +343,9 @@ classdef SphericalDeconvolution < handle
                         %                     fODF = mat_RL(DS, weighted_HRKernel(:,1:end-NC), 200);
                         fODF = RichardsonLucy(DS, weighted_HRKernel(:,1:end-NC), 200);
                     elseif(DeconvMethodCode == 2)
-                        fODF = DW_RegularizedDeconv(weighted_HRKernel(:,1:end-NC),DS,op_e2, obj.L2LSQ_reg);
+                        fODF = DW_RegularizedDeconv(weighted_HRKernel(:,1:end-NC),DS,op, obj.L2LSQ_reg);
                     elseif(DeconvMethodCode == 1)
-                        fODF = lsqnonneg(weighted_HRKernel(:,1:end-NC),DS, op_e2);
+                        fODF = lsqnonneg(weighted_HRKernel(:,1:end-NC),DS);
                     end
                     fODFC = fODF;
                     fODFC(fODFC < median(fODFC)) = 0;
@@ -385,7 +388,7 @@ classdef SphericalDeconvolution < handle
 
                     % This normalization assumes there is some b=0s/mm2 data. It is not
                     % essential to do it as long as fractions is normalized at the end
-                    NormFactor = mean(Stot(obj.data.bvals<100));
+                    NormFactor = mean(Stot(obj.data.bvals<=min_bval));
                     S0(x) = NormFactor;
                     Stot = Stot/NormFactor;
                     
@@ -1315,7 +1318,93 @@ classdef SphericalDeconvolution < handle
             
         end
         
-        function [mx,my,mz] = ConvertMatTractographt2VTK(varargin)
+        function ConvertMatTractography2TRK(varargin)
+            % Converts MAT tractography 2 the TRK format
+            % input arguments:
+            % mat_file: the input tractography mat file
+            % output: the output vtk file            
+            mat_file = GiveValueForName(varargin,'mat_file');
+            if(isempty(mat_file))
+                error('Missing mandatory argument mat_file');
+            end
+            output = GiveValueForName(varargin,'output');
+            if(isempty(output))
+                error('Missing mandatory argument output');
+            end
+
+            TR = load(mat_file,'Tract','VDims','TractMask');
+        
+        end
+
+        function ConvertTRKTractography2Mat(varargin)
+            % Converts TRK tractography 2 the ExploreDTI format
+            % input arguments:
+            % trk_file: the input tractography trk file
+            % nii_file: a reference .nii file in the same space of the tck
+            % output: the output MAT file
+            trk_file = GiveValueForName(varargin,'trk_file');
+            if(isempty(vtk_file))
+                error('Missing mandatory argument trk_file');
+            end
+            output = GiveValueForName(varargin,'output');
+            if(isempty(output))
+                error('Missing mandatory argument output');
+            end
+            nii_file = GiveValueForName(varargin,'nii_file');            
+            if(isempty(nii_file))
+                error('Missing mandatory argument nii_file');
+            end
+
+            [header,tracks] = trk_read(trk_file);
+            SEG = EDTI.LoadNifti(nii_file);
+
+            Tracts.VDims = REF.VD;
+            Tracts.Tracts = cell(1,length(Lines));
+            Tracts.TractAng = cell(1,length(Lines));
+            Tracts.TractFA = cell(1,length(Lines));
+            Tracts.TractFE = cell(1,length(Lines));
+            Tracts.TractGEO = cell(1,length(Lines));
+            Tracts.TractL = cell(1,length(Lines));
+            Tracts.TractLambdas = cell(1,length(Lines));
+            Tracts.TractMD = cell(1,length(Lines));
+            Tracts.TractMask = ones(size(REF.img));
+            Tracts.TractMask = permute(Tracts.TractMask,[2 1 3]);
+            Tracts.FList = (1:length(Tracts.Tracts))';
+            for tid=1:length(Tracts.Tracts)
+                tracks(tid).matrix = tracks(tid).matrix(:,[2 1 3]);
+                % These lines are needed for .trk saved from TrackVis, but not for .trk converted
+                % from E_DTI - CHECK THE DENSITY MAPS EVERY TIME!!!
+                tracks(tid).matrix(:,1) = size(SEG.img,1)-tracks(tid).matrix(:,1);
+                tracks(tid).matrix(:,2) = size(SEG.img,2)-tracks(tid).matrix(:,2);
+                PL = tracks(tid).matrix;
+                Tracts.Tracts(tid) = {PL};
+                cTractFA = zeros([size(PL,1),1]);
+                cTractFE = zeros([size(PL,1),3]);
+                cTractGEO = zeros([size(PL,1),1]);
+                cTractAng = zeros([size(PL,1),1]);
+                cTractL = size(PL,1);
+                cTractLambdas = zeros([size(PL,1),3]);
+                cTractMD = zeros([size(PL,1),1]);
+                for point=1:size(PL,1)
+                   P = PL(point,:)./REF.VD; 
+                   PC = floor(P)+1;
+                   cTractFA(point) = DIFF_PROP.FA(PC(1),PC(2),PC(3))/sqrt(3);
+                   cTractFE(point,:) = abs(squeeze(DIFF_PROP.FE(PC(1),PC(2),PC(3),:)));
+                   cTractLambdas(point,:) = squeeze(DIFF_PROP.eigval(PC(1),PC(2),PC(3),:));
+                   cTractMD(point) = mean(cTractLambdas(point,:));
+                end
+                Tracts.TractAng(tid) = {cTractAng};
+                Tracts.TractFA(tid) = {cTractFA};
+                Tracts.TractFE(tid) = {cTractFE};
+                Tracts.TractGEO(tid) = {cTractGEO};
+                Tracts.TractLambdas(tid) = {cTractLambdas};
+                Tracts.TractMD(tid) = {cTractMD};       
+                Tracts.TractL(tid) = {cTractL};
+            end
+            save(output,'-struct','Tracts');
+        end
+
+        function [mx,my,mz] = ConvertMatTractography2VTK(varargin)
             % Converts MAT tractography 2 the VTK format
             % The output mx,my,mz are the shifts from the EDTI space to the
             % Slicer space
@@ -1333,10 +1422,10 @@ classdef SphericalDeconvolution < handle
             [mx,my,mz] = E_DTI_Convert_tracts_mat_2_vtk_lines(mat_file, output);
         end
         
-        function VTKTractography2Mat(varargin)
+        function ConvertVTKTractography2Mat(varargin)
             % Converts VTK tractography 2 the ExploreDTI format
             % input arguments:
-            % vtk_file: the input tractography mat file
+            % vtk_file: the input tractography vtk file
             % nii_file: a reference .nii file in the same space of the tck
             % output: the output MAT file
             
@@ -1645,8 +1734,13 @@ end
 
 % Private function assembling the NODDI based kernels.
 function [bmat,LRKernel,HRKernel,super_scheme] = mDRLMT_MakeNODDIKernel_multicomp(data,nreconstruction_vertices,noddi_values,isoDs,shell_data)
+global MRIToolkit
 if(isempty(which('SynthMeasWatsonSHStickTortIsoV_B0')))
-    error('Cannot find the NODDI toolbox. Please, add it to the MATLAB path');
+    if(isfield(MRIToolkit,'noddi_path') && exist(MRIToolkit.noddi_path,'dir') > 0)
+        addpath(genpath(MRIToolkit.noddi_path))
+    else
+        error('Cannot find the NODDI toolbox. Please, add it to the MATLAB path');
+    end
 end
 
 shells = single(unique(int16(round(data.bvals)/1)*1)); % automatic detection of number of shells.
@@ -2410,4 +2504,96 @@ fclose(fid);
 
 A = reshape(A,3,nvert);
 points_list = A';
+end
+
+% Ensure a vector is in column format
+function col = ascolumn(in_vector)
+    if(~ismatrix(in_vector))
+        warning('ascolumn works only with vectors - no nd matrices');
+        col = [];
+        return
+    end
+    if(size(in_vector,2) > size(in_vector,1))
+        col = in_vector';
+    else
+        col = in_vector;
+    end
+end
+
+% Tensor 2 Symmetric Tensor
+function Dtensor = D2Dtensor(D) 
+Dtensor = [D(1) D(2)/2 D(3)/2
+               D(2)/2 D(4) D(5)/2
+               D(3)/2 D(5)/2 D(6)];
+end
+
+% Utility function to derive DTI metrics
+function [MD,FA,DEC,AD,RD,LAMBDAS,L1] = DW_ComputeTensorMetrics(p,tensor_indexes)
+    sizes = size(p);
+    ndims = length(sizes);
+    
+    rows = 1;
+    for j=1:ndims-1
+        rows = rows*sizes(j);
+    end
+    
+    newp = reshape(p,rows,sizes(end));
+    newp = newp(:,tensor_indexes);
+    
+    MD = zeros(rows,1);
+    FA = zeros(rows,1);
+    if(nargout > 2)
+        DEC = zeros(rows,3);
+    end
+    
+    if(nargout > 3)
+        AD = zeros(rows,1);
+        RD = zeros(rows,1);
+        LAMBDAS = zeros(rows,3);
+        L1 = zeros(rows,3);
+    end
+    
+    for j=1:size(newp,1)
+        D = [newp(j,1) newp(j,2)/2 newp(j,3)/2
+            newp(j,2)/2 newp(j,4) newp(j,5)/2
+            newp(j,3)/2 newp(j,5)/2 newp(j,6)];
+%         D = [newp(j,1) newp(j,2) newp(j,3)
+%         newp(j,2) newp(j,4) newp(j,5)
+%         newp(j,3) newp(j,5) newp(j,6)];
+        if(sum(~isfinite(D(:))) > 0 || sum(D(:)) == 0)
+            continue
+        end
+        [autovett,autoval] = eig(D);
+        autoval = diag(autoval);
+        if(sum(autoval<0) == length(autoval))
+            autoval = -autoval;
+            autovett = -autovett;
+        end
+        autoval(autoval<0)=0;
+        MD(j) = mean(autoval);
+        FA(j) = sqrt(1.5*((autoval(1)-MD(j))^2+(autoval(2)-MD(j))^2+(autoval(3)-MD(j))^2)/(sum(autoval.^2)));
+%         FA(j) = sqrt(0.5*((autoval(1)-autoval(2))^2+(autoval(2)-autoval(3))^2+(autoval(1)-autoval(3))^2)/(sum(autoval.^2)));
+        if(nargout > 2)
+            [~,IX] = sort(autoval,'descend');
+            DEC(j,:) = autovett(:,IX(1))*FA(j);
+            if(nargout > 3)
+               AD(j) = autoval(IX(1));
+               RD(j) = 0.5*sum(autoval(IX(2:3)));
+               LAMBDAS(j,:) = autoval(IX);
+               L1(j,:) = autovett(IX(1),:);
+            end
+        end
+    end
+    
+    MD = reshape(MD,sizes(1:end-1));
+    FA = reshape(FA,sizes(1:end-1));
+    if(nargout > 2)
+        DEC = reshape(DEC,[sizes(1:end-1) 3]);
+        if(nargout > 3)
+            AD = reshape(AD,sizes(1:end-1));
+            RD = reshape(RD,sizes(1:end-1));
+            LAMBDAS = reshape(LAMBDAS,[sizes(1:end-1) 3]);
+            L1 = reshape(L1,[sizes(1:end-1) 3]);
+        end
+    end
 end

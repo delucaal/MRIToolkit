@@ -1,4 +1,6 @@
-%%%$ Included in MRIToolkit (https://github.com/delucaal/MRIToolkit) %%%%%% Alberto De Luca - alberto@isi.uu.nl $%%%%%% Distributed under the terms of LGPLv3  %%%
+%%%$ Included in MRIToolkit (https://github.com/delucaal/MRIToolkit) %%%
+%%% Alberto De Luca - alberto@isi.uu.nl $%%%
+%%% Distributed under the terms of LGPLv3  %%%
 
 
 
@@ -32,7 +34,9 @@ classdef SHTracker < Tracker
             this = this@Tracker(v2w);
             if nargin > 1
                 this.op = op;
-                SHPrecomp.init(this.op.lmax);
+                if(isfield(this.op,'lmax'))
+                    SHPrecomp.init(this.op.lmax);
+                end
             else
                 this.op = [];
             end

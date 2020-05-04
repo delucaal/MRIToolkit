@@ -992,14 +992,8 @@ classdef EDTI < handle
             end
             
             option_value = GiveValueForName(coptions,'epi_reg_type');
-            if(~isempty(par.R2D.FN) && isempty(option_value))
+            if(isemisempty(option_value))
                 par.R2D.type = 3;
-            else
-                if(strcmpi(option_value,'linear'))
-                    par.R2D.type = 1;
-                elseif(strcmpi(option_value,'nonlinear'))
-                    par.R2D.type = 3;
-                end
             end
             
             option_value = GiveValueForName(coptions,'constraint_epi');
