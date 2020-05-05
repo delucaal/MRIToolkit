@@ -148,6 +148,9 @@ classdef EDTI < handle
                 help('EDTI.PerformSignalDriftCorrection');
                 return;
             end
+            
+            json.CallFunction = 'EDTI.PerformSignalDriftCorrection';
+            json.Description = help('EDTI.PerformSignalDriftCorrection');
 
             coptions = varargin;
             par.bvalC = 0;
@@ -155,21 +158,29 @@ classdef EDTI < handle
             if(~isempty(tgt_bval))
                 par.bvalC = (tgt_bval);
             end
+            json.target_bval = par.bvalC;
+            
             par.bv_thresh=1;
             tgt_thresh = GiveValueForName(coptions,'target_bval_tol');
             if(~isempty(tgt_thresh))
                 par.bv_thresh = (tgt_thresh);
             end
+            json.bv_thresh = par.bv_thresh;
+            
             par.method = 2;
             tgt_method = GiveValueForName(coptions,'pol_degree');
             if(~isempty(tgt_method))
                 par.method = (tgt_method);
             end
+            json.method = par.method;
+            
             par.masking.do_it = 0;
             tgt_masking = GiveValueForName(coptions,'masking');
             if(~isempty(tgt_masking))
                 par.tgt_masking = (tgt_masking);
             end
+            json.masking = par.tgt_masking;
+            
             par.show_summ_plot = 1;
             par.suff = '_sdc';
             par.masking.p1 = 5;
@@ -191,11 +202,15 @@ classdef EDTI < handle
             param{1}.f_out_nii = file_out;
             param{1}.f_out_txt = [file_out(1:end-4) '.txt'];
             
+            json.ReferenceFile = file_in;
+            
             E_DTI_signal_drift_correction(param{1});
+            
+            NiftiIO_basic.WriteJSONDescription('output',file_out(1:end-4),'props',json);
         end
         
         function FlipPermuteSpatialDimensions(varargin)
-        % Inteface to flip / permuting spatial dimensions (Ensures
+        % Interface to flip / permuting spatial dimensions (Ensures
         % compliance of the .nii files with the ExploreDTI convention)
         % Accordingly, the header is discarded and only the rotation matrix
         % retained. Arguments:
@@ -208,7 +223,10 @@ classdef EDTI < handle
                 help('EDTI.FlipPermuteSpatialDimensions');
                 return;
             end
-    
+            
+            json.CallFunction = 'EDTI.FlipPermuteSpatialDimensions';
+            json.Description = help('EDTI.FlipPermuteSpatialDimensions');
+            
             coptions = varargin;
             params.suff = '';
             tgt_permute = GiveValueForName(coptions,'permute');
@@ -223,10 +241,17 @@ classdef EDTI < handle
             else
                 params.flip = tgt_flip;
             end
+            
+            json.permute = params.permute;
+            json.flip = params.permute;
+            
             file_in = GiveValueForName(coptions,'nii_file');
             if(isempty(file_in))
                 error('Missing mandatory parameter nii_file');
             end
+            
+            json.ReferenceFile = file_in;
+            
             file_out = GiveValueForName(coptions,'output');
             if(isempty(file_out))
                 file_out = [file_in(1:end-4) '_FP.nii'];
@@ -234,11 +259,12 @@ classdef EDTI < handle
                         
             params.force_voxel_size = [];
             E_DTI_flip_permute_nii_file_exe(file_in,params,file_out);
-            
+                        
             if(exist([file_in(1:end-4) '.txt'],'file'))
                 copyfile([file_in(1:end-4) '.txt'],[file_out(1:end-4) '.txt']);
             end
             
+            NiftiIO_basic.WriteJSONDescription('output',file_out(1:end-4),'props',json);
         end
 
         function ResampleDataSpatially(varargin)
@@ -254,16 +280,21 @@ classdef EDTI < handle
                 return;
             end
 
+            json.CallFunction = 'EDTI.ResampleDataSpatially';
+            json.Description = help('EDTI.ResampleDataSpatially');
+
             coptions = varargin;
             params.suff = '';
             tgt_res = GiveValueForName(coptions,'res');
             if(isempty(tgt_res))
-                error('Missing mandatory parameter nii_file');
-            end
+                error('Missing mandatory parameter tgt_res');
+            end            
+            json.tgt_res = tgt_res;
             file_in = GiveValueForName(coptions,'nii_file');
             if(isempty(file_in))
                 error('Missing mandatory parameter nii_file');
             end
+            json.ReferenceFile = file_in;
             file_out = GiveValueForName(coptions,'output');
             if(isempty(file_out))
                 file_out = [file_in(1:end-4) '_resampled.nii'];
@@ -280,6 +311,7 @@ classdef EDTI < handle
                 copyfile([file_in(1:end-4) '.txt'],[file_out(1:end-4) '.txt']);
             end
             
+            NiftiIO_basic.WriteJSONDescription('output',file_out(1:end-4),'props',json);
         end
         
         function PerformDTI_DKIFit(varargin)
@@ -304,23 +336,32 @@ classdef EDTI < handle
             if(isempty(varargin))
                 help('EDTI.PerformDTI_DKIFit');
                 return;
-            end            
-        
+            end                    
+            
+            json.CallFunction = 'EDTI.PerformDTI_DKIFit';
+            json.Description = help('EDTI.PerformDTI_DKIFit');
+            
             coptions = varargin;
             file_in = GiveValueForName(coptions,'nii_file');
             if(isempty(file_in))
                 error('Need to specify the target file');
             end
             
+            json.ReferenceFile = file_in;
+            
             txtfile = GiveValueForName(coptions,'txt_file');
             if(isempty(txtfile))
                 txtfile = [file_in(1:end-4) '.txt'];
             end
             
+            json.txt_file = txtfile;
+            
             mk_curve_fit = GiveValueForName(coptions,'mk_curve');
             if(isempty(mk_curve_fit))
                 mk_curve_fit = 0;
             end
+            
+            json.mk_curve_fit = mk_curve_fit;
             
             gmat = load(txtfile);
             bvals = sum(gmat(:,[1 4 6]),2);
@@ -335,24 +376,32 @@ classdef EDTI < handle
             else
                 dki_fit = 0;
             end
+            
+            json.dki_fit = dki_fit;
+            
             option_value = GiveValueForName(coptions,'grad_perm');
             if(~isempty(option_value))
                 perm = option_value;
             else
                 perm = [];
             end
+            
             option_value = GiveValueForName(coptions,'grad_flip');
             if(~isempty(option_value))
                 flip = option_value;
             else
                 flip = [];
             end
+                        
             option_value = GiveValueForName(coptions,'fit_mode');
             if(~isempty(option_value))
                 fit_mode = option_value;
             else
                 fit_mode = 'ols';
             end
+            
+            json.fit_mode = fit_mode;
+            
             option_value = GiveValueForName(coptions,'dki_constraints');
             if(~isempty(option_value))
                 V2 = strsplit(option_value,' ');
@@ -366,6 +415,8 @@ classdef EDTI < handle
                 dki_constraints = [-Inf Inf];
             end
             
+            json.dki_constraints = dki_constraints;
+            
             option_value = GiveValueForName(coptions,'output');
             if(~isempty(option_value))
                 out_name = option_value;
@@ -376,6 +427,7 @@ classdef EDTI < handle
             option_value = GiveValueForName(coptions,'mask_file');
             if(~isempty(option_value))
                 Mask_par = option_value;
+                json.mask_file = Mask_par;
             else
                 Mask_par.tune_NDWI = 0.5;
                 Mask_par.tune_DWI = 0.5;
@@ -422,12 +474,17 @@ classdef EDTI < handle
                end
             end
             
+            json.grad_flip = flip;
+            json.grad_perm = perm;
+            
             E_DTI_model_fit(file_in,txtfile,out_name,Mask_par,perm,flip, fit_mode,dki_fit, dki_constraints);
             
             if(mk_curve_fit == 1)
                disp('Performing M-K curve fit');
                mkcurve_fit_mat(out_name,out_name); 
             end
+            
+            NiftiIO_basic.WriteJSONDescription('output',out_name(1:end-4),'props',json);
         end
         
         function PerformDTIBased_FiberTracking(varargin)
@@ -444,13 +501,18 @@ classdef EDTI < handle
             if(isempty(varargin))
                 help('EDTI.PerformDTIBased_FiberTracking');
                 return;
-            end   
+            end
+            
+            json.CallFunction = 'EDTI.PerformDTIBased_FiberTracking';
+            json.Description = help('EDTI.PerformDTIBased_FiberTracking');
                         
             coptions = varargin;
             file_in = GiveValueForName(coptions,'mat_file');
             if(isempty(file_in))
                 error('Need to specify the input .mat file');
             end
+            
+            json.ReferenceFile = file_in;
             
             filename_out = GiveValueForName(coptions,'output');
             if(isempty(filename_out))
@@ -492,7 +554,10 @@ classdef EDTI < handle
                 parameters.FiberLengthRange = option;
             end
             
+            json.parameters = parameters;
+            
             WholeBrainTrackingDTI_fast(file_in, filename_out, parameters);
+            NiftiIO_basic.WriteJSONDescription('output',filename_out(1:end-4),'props',json);
         end
         
         function CSD_FOD = PerformCSD(varargin)
@@ -516,16 +581,23 @@ classdef EDTI < handle
                 return;
             end   
                     
+            json.CallFunction = 'EDTI.PerformCSD';
+            json.Description = help('EDTI.PerformCSD');
+
             coptions = varargin;
             file_in = GiveValueForName(coptions,'mat_file');
             if(isempty(file_in))
                 error('Need to specify the input .mat file');
             end
             
+            json.ReferenceFile = file_in;
+            
             rc_mask_file = GiveValueForName(coptions,'rc_mask_file');
             if(isempty(rc_mask_file))
                 rc_mask_file = '';
             end
+            
+            json.rc_mask_file = rc_mask_file;
             
             filename_out = GiveValueForName(coptions,'output');
             if(isempty(filename_out))
@@ -539,6 +611,8 @@ classdef EDTI < handle
                 Lmax = 8;
             end
             
+            json.Lmax = Lmax;
+            
             option = GiveValueForName(coptions,'T1seg');
             if(~isempty(option))
                 t1_seg = option;
@@ -546,12 +620,17 @@ classdef EDTI < handle
                 t1_seg = '';
             end
             
+            json.t1_seg = t1_seg;
+            
             save_sh = GiveValueForName(coptions,'save_sh');
             if(isempty(save_sh))
                 save_sh = 0;
             end            
 
+            json.save_sh = save_sh;
+            
             dti_rf = GiveValueForName(coptions,'rf_dti');
+            json.dti_rf = dti_rf;           
             
             mscsd = GiveValueForName(coptions,'mscsd');
             if(isempty(mscsd) || mscsd == 0)
@@ -567,7 +646,9 @@ classdef EDTI < handle
                 disp('Running MS-CSD (beta mode)...')
                 CSD_FOD = E_DTI_Get_HARDI_CSD_FOD_RC_MuSh(file_in,Lmax,rc_mask_file,filename_out,t1_seg);
             end
+            json.mscsd = mscsd;
                            
+            NiftiIO_basic.WriteJSONDescription('output',filename_out(1:end-4),'props',json);
             if(nargout == 0)
                 CSD_FOD = [];
             end
@@ -600,16 +681,22 @@ classdef EDTI < handle
                 return;
             end  
 
+            json.CallFunction = 'EDTI.PerformFODBased_FiberTracking';
+            json.Description = help('EDTI.PerformFODBased_FiberTracking');
+
             coptions = varargin;
             file_in = GiveValueForName(coptions,'mat_file');
             if(isempty(file_in))
                 error('Need to specify the input .mat file');
             end
             
+            json.ReferenceFile = file_in;
+            
             fod_file = GiveValueForName(coptions,'fod_file');
             if(isempty(fod_file))
                 error('Need to specify the input FOD file/variable');
             end
+            json.fod_file = fod_file;
             
             filename_out = GiveValueForName(coptions,'output');
             if(isempty(filename_out))
@@ -660,7 +747,10 @@ classdef EDTI < handle
             
             parameters.randp = 0;
             
+            json.TrackingParameters = parameters;
+            
             WholeBrainFODTractography(file_in,fod_file,parameters,filename_out);
+            NiftiIO_basic.WriteJSONDescription('output',filename_out(1:end-4),'props',json);
         end
         
 
@@ -688,16 +778,21 @@ classdef EDTI < handle
                 return;
             end  
 
+            json.CallFunction = 'EDTI.Perform_mFOD_FiberTracking';
+            json.Description = help('EDTI.PerformFODBased_FiberTracking');
+
             coptions = varargin;
             file_in = GiveValueForName(coptions,'mat_file');
             if(isempty(file_in))
                 error('Need to specify the input .mat file');
             end
+            json.ReferenceFile = file_in;
             
             fod_basename = GiveValueForName(coptions,'fod_basename');
             if(isempty(fod_basename))
                 error('Need to specify the input FOD basename');
             end
+            json.fod_basename = fod_basename;
             
             filename_out = GiveValueForName(coptions,'output');
             if(isempty(filename_out))
@@ -754,7 +849,11 @@ classdef EDTI < handle
             end
             
             parameters.randp = 0;
+            json.TrackingParameters = parameters;
+            
             WholeBrainTracking_mDRL_fast_exe(file_in, fod_basename, filename_out, parameters, interpolation_mode); 
+
+            NiftiIO_basic.WriteJSONDescription('output',filename_out(1:end-4),'props',json);
         end
         
         function MatMetrics2Nii(mat_file_in,dki_export)
@@ -766,6 +865,10 @@ classdef EDTI < handle
         % (KA) will also be exported. Input arguments are:
         % mat_file_in: the target .mat file in ExploreDTI-like format
         % dki_export: whether to export kurtosis metrics, as 0 (default) or 1
+            
+            json.CallFunction = 'EDTI.Perform_mFOD_FiberTracking';
+            json.Description = help('EDTI.PerformFODBased_FiberTracking');
+
             list2export = [1 2 3 6 13 19];
             if(nargin > 1 && dki_export == 1)
                 list2export = [list2export 46 47 48 49];
@@ -775,7 +878,34 @@ classdef EDTI < handle
             if(isempty(fp))
                 fp = pwd;
             end
+            KT = load(mat_file_fin,'KT');
+            has_dki = 0;
+            if(~isempty(KT))
+                has_dki = 1;
+            end
+            
+            DTI_extensions = {'FA','MD','L1','RD','FE','FEFA'};
+            DKI_extensions = {'MK','AK','RK','KA'};
+            
             E_DTI_Convert_mat_2_nii(mat_file_in,fp,CLL(list2export));
+            
+            for metric_id=1:length(DTI_extensions)
+                json.MetricDescription = CLL{metric_id};
+                NiftiIO_basic.WriteJSONDescription('output',fullfile(fp,[fn(1:end-4) '_' DTI_extensions{metric_id}]),'props',json);
+            end
+            if(has_dki == 1 && dki_export == 1)
+                for metric_id=1:length(DKI_extensions)
+                    json.MetricDescription = CLL{metric_id+length(DTI_extensions)};
+                    NiftiIO_basic.WriteJSONDescription('output',fullfile(fp,[fn(1:end-4) '_' DKI_extensions{metric_id}]),'props',json);
+                end                
+            end
+        end
+        
+        function EnforceJSON(true_or_false)
+        % Set a global flag which will force all functions to save
+        % a descriptive .JSON file associated to the processing.
+            global MRIToolkit;
+            MRIToolkit.EnforceJSON = true_or_false;            
         end
         
         function EnforceNiiGz(true_or_false)
@@ -895,7 +1025,6 @@ classdef EDTI < handle
         % fit_mode: force a new fit_mode, ols, wls, nls, rekindle
         % output: output folder
         
-        
             global MRIToolkit;         
 
             if(isempty(varargin))
@@ -903,11 +1032,16 @@ classdef EDTI < handle
                 return;
             end  
 
+            json.CallFunction = 'EDTI.Perform_mFOD_FiberTracking';
+            json.Description = help('EDTI.PerformFODBased_FiberTracking');
+
             coptions = varargin;
             file_in = GiveValueForName(coptions,'mat_file');
             if(isempty(file_in))
                 error('Need to specify the input .mat file');
             end
+            
+            json.ReferenceFile = file_in;
             
             basic_info = load(file_in,'par');
             if(~isfield(basic_info,'par'))
@@ -992,8 +1126,14 @@ classdef EDTI < handle
             end
             
             option_value = GiveValueForName(coptions,'epi_reg_type');
-            if(isemisempty(option_value))
+            if(~isempty(par.R2D.FN) && isempty(option_value))
                 par.R2D.type = 3;
+            else
+                if(strcmpi(option_value,'linear'))
+                    par.R2D.type = 1;
+                elseif(strcmpi(option_value,'nonlinear'))
+                    par.R2D.type = 3;
+                end
             end
             
             option_value = GiveValueForName(coptions,'constraint_epi');
@@ -1036,7 +1176,6 @@ classdef EDTI < handle
             if(strcmp(par.temp_folder(end),'/'))
                 par.temp_folder = par.temp_folder(1:end-1);
             end
-            
             
             par.E_path = MRIToolkit.Elastix.ElastixCMD;
             par.T_path = MRIToolkit.Elastix.TransformixCMD;
@@ -1090,6 +1229,9 @@ classdef EDTI < handle
             
             EDTI.EnforceNiiGz(enforce_niigz);
 
+            json.parameters = par;
+            NiftiIO_basic.WriteJSONDescription('output',out_name(1:end-4),'props',json);
+
             disp('Processing finished!')
             
             t=toc(TS);
@@ -1119,15 +1261,23 @@ classdef EDTI < handle
                 return;
             end
         
+            json.CallFunction = 'EDTI.SelectVolumesWithBvals';
+            json.Description = help('EDTI.SelectVolumesWithBvals');
+
             coptions = varargin;
             file_in = GiveValueForName(coptions,'nii_file');
             if(isempty(file_in))
                 error('Need to specify the input .nii file');
             end       
+            
+            json.ReferenceFile = file_in;
+            
             bvals_list = GiveValueForName(coptions,'bvals');
             if(isempty(bvals_list))
                 error('Need to specify the bvals to keep');
             end
+            json.bvals_list = bvals_list;
+            
             outname = GiveValueForName(coptions,'output');
             if(isempty(outname))
                 error('Need to specify the output .nii file');
@@ -1164,6 +1314,8 @@ classdef EDTI < handle
                 save([outname(1:end-4) '.bval'],'bval','-ascii');
             end
             E_DTI_write_nifti_file(data,VD,outname);
+
+            NiftiIO_basic.WriteJSONDescription('output',outname(1:end-4),'props',json);
         end
         
         function [nrb0s,nrdwis,b0s_indices,dwis_indices] = GetNumOfB0sDWIs(varargin)
@@ -1241,6 +1393,8 @@ classdef EDTI < handle
             if(exist([file_in(1:end-4) '.txt'],'file'))
                 copyfile([file_in(1:end-4) '.txt'],[output(1:end-4) '.txt']);
             end
+            
+            NiftiIO_basic.WriteJSONDescription('output',out_name(1:end-4),'props',json);
         end
         
         function SortNiiWRTbval(varargin)
@@ -1293,6 +1447,8 @@ classdef EDTI < handle
             
             data = data(:,:,:,IX);
             E_DTI_write_nifti_file(data,VD,output);
+            
+            NiftiIO_basic.WriteJSONDescription('output',out_name(1:end-4),'props',json);
         end
         
         function DiscardEmptyVolumes(varargin)
@@ -1335,6 +1491,7 @@ classdef EDTI < handle
                 EDTI.WriteNifti(data,output);
             end
             
+            NiftiIO_basic.WriteJSONDescription('output',out_name(1:end-4),'props',json);
         end
         
         function res = AverageNormalizedResiduals(varargin)
@@ -1387,9 +1544,7 @@ classdef EDTI < handle
             end
             
         end
-        
-
-        
+                
     end
 end
 
@@ -10383,6 +10538,8 @@ function mkcurve_fit_mat(input_file,output_file)
     data.img = reshape(data.img,sx*sy*sz,st);
     
     parfor x=1:size(data.img,1)
+        S = [];
+        GP = [];
         So = squeeze(data.img(x,:))';
         if((So(1) < min_val) || any(~isfinite(So)) || isnan(tensors.FA(x)))
             continue

@@ -520,14 +520,18 @@ classdef SphericalDeconvolution < handle
                 json.CallFunction = 'SphericalDeconvolution.PerformDeconv';
                 json.Description = 'GRL/mFOD spherical deconvolution';
                 json.parameters.n_anisotropic = SpherDec.n_anisotropic;
-                json.parameters.n_isotropic = SpherDec.n_isotropic;
-                json.parameters.deconv_method = SpherDec.deconv_method;
-                json.parameters.inner_shells_weight = SpherDec.inner_shells_weight;
-                json.parameters.rf_models = SpherDec.rf_models;
-                json.parameters.L2LSQ_reg = SpherDec.L2LSQ_reg;
-                json.parameters.nDirections = SpherDec.nDirections;
-                json.parameters.NN_L = SpherDec.NN_L; 
-                json.parameters.NN_H = SpherDec.NN_H;
+                json.parameters.n_isotropic;
+                json.parameters.n_anisotropic;
+                json.parameters.deconv_method;
+                json.parameters.inner_shells_weight;
+                json.parameters.rf_indices_lr;
+                json.parameters.rf_indices_hr;
+                json.parameters.rf_models;
+                json.parameters.L2LSQ_reg;
+                nDirections;
+                NN_L, NN_H;
+                data_size;
+                kernels_description;
         
                 NiftiIO_basic.WriteJSONDescription('output',file_prefix,'props',json);
 

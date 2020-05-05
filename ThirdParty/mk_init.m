@@ -1,4 +1,6 @@
-%%%$ Included in MRIToolkit (https://github.com/delucaal/MRIToolkit) %%%%%% Alberto De Luca - alberto@isi.uu.nl $%%%%%% Distributed under the terms of LGPLv3  %%%
+%%%$ Included in MRIToolkit (https://github.com/delucaal/MRIToolkit) %%%
+%%% Alberto De Luca - alberto@isi.uu.nl $%%%
+%%% Distributed under the terms of LGPLv3  %%%
 
 
 
@@ -10,3 +12,5 @@ MRIToolkit.thirdparty_version = 1.0;
 
 addpath(get_executed_file_path())
 addpath(fullfile(get_executed_file_path(),'EPG'))
+addpath(fullfile(get_executed_file_path(),'TRK'))
+addpath(fullfile(get_executed_file_path(),'TCK'))

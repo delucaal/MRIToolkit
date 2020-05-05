@@ -3,7 +3,7 @@
 %%% Distributed under the terms of LGPLv3  %%%
 
 classdef MultiPeakTracker < SHTracker
-    properties (Access = protected)
+    properties (Access = public)
         nlevels = 1;
     end
     

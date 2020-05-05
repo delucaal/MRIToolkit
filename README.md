@@ -4,7 +4,8 @@
  </a> 
  </p>
  
- # [MRIToolkit](https://github.com/delucaal/MRIToolkit) [update 14-03-2020] 
+ # [MRIToolkit](https://github.com/delucaal/MRIToolkit) [update 04-05-2020] 
+Since the last update, each method of MRIToolkit stamps its version (from git) and parameters in a sidecar .JSON file for reproducibility!
 
  ## What is it?
 MRIToolkit is a set of [command line tools](https://github.com/delucaal/MRIToolkit/tree/master/CommandLine) and a MATLAB (R) toolbox/library to process (diffusion) magnetic resonance imaging (MRI) data. Binaries of the command line version will be provided soon!
