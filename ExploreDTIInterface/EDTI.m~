@@ -1230,7 +1230,7 @@ classdef EDTI < handle
             EDTI.EnforceNiiGz(enforce_niigz);
 
             json.parameters = par;
-            [~,filename] = fileparts(file_in);
+            [~,filename] = fileparts(file_);
             out_name = fullfile(out_folder,[filename(1:end-4) '_MD_C_trafo']);
             NiftiIO_basic.WriteJSONDescription('output',out_name,'props',json);
 
