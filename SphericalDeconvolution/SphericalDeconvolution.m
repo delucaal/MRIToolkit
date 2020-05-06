@@ -272,6 +272,8 @@ classdef SphericalDeconvolution < handle
             
             if(NC > 0)
                 parfor (x=1:N,nof_workers)
+                    fODFC = [];
+                    fODF = [];
                     %     if(mod(x,progressStepSize) == 0)
                     %         ppm.increment();
                     %     end
