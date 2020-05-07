@@ -878,7 +878,7 @@ classdef EDTI < handle
             if(isempty(fp))
                 fp = pwd;
             end
-            KT = load(mat_file_fin,'KT');
+            KT = load(mat_file_in,'KT');
             has_dki = 0;
             if(~isempty(KT))
                 has_dki = 1;
