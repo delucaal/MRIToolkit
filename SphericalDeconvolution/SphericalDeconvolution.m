@@ -1222,7 +1222,7 @@ classdef SphericalDeconvolution < handle
                 max_cores = 1;
             end
             
-            [peak_dir,peak_amp] = SHPrecomp.all_peaks(fod,peak_threshold,max_peaks,max_cores,lmax,300);
+            [peak_dir,peak_amp] = SHPrecomp.all_peaks(fod,peak_threshold,max_peaks,max_cores);
             
             if(nargout > 2)
                NuFO = zeros(size(peak_dir));
