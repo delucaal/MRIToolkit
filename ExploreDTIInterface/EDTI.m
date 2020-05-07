@@ -158,28 +158,28 @@ classdef EDTI < handle
             if(~isempty(tgt_bval))
                 par.bvalC = (tgt_bval);
             end
-            json.target_bval = par.bvalC;
+            json.target_bval = tgt_bval;
             
             par.bv_thresh=1;
             tgt_thresh = GiveValueForName(coptions,'target_bval_tol');
             if(~isempty(tgt_thresh))
                 par.bv_thresh = (tgt_thresh);
             end
-            json.bv_thresh = par.bv_thresh;
+            json.bv_thresh = tgt_thresh;
             
             par.method = 2;
             tgt_method = GiveValueForName(coptions,'pol_degree');
             if(~isempty(tgt_method))
                 par.method = (tgt_method);
             end
-            json.method = par.method;
+            json.method = tgt_method;
             
             par.masking.do_it = 0;
             tgt_masking = GiveValueForName(coptions,'masking');
             if(~isempty(tgt_masking))
                 par.tgt_masking = (tgt_masking);
             end
-            json.masking = par.tgt_masking;
+            json.masking = tgt_masking;
             
             par.show_summ_plot = 1;
             par.suff = '_sdc';
