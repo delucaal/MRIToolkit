@@ -880,7 +880,7 @@ classdef EDTI < handle
             end
             KT = load(mat_file_in,'KT');
             has_dki = 0;
-            if(~isempty(KT))
+            if(isfield(KT,'KT'))
                 has_dki = 1;
             end
             
@@ -893,7 +893,7 @@ classdef EDTI < handle
                 json.MetricDescription = CLL{metric_id};
                 NiftiIO_basic.WriteJSONDescription('output',fullfile(fp,[fn(1:end-4) '_' DTI_extensions{metric_id}]),'props',json);
             end
-            if(has_dki == 1 && dki_export == 1)
+            if(has_dki == 1 && nargin > 1 && dki_export == 1)
                 for metric_id=1:length(DKI_extensions)
                     json.MetricDescription = CLL{metric_id+length(DTI_extensions)};
                     NiftiIO_basic.WriteJSONDescription('output',fullfile(fp,[fn(1:end-4) '_' DKI_extensions{metric_id}]),'props',json);
