@@ -1170,7 +1170,7 @@ classdef EDTI < handle
             option_value = GiveValueForName(coptions,'use_normcorr');
             if(~isempty(option_value) && ...
                     ((isnumeric(option_value) && option_value == 1) ...
-                    || isstring(option_value) && strcmpi(option_value,'1')))
+                    
                 par.use_NC = 1;
             end
             
