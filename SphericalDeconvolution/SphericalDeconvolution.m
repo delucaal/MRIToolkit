@@ -1262,7 +1262,8 @@ classdef SphericalDeconvolution < handle
             tracks.max_num_tracks = num2str(length(T.Tracts));
             tracks.unidirectional = 0;
             tracks.data = cell(1,length(T.Tracts));
-            shift = round(size(T.TractMask).*T.VDims)/2;
+%             shift = round(size(T.TractMask).*T.VDims)/2;
+            shift = (size(T.TractMask).*T.VDims)/2;
             for ij=1:length(T.Tracts)
                TR = T.Tracts{ij}(:,[2 1 3]);
                TR(:,1) = -TR(:,1)+shift(2);
@@ -1307,6 +1308,7 @@ classdef SphericalDeconvolution < handle
             VDims = ref.VD;
             TractMask = ones(size(ref.img));
             TractMask = permute(TractMask,[2 1 3]);
+%             shift = (size(TractMask).*VDims)/2;
             shift = round(size(TractMask).*VDims)/2;
             for tid=1:length(tracks.data)
                T = tracks.data{tid}; 
