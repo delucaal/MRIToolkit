@@ -4,7 +4,9 @@
  </a> 
  </p>
  
- # [MRIToolkit](https://github.com/delucaal/MRIToolkit) [update 04-05-2020] 
+ # [MRIToolkit](https://github.com/delucaal/MRIToolkit) [update 24-10-2020] 
+This is the latest update before the release of v1.1, which will simplify the overall structure and focus on the integration of the MATLAB-based library with other existing pipelines and tools (e.g. FSL). The aim of the new release is also to deploy standalone executables that simplify running common dMRI analyses pipelines. 
+
 Since the last update, each method of MRIToolkit stamps its version (from git) and parameters in a sidecar .JSON file for reproducibility!
 
  ## What is it?

@@ -469,6 +469,9 @@ classdef SphericalDeconvolution < handle
             % the desired outputs.
             lmax = 16;
             super_scheme = gen_scheme(SpherDec.nDirections,lmax); % the reconstruction scheme. Change 300 to any number
+%             super_scheme.vert = super_scheme.vert(:,[2 1 3]);
+%             super_scheme.vert(:,3) = -super_scheme.vert(:,3);
+
             sh = SH(lmax,super_scheme.vert);
             
             if(SpherDec.n_anisotropic == 1)
@@ -985,6 +988,7 @@ classdef SphericalDeconvolution < handle
             IX = abs(data.bvals-bvalue)<0.1*bvalue;
             data.bvals = data.bvals(IX);
             data.bvecs = data.bvecs(IX,:);
+            data.bvecs(:,1) = -data.bvecs(:,1);
             if(~ismatrix(data.img))
                 data.img = data.img(:,:,:,IX);
             else
@@ -1121,6 +1125,11 @@ classdef SphericalDeconvolution < handle
             if(isempty(basis_out))
                 error('Missing mandatory argument basis_out');
             end
+            if(~isempty(bmat))
+               if(ischar(bmat))
+                   bmat = load(bmat);
+               end
+            end
             
             data = SphericalDeconvolution.SH_2_dMRI('bvals',bvals,...
                 'bvecs',bvecs,'basis',basis_in,'bmat',bmat,'shcoeffs',shcoeffs,'lmax',lmax);
@@ -1172,7 +1181,7 @@ classdef SphericalDeconvolution < handle
             end            
             
             SV = gen_scheme(nvert,4);
-            vertices = SV.vert;
+            vertices = SV.vert;            
             
             mySH = SH(lmax,SV.vert);
             fod_amp = mySH.amp(DATA.img);

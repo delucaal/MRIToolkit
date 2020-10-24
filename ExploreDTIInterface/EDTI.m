@@ -35,12 +35,67 @@ classdef EDTI < handle
             end
         end
         
-
         function WriteNifti(data, file_name)
         % Writes a data matrix to nifti as specified in file_name. data
         % must be a struct with fields img (the matrix) and VD (voxel
         % dimension)
             E_DTI_write_nifti_file(data.img, data.VD, file_name);
+        end
+        
+        function ConformSpatialDimentions(varargin)
+        % Ensures consistency with the coordinate systems of MRIToolkit and
+        % ExploreDTI. Input arguments:
+        % nii_file: the input file
+        % output: the output file
+            if( isempty(varargin))
+                help('EDTI.ConformSpatialDimentions');
+                return;
+            end
+
+            coptions = varargin;
+            nii_file = GiveValueForName(coptions,'nii_file');
+            if(isempty(nii_file))
+                error('Missing mandatory parameter nii_file');
+            end
+            output = GiveValueForName(coptions,'output');
+            if(isempty(output))
+                error('Missing mandatory parameter output');
+            end
+            
+            data_in = nii_file;
+            data_out = output;
+
+            hdr = load_untouch_nii(data_in);
+            smat = [hdr.hdr.hist.srow_x(1:3);
+                    hdr.hdr.hist.srow_y(1:3);
+                    hdr.hdr.hist.srow_z(1:3)];
+            permute_order = [1 2 3];
+            sign_order = [1 1 1];
+            for ij=1:size(smat,2)
+                [~,IX] = max(abs(smat(:,ij)));
+                permute_order(ij) = IX;
+                if(smat(IX,ij) < 0)
+                    sign_order(IX) = -1;
+                end
+            end
+
+            out_data.img = single(hdr.img);
+            out_data.img = permute(out_data.img,[permute_order 4]);
+            for ij=1:length(sign_order)
+               if(sign_order(ij) == -1)
+                   out_data.img = flip(out_data.img,ij);
+               end
+            end
+
+            out_data.VD = hdr.hdr.dime.pixdim(2:4);
+            out_data.VD = out_data.VD(permute_order(1:3));
+            out_data.VD = out_data.VD([2 1 3]);
+            out_data.img = permute(out_data.img,[2 1 3 4]);
+            out_data.img = flip(out_data.img,1);
+            out_data.img = flip(out_data.img,2);
+
+            EDTI.WriteNifti(out_data,data_out);
+
         end
         
         function SetB0Val(newval)
@@ -485,6 +540,34 @@ classdef EDTI < handle
             end
             
             NiftiIO_basic.WriteJSONDescription('output',out_name(1:end-4),'props',json);
+        end
+        
+        function RefitDKIWithMKCurve(varargin)
+           % This function re-fits an existing .mat file with the MK-curve
+           % method (Zhang et al. 2019). Input arguments:
+           % mat_file: The ExpoloreDTI-like .mat file
+           % output: The output tracts (must be .mat)
+           
+            if(isempty(varargin))
+                help('EDTI.RefitDKIWithMKCurve');
+                return;
+            end
+            
+            json.CallFunction = 'EDTI.RefitDKIWithMKCurve';
+            json.Description = help('EDTI.RefitDKIWithMKCurve');
+                        
+            coptions = varargin;
+            file_in = GiveValueForName(coptions,'mat_file');
+            if(isempty(file_in))
+                error('Need to specify the input .mat file');
+            end
+            file_out = GiveValueForName(coptions,'output');
+            if(isempty(file_out))
+                error('Need to specify the output .mat file');
+            end
+           
+           mkcurve_fit_mat(file_in,file_out); 
+           NiftiIO_basic.WriteJSONDescription('output',file_out(1:end-4),'props',json);
         end
         
         function PerformDTIBased_FiberTracking(varargin)
@@ -6930,8 +7013,8 @@ FA(~mask)=nan;
 bvals=round(sum(b(:,[1 4 6]),2)/100)*100;
 ubvals = unique(bvals);
 
-bvals = repmat(bval,[length(DWI)-NrB0 1]);
-grad4 = [zeros(NrB0,4);[g bvals]];
+% bvals = repmat(bval,[length(DWI)-NrB0 1]);
+grad4 = [[zeros(NrB0,3);g] bvals];
 
 if length(ubvals)>2
     disp(['Selecting a subset of the data: ' num2str(ubvals(1)) 's/mm2 and ' num2str(ubvals(end)) 's/mm2']);
@@ -6950,16 +7033,16 @@ clear B0s;
 
 if(sim_rf == 1)
     the_dirs = load('dir300.txt');
-    grad4 = [the_dirs ...
+    s_grad4 = [the_dirs ...
         repmat(bval,...
         [size(the_dirs,1) 1])];
-    grad4 = [0 0 0 0; grad4];
+    s_grad4 = [0 0 0 0; s_grad4];
     
-    dti = DTI(grad4);
+    dti = DTI(s_grad4);
     dwi = dti.sim_dwi(sim_fa,...
         sim_adc,0,0,...
         bval);
-    r_sh = SD.response(dwi, grad4,...
+    r_sh = SD.response(dwi, s_grad4,...
         bval, 0, Lmax);
 else
     
@@ -6983,7 +7066,7 @@ else
 end
 
 try
-    sh = SH(Lmax,g);
+    sh = SH(Lmax,grad4(bvals>=ubvals(end),1:3));
     csd = CSD(r_sh,Lmax);
 catch
     D = [];
@@ -10310,7 +10393,7 @@ try
     logdt(4,:) = sum(eigvec([2 5 8],:).*logeigval.*eigvec([2 5 8],:));
     logdt(5,:) = sum(eigvec([2 5 8],:).*logeigval.*eigvec([3 6 9],:));
     logdt(6,:) = sum(eigvec([3 6 9],:).*logeigval.*eigvec([3 6 9],:));
-    fa = DTI_GC.fa(eigval);
+    fa = DTI.fa(eigval);
     meanfa = nanmean(fa);
     p.threshold = meanfa;
     famask = unvec(fa,mask) > meanfa;
@@ -10489,6 +10572,9 @@ function mkcurve_fit_mat(input_file,output_file)
     data = EDTI.EDTI_Data_2_MRIToolkit('mat_file',input_file);
     gradient_info = load(input_file,'b','g','NrB0');
     tensors = load(input_file,'KT','DT','FA');
+%     if(~isfield(tensors,'outlier'))
+%         tensors.outlier = false(size(data.img));
+%     end
     siz = size(data.img);
     V = reshape(data.img,siz(1)*siz(2)*siz(3),siz(4));
     V(isnan(tensors.FA(:)),:) = 0;
@@ -10496,7 +10582,8 @@ function mkcurve_fit_mat(input_file,output_file)
     tic
     g = [zeros(gradient_info.NrB0,3);gradient_info.g];
     b = gradient_info.b;
-
+    bval = sum(b(:,[1 4 6]),2);
+    
     b_kurt = [g(:,1).^4 g(:,2).^4 g(:,3).^4 ...
         4*(g(:,1).^3).*g(:,2) 4*(g(:,1).^3).*g(:,3) ...
         4*(g(:,2).^3).*g(:,1) 4*(g(:,2).^3).*g(:,3) ...
@@ -10556,6 +10643,7 @@ function mkcurve_fit_mat(input_file,output_file)
     min_val = max(S0(:))*0.01;
 
     data.img = reshape(data.img,sx*sy*sz,st);
+%     outliers = reshape(tensors.outlier,sx*sy*sz,st);
     
     parfor x=1:size(data.img,1)
         S = [];
@@ -10564,7 +10652,8 @@ function mkcurve_fit_mat(input_file,output_file)
         if((So(1) < min_val) || any(~isfinite(So)) || isnan(tensors.FA(x)))
             continue
         end
-        s0_val = mean(So(1:gradient_info.NrB0));
+        l_bval = bval;%(outliers(x,:)==0);
+        s0_val = mean(So(l_bval <= 1));
         s0_range = linspace(0.5*s0_val,s0_val*2,100);
 %         [~,C_IX] = min(abs(s0_range-s0_val));
 
@@ -10573,9 +10662,9 @@ function mkcurve_fit_mat(input_file,output_file)
         for s0_id=1:length(s0_range)
 
             S = So;
-            S(1:gradient_info.NrB0) = s0_range(s0_id);
+            S(l_bval <= 1) = s0_range(s0_id);
 
-            GP = S ~= 0;
+            GP = S' ~= 0;% & outliers(x,:) == 0;
             X = Xd(:,GP)*log(S(GP));
 
             DT = X(2:7,:);
@@ -10586,7 +10675,10 @@ function mkcurve_fit_mat(input_file,output_file)
             MDsq = MD^2;
 
             for i=gradient_info.NrB0+1:size(g,1)
-
+                if(GP(i) == 0)
+                    continue
+                end
+                
                 dum_adc = (B(i,:)*dt).^2;
                 dum_kt = A(i,:)*KT;
 
@@ -10600,7 +10692,7 @@ function mkcurve_fit_mat(input_file,output_file)
 
             end
 
-            MK(s0_id) = MK(s0_id)/size(g,1);
+            MK(s0_id) = MK(s0_id)/(size(g,1)-sum(GP(l_bval > 1) == 0));
         end
 
         last_negative = find(MK<0,1,'last');
@@ -10683,4 +10775,149 @@ end
 
 function lmax = E_DTI_n2lmax(n)
     lmax = 2*(floor((sqrt(1+8*n)-3)/4));
+end
+
+function [y, mask] = vec_cell(x,mask)
+%
+% Copyright Ben Jeurissen (ben.jeurissen@uantwerpen.be)
+%
+%
+if ~exist('mask','var')
+    mask = ~isnan(x{1});
+end
+y = zeros([size(x,2) sum(mask(:))], class(x{1}));
+for k = 1:size(x,2);
+    Dummy = x{k};
+    y(k,:) = Dummy(mask(:));
+end
+end
+
+function y = unvec_cell(x,mask)
+%
+% Copyright Ben Jeurissen (ben.jeurissen@uantwerpen.be)
+%
+%
+dims = [size(mask,1) size(mask,2) size(mask,3)];
+
+y = cell(1,size(x,1));
+
+for k = 1:size(x,1)
+    if isfloat(x)
+        Dummy = NaN(dims, class(x));
+    else
+        Dummy = zeros(dims, class(x));
+    end
+    Dummy(mask) = x(k,:);
+    y{k} = Dummy;
+end
+end
+
+function seedPoints = SampleSeedPoints(mask, vdims, n)
+%
+% Copyright Ben Jeurissen (ben.jeurissen@uantwerpen.be)
+%
+%
+seedPoints = zeros(3,n);
+i = 1;
+while i<=n
+    point=(rand([3,1]).*(size(mask)-1)')+[1 1 1]';
+    point_ = round(point);
+    
+    if mask(point_(1), point_(2), point_(3))==1
+        seedPoints(:,i)=point(:);
+        i=i+1;
+    end
+    
+end
+seedPoints = bsxfun(@times,seedPoints,vdims');
+end
+
+function M = DiffusionTensorRotationMatrix(R)
+%
+% Copyright Ben Jeurissen (ben.jeurissen@uantwerpen.be)
+%
+M = [R(1,1)^2 2*R(1,1)*R(1,2) 2*R(1,1)*R(1,3) R(1,2)^2 2*R(1,2)*R(1,3) R(1,3)^2;
+     R(1,1)*R(2,1) R(1,1)*R(2,2)+R(1,2)*R(2,1) R(1,1)*R(2,3)+R(1,3)*R(2,1) R(1,2)*R(2,2) R(1,2)*R(2,3)+R(1,3)*R(2,2) R(1,3)*R(2,3);
+     R(1,1)*R(3,1) R(1,1)*R(3,2)+R(1,2)*R(3,1) R(1,1)*R(3,3)+R(1,3)*R(3,1) R(1,2)*R(3,2) R(1,2)*R(3,3)+R(1,3)*R(3,2) R(1,3)*R(3,3);
+     R(2,1)^2 2*R(2,1)*R(2,2) 2*R(2,1)*R(2,3) R(2,2)^2 2*R(2,2)*R(2,3) R(2,3)^2;
+     R(2,1)*R(3,1) R(2,1)*R(3,2)+R(2,2)*R(3,1) R(2,1)*R(3,3)+R(2,3)*R(3,1) R(2,2)*R(3,2) R(2,2)*R(3,3)+R(2,3)*R(3,2) R(2,3)*R(3,3);
+     R(3,1)^2 2*R(3,1)*R(3,2) 2*R(3,1)*R(3,3) R(3,2)^2 2*R(3,2)*R(3,3) R(3,3)^2];
+end
+
+function tract = track(p,logdt,point)
+%
+% Copyright Ben Jeurissen (ben.jeurissen@uantwerpen.be)
+%
+%
+point(4,:) = 1;
+voxel = p.v2w\point;
+voxel = voxel(1:3,:);
+point = point(1:3,:);
+logdt_m = mex_interp(logdt, voxel);
+
+mask = ~isnan(logdt_m(1,:));
+point = point(:,mask);
+logdt_m = logdt_m(:,mask);
+
+[logeigval, mydir] = mex_dteig(double(logdt_m));
+mydir = mydir(1:3,:);
+val = DTI.fa(exp(logeigval));
+
+mask = val > p.threshold;
+point = point(:,mask);
+mydir = mydir(:,mask);
+
+tract1 = trackOneDir(p,logdt,point, mydir);
+tract2 = trackOneDir(p,logdt,point,-mydir);
+
+tract = tract1+tract2;
+tract = tract.*p.stepSize;
+end
+
+function tract = trackOneDir(p,logdt,point,mydir)
+%
+% Copyright Ben Jeurissen (ben.jeurissen@uantwerpen.be)
+%
+%
+tract = zeros([1 size(point,2)]);
+flist = 1:size(point,2);
+
+for it = 1:(p.lengthRange(2)/p.stepSize)
+    point = point + p.stepSize .* mydir;
+
+    point(4,:) = 1;
+    voxel = p.v2w\point;
+    voxel = voxel(1:3,:);
+    point = point(1:3,:);
+    logdt_m = mex_interp(logdt, voxel);
+
+    mask = ~isnan(logdt_m(1,:));
+    point = point(:,mask);
+    mydir = mydir(:,mask);
+    logdt_m = logdt_m(:,mask);
+    flist = flist(:,mask);
+
+    [logeigval, newDir] = mex_dteig(double(logdt_m));
+    newDir = newDir(1:3,:);
+    eigval = exp(logeigval);
+    val = DTI.fa(eigval);
+
+    dot = sum(mydir.*newDir,1);
+    myangle = (180/pi)*real(acos(abs(dot)));
+
+    flipsign = sign(dot);
+    mydir = flipsign([1 1 1],:).*newDir;
+
+    mask = val > p.threshold | myangle < p.maxAngle;
+    point = point(:,mask);
+    mydir = mydir(:,mask);
+    flist = flist(:,mask);
+    val = val(mask);
+
+    if isempty(point)
+        break
+    end
+
+    tract(flist) = tract(flist)+val;
+end
 end

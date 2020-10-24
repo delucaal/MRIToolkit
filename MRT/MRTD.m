@@ -63,7 +63,7 @@ classdef MRTD < handle
             temp_mat_location = [dest_basename '.mat'];
             
         end
-        
+                        
         function [DataRecon, noise_map, ncomponents] = MPPCADenoising(varargin)
             % Based on MRTRIX3 implementation of J. Veraart work on MP-PCA denoising
             % (PMID 27523449)
@@ -197,9 +197,13 @@ classdef MRTD < handle
             % UseLP: Use the "low_res" prior in PL2NNLS 0 or 1 (default 1)
             % ExtraSens: Tries to increase sensitivity (requires high SNR
             % data) 1 or 0 (default 0)
+            % OutliersSD: Threshold for outlier rejection (default 3)
             % output: the output prefix name (suffixes and .nii will be
             % added automatically)
-            
+            if(isempty(varargin))
+                help('MRTD.PerformSpectralDeconvolution');
+                return
+            end
             coptions = varargin;
             data_name = GiveValueForName(coptions,'nii_file');
             if(isempty(data_name))
@@ -231,23 +235,29 @@ classdef MRTD < handle
             end
             parameters.output_prefix = output_prefix;
             
-            min_bval = GiveValueForName(coptions,'min_bval');
-            if(isempty(min_bval))
+            parameters.min_bval = GiveValueForName(coptions,'min_bval');
+            if(isempty(parameters.min_bval))
                 error('Need to specify the minimum b-value (min_bval)');
             end
-            parameters.min_bval = min_bval;
+            parameters.min_bval = parameters.min_bval;
             
-            max_bval = GiveValueForName(coptions,'max_bval');
-            if(isempty(max_bval))
+            parameters.max_bval = GiveValueForName(coptions,'max_bval');
+            if(isempty(parameters.max_bval))
                 error('Need to specify the maximum b-value (max_bval)');
             end
-            parameters.max_bval = max_bval;
+            parameters.max_bval = parameters.max_bval;
             
             LambdaGrid = GiveValueForName(coptions,'Lambda');
             if(isempty(LambdaGrid))
                 LambdaGrid = 0.05;
             end
             parameters.LambdaGrid = LambdaGrid;
+
+            OutliersSD = GiveValueForName(coptions,'OutliersSD');
+            if(isempty(OutliersSD))
+                OutliersSD = 3;
+            end
+            parameters.outliers_sigma = OutliersSD;
 
             ExtraSens = GiveValueForName(coptions,'ExtraSens');
             if(isempty(ExtraSens))
@@ -264,6 +274,257 @@ classdef MRTD < handle
             GMMBatch_NMRBiomed_fitscript_clean(parameters)
 
         end
+        
+        function PerformSegmentedIVIMFit2comp(varargin)
+            % Perform an IVIM "segmented" fit with 2 compartments (tissue + blood).
+            % The input MUST have multiple diffusion weightings (2+) including low b-values (b<=200s/mm2). 
+            % Input arguments:
+            % nii_file: the target .nii file
+            % bval_file: the corresponding .bval file
+            % bvec_file: the corresponding .bvec file
+            % txt_file: the target .txt file (overrides
+            % bval_file,bvec_file)
+            % mat_file: the target .mat file (overrides nii_file,
+            % bval_file, bvec_file)
+            % mask_file: a mask file defining the volume to fit
+            % min_bval: Minimum b-value to use
+            % max_bval: Maximum b-value to use
+            % b_thresh: The b-value after which IVIM is "negligible"
+            % (typically b=200s/mm2)
+            % output: the output prefix name (suffixes and .nii will be
+            % added automatically)   
+            
+            coptions = varargin;
+
+            mat_name = GiveValueForName(coptions,'mat_file');           
+            
+            if(isempty(mat_name))
+                data_name = GiveValueForName(coptions,'nii_file');
+                if(isempty(data_name))
+                    error('Need to specify the target file (nii_file)');
+                end
+                data = EDTI.LoadNifti(data_name);
+
+                txt_name = GiveValueForName(coptions,'txt_file');
+
+                if(isempty(txt_name))
+                    bvec_name = GiveValueForName(coptions,'bvec_file');
+                    if(isempty(bvec_name))
+                        error('Need to specify the bvec file (bvec_file)');
+                    end
+
+                    bval_name = GiveValueForName(coptions,'bval_file');
+                    if(isempty(bval_name))
+                        error('Need to specify the bval file (bval_file)');
+                    end
+                    data.bvals = load(bval_name)';
+                    data.bvecs = load(bvec_name)';
+                else
+                    gmat = load(txt_name);
+                    [data.bvals,data.bvecs] = EDTI.bval_bvec_from_b_Matrix(gmat);
+                end
+            else
+                data = EDTI.EDTI_Data_2_MRIToolkit('mat_file',mat_name);
+            end
+            
+            mask_name = GiveValueForName(coptions,'mask_file');
+            if(isempty(mask_name))
+                error('Need to specify the mask file (mask_file)');
+            end
+            
+            output_prefix = GiveValueForName(coptions,'output');
+            if(isempty(output_prefix))
+                error('Need to specify the output prefix (output)');
+            end
+            
+            parameters.min_bval = GiveValueForName(coptions,'min_bval');
+            if(isempty(parameters.min_bval))
+                error('Need to specify the minimum b-value (min_bval)');
+            end
+            
+            parameters.max_bval = GiveValueForName(coptions,'max_bval');
+            if(isempty(parameters.max_bval))
+                error('Need to specify the maximum b-value (max_bval)');
+            end
+
+            parameters.bthresh = GiveValueForName(coptions,'b_thresh');
+            if(isempty(parameters.bthresh))
+                disp('Using the default threshold b-value (bthresh)');
+                parameters.bthresh = 200;
+            end
+
+            mask = EDTI.LoadNifti(mask_name);
+            data.mask = mask.img;
+            
+            [Dhigh,Dlow,f] = SegmentedIVIMFit2Comp(data,parameters);
+
+            EDTI.WriteNifti(f,[output_prefix '_fivim.nii']);
+            EDTI.WriteNifti(Dlow,[output_prefix '_Dstar.nii']);
+            EDTI.WriteNifti(Dhigh,[output_prefix '_Dhigh.nii']);
+        end
+        
+        function PerformFW_Fit(varargin)
+            % Perform a FW + ADC fit (ISO) with 2 compartments (tissue + blood).
+            % This is a non-linear fit (slow)
+            % The input MUST have multiple diffusion weightings (2+) including low b-values (b<=1000s/mm2). 
+            % Input arguments:
+            % nii_file: the target .nii file
+            % bval_file: the corresponding .bval file
+            % bvec_file: the corresponding .bvec file
+            % txt_file: the target .txt file (overrides
+            % bval_file,bvec_file)
+            % mat_file: the target .mat file (overrides nii_file,
+            % bval_file, bvec_file)
+            % mask_file: a mask file defining the volume to fit
+            % min_bval: Minimum b-value to use
+            % max_bval: Maximum b-value to use
+            % output: the output prefix name (suffixes and .nii will be
+            % added automatically)   
+            
+            coptions = varargin;
+
+            mat_name = GiveValueForName(coptions,'mat_file');           
+            
+            if(isempty(mat_name))
+                data_name = GiveValueForName(coptions,'nii_file');
+                if(isempty(data_name))
+                    error('Need to specify the target file (nii_file)');
+                end
+                data = EDTI.LoadNifti(data_name);
+
+                txt_name = GiveValueForName(coptions,'txt_file');
+
+                if(isempty(txt_name))
+                    bvec_name = GiveValueForName(coptions,'bvec_file');
+                    if(isempty(bvec_name))
+                        error('Need to specify the bvec file (bvec_file)');
+                    end
+
+                    bval_name = GiveValueForName(coptions,'bval_file');
+                    if(isempty(bval_name))
+                        error('Need to specify the bval file (bval_file)');
+                    end
+                    data.bvals = load(bval_name)';
+                    data.bvecs = load(bvec_name)';
+                else
+                    gmat = load(txt_name);
+                    [data.bvals,data.bvecs] = EDTI.bval_bvec_from_b_Matrix(gmat);
+                end
+            else
+                data = EDTI.EDTI_Data_2_MRIToolkit('mat_file',mat_name);
+            end
+            
+            mask_name = GiveValueForName(coptions,'mask_file');
+            if(isempty(mask_name))
+                error('Need to specify the mask file (mask_file)');
+            end
+            
+            output_prefix = GiveValueForName(coptions,'output');
+            if(isempty(output_prefix))
+                error('Need to specify the output prefix (output)');
+            end
+            
+            parameters.min_bval = GiveValueForName(coptions,'min_bval');
+            if(isempty(parameters.min_bval))
+                error('Need to specify the minimum b-value (min_bval)');
+            end
+            
+            parameters.max_bval = GiveValueForName(coptions,'max_bval');
+            if(isempty(parameters.max_bval))
+                error('Need to specify the maximum b-value (max_bval)');
+            end
+
+            mask = EDTI.LoadNifti(mask_name);
+            data.mask = mask.img;
+            
+            [Dhigh,f] = FWFit2Comp(data,parameters);
+
+            EDTI.WriteNifti(f,[output_prefix '_ffw.nii']);
+            EDTI.WriteNifti(Dhigh,[output_prefix '_Dhigh.nii']);
+            
+        end                
+ 
+        function PerformIVIM_FW_Fit(varargin)
+            % Perform an IVIM + FW + ADC non-linear fit.
+            % The input MUST have multiple diffusion weightings (2+) including low b-values (b<=200s/mm2)
+            % as well as intermediate b-values (200 < b < 1000s/mm2). 
+            % Input arguments:
+            % nii_file: the target .nii file
+            % bval_file: the corresponding .bval file
+            % bvec_file: the corresponding .bvec file
+            % txt_file: the target .txt file (overrides
+            % bval_file,bvec_file)
+            % mat_file: the target .mat file (overrides nii_file,
+            % bval_file, bvec_file)
+            % mask_file: a mask file defining the volume to fit
+            % parameters.min_bval: Minimum b-value to use
+            % parameters.max_bval: Maximum b-value to use
+            % output: the output prefix name (suffixes and .nii will be
+            % added automatically)   
+            
+            coptions = varargin;
+
+            mat_name = GiveValueForName(coptions,'mat_file');           
+            
+            if(isempty(mat_name))
+                data_name = GiveValueForName(coptions,'nii_file');
+                if(isempty(data_name))
+                    error('Need to specify the target file (nii_file)');
+                end
+                data = EDTI.LoadNifti(data_name);
+
+                txt_name = GiveValueForName(coptions,'txt_file');
+
+                if(isempty(txt_name))
+                    bvec_name = GiveValueForName(coptions,'bvec_file');
+                    if(isempty(bvec_name))
+                        error('Need to specify the bvec file (bvec_file)');
+                    end
+
+                    bval_name = GiveValueForName(coptions,'bval_file');
+                    if(isempty(bval_name))
+                        error('Need to specify the bval file (bval_file)');
+                    end
+                    data.bvals = load(bval_name)';
+                    data.bvecs = load(bvec_name)';
+                else
+                    gmat = load(txt_name);
+                    [data.bvals,data.bvecs] = EDTI.bval_bvec_from_b_Matrix(gmat);
+                end
+            else
+                data = EDTI.EDTI_Data_2_MRIToolkit('mat_file',mat_name);
+            end
+            
+            mask_name = GiveValueForName(coptions,'mask_file');
+            if(isempty(mask_name))
+                error('Need to specify the mask file (mask_file)');
+            end
+            
+            output_prefix = GiveValueForName(coptions,'output');
+            if(isempty(output_prefix))
+                error('Need to specify the output prefix (output)');
+            end
+            
+            parameters.min_bval = GiveValueForName(coptions,'min_bval');
+            if(isempty(parameters.min_bval))
+                error('Need to specify the minimum b-value (min_bval)');
+            end
+            
+            parameters.max_bval = GiveValueForName(coptions,'max_bval');
+            if(isempty(parameters.max_bval))
+                error('Need to specify the maximum b-value (max_bval)');
+            end
+            
+            mask = EDTI.LoadNifti(mask_name);
+            data.mask = mask.img;
+            
+            [Dhigh,Dlow,ffw,fivim] = IVIMFWFit3Comp(data,parameters);
+
+            EDTI.WriteNifti(ffw,[output_prefix '_ffw.nii']);
+            EDTI.WriteNifti(fivim,[output_prefix '_fivim.nii']);
+            EDTI.WriteNifti(Dlow,[output_prefix '_Dstar.nii']);
+            EDTI.WriteNifti(Dhigh,[output_prefix '_Dhigh.nii']);
+        end        
         
     end
 end
@@ -382,8 +643,8 @@ bval_name = parameters.bval_name;
 
 mask_name = parameters.mask_name;
 
-min_bval = parameters.min_bval;
-max_bval = parameters.max_bval;
+parameters.min_bval = parameters.min_bval;
+parameters.max_bval = parameters.max_bval;
 
 % Load the data
 
@@ -419,7 +680,7 @@ data = avg_data;
 clear avg_data;
 
 % Filter according to initial requirements
-GP = data.bvals >= min_bval & data.bvals <= max_bval;
+GP = data.bvals >= parameters.min_bval & data.bvals <= parameters.max_bval;
 data.img = data.img(:,:,:,GP);
 data.bvals = data.bvals(GP);
 data.bvecs = data.bvecs(GP,:);
@@ -477,7 +738,7 @@ for z=1:size(data.img,3)
     NoisySimulatedSignal = NoisySimulatedSignal/mean(NoisySimulatedSignal(data.bvals <= min_b));
     
     % This solution is more sensitive to small components but also to noise 
-    [LSQNONNEG_CL_DECONV,goodpoints] = DW_RobustDeconvFinal(Dictionary,NoisySimulatedSignal,3,op_hp);
+    [LSQNONNEG_CL_DECONV,goodpoints] = DW_RobustDeconvFinal(Dictionary,NoisySimulatedSignal,parameters.outliers_sigma,op_hp);
     OUTLIERS(x,y,z,:) = goodpoints;
     
     LSQNONNEG_CL_AVG_PROFILE(x,y,z,:) = LSQNONNEG_CL_DECONV;
@@ -538,7 +799,7 @@ for z=1:size(data.img,3)
 %     unique_bvals.bvals = unique(round(data.bvals(goodpoints)));
 %     UniqueDictionary = DW_BuildIsotropicDictionary(unique_bvals,DRange);
 
-    L2LSQNONNEG_DECONV = DW_RegularizedDeconv(Dictionary(goodpoints,:),NoisySimulatedSignal(goodpoints),op_e16,LambdaGrid(IX),PRIOR);
+    L2LSQNONNEG_DECONV = DW_RegularizedDeconv(Dictionary(goodpoints,:),NoisySimulatedSignal(goodpoints),op_lp,LambdaGrid(IX),PRIOR);
     L2LSQNONNEG_PRIOR_AVG_PROFILE(x,y,z,:) = L2LSQNONNEG_DECONV;
 end
 end
@@ -566,7 +827,7 @@ TARGET = L2LSQNONNEG_PRIOR_AVG_PROFILE;
 
 clean_data = DW_LoadData(data_name,bvec_name,bval_name,mask_name,0,'',1);
 clean_data.bvals = round(clean_data.bvals);
-GP = clean_data.bvals >= min_bval & clean_data.bvals < max_bval;
+GP = clean_data.bvals >= parameters.min_bval & clean_data.bvals < parameters.max_bval;
 clean_data.img = clean_data.img(:,:,:,GP);
 clean_data.bvals = clean_data.bvals(GP);
 clean_data.bvecs = clean_data.bvecs(GP,:);
@@ -966,3 +1227,148 @@ for ij=1:length(ClassAssignment)
    end
 end
 end
+
+% Geometrical average per shell/unique b-val
+function s1 = QuickGeoAverage(data)
+   data.bvals = round(data.bvals);
+   ub1 = unique(data.bvals);
+
+   s1 = data;
+   s1.img = zeros([size(data.img(:,:,:,1)),length(ub1)]);
+
+   s1.bvals = ub1;
+   s1.bvecs = [];
+
+   for j=1:length(ub1)
+      vol = single(data.img(:,:,:,data.bvals==ub1(j)));
+      s1.img(:,:,:,j) = geomean(vol,4);
+   end
+        
+end
+
+% Segmented IVIM + tissue (isotropic) fit
+function [Dhigh,Dlow,f] = SegmentedIVIMFit2Comp(data,parameters)
+    data = QuickGeoAverage(data);
+    IX_high = data.bvals >= parameters.bthresh & data.bvals <= parameters.max_bval;
+    IX_low = data.bvals >= parameters.min_bval & data.bvals < parameters.bthresh;
+
+    siz = size(data.img);
+    data.img = log(reshape(data.img,siz(1)*siz(2)*siz(3),siz(4)));
+    Xh = [-data.bvals(IX_high) ones(sum(IX_high==1),1)];
+    HighD = Xh\data.img(:,IX_high)';
+
+    Dhigh.img = reshape(HighD(1,:),siz(1:3));
+    Dhigh.VD = data.VD;
+    Dhigh.img(data.mask == 0) = 0;
+
+    Xl =[-data.bvals(IX_low) ones(sum(IX_low==1),1)];
+    LowD = Xl\data.img(:,IX_low)';
+    Dlow.img = reshape(LowD(1,:),siz(1:3));
+    Dlow.VD = data.VD;
+    Dlow.img(data.mask == 0) = 0;
+
+    data.img = exp(data.img);
+    f.img = abs(data.img(:,1) - exp(HighD(2,:)'))./data.img(:,1);
+    f.img = reshape(f.img,siz(1:3));
+    f.VD = data.VD;
+    f.img(data.mask == 0) = 0;
+end
+
+% FW + D model
+function [out,S] = FW2CompartmentsModel(x0,params)
+    S = x0(1)*((1-x0(2))*exp(-params.b*x0(3))+x0(2)*exp(-params.b*3e-3));
+    out = params.S - S;
+end
+
+% FW + Tissue (isotropic) non-linear fit
+function [Dhigh,f] = FWFit2Comp(data,parameters)
+    data = QuickGeoAverage(data);
+    IX_high = data.bvals >= parameters.min_bval & data.bvals <= parameters.max_bval;
+
+    x0 = [1 0.05 0.7e-3];
+    lb = [0 0 0];
+    ub = [1 1 2e-3];
+    
+    Dhigh.img = zeros(size(data.img(:,:,:,1)));
+    Dhigh.VD = data.VD;
+    f.img = zeros(size(data.img(:,:,:,1)));
+    f.VD = data.VD;
+    
+    siz = size(data.img);
+    
+    data.img = (reshape(data.img,siz(1)*siz(2)*siz(3),siz(4)));
+    data.img = permute(data.img,[2 1]);
+    points2fit = find(data.mask > 0);
+
+    options = optimset('TolX',1e-3,'TolFun',1e-3,'Display','off');
+    params.b = data.bvals(IX_high);
+    tic
+    for pi=1:length(points2fit)
+        if(mod(pi,1000) == 0)
+            disp(['Free-water fit: ' num2str(pi/length(points2fit)*100) '%']);
+        end
+        params.S = data.img(IX_high,points2fit(pi));
+        x0(1) = params.S(1);
+        ub(1) = 2*params.S(1);
+        p = lsqnonlin(@FW2CompartmentsModel,x0,lb,ub,options,params);
+        Dhigh.img(points2fit(pi)) = p(3);
+        f.img(points2fit(pi)) = p(2);
+    end
+    toc
+end
+
+% IVIM + FW + D model
+function [out,S] = IVIMFW3CompartmentsModel(x0,params)
+    S0 = x0(1);
+    fivim = x0(2);
+    ffw = x0(3);
+    D = x0(4);
+    DStar = x0(5);
+    S = S0*((1-fivim)*((1-ffw)*exp(-params.b*D)+ffw*exp(-params.b*3e-3)) +...
+        fivim*exp(-params.b*DStar));
+    out = params.S - S;
+end
+
+% IVIM + FW + Tissue (isotropic) non-linear fit
+function [Dhigh,DStar,ffw,fivim] = IVIMFWFit3Comp(data,parameters)
+    data = QuickGeoAverage(data);
+    IX_high = data.bvals >= parameters.min_bval & data.bvals <= parameters.max_bval;
+
+    x0 = [1 0.05 0.05 0.7e-3 10e-3];
+    lb = [0 0 0 0 6e-3];
+    ub = [1 1 1 2e-3 500e-3];
+    
+    Dhigh.img = zeros(size(data.img(:,:,:,1)));
+    Dhigh.VD = data.VD;
+    ffw.img = zeros(size(data.img(:,:,:,1)));
+    ffw.VD = data.VD;
+    fivim.img = zeros(size(data.img(:,:,:,1)));
+    fivim.VD = data.VD;
+    DStar.img = zeros(size(data.img(:,:,:,1)));
+    DStar.VD = data.VD;
+    
+    siz = size(data.img);
+    
+    data.img = (reshape(data.img,siz(1)*siz(2)*siz(3),siz(4)));
+    data.img = permute(data.img,[2 1]);
+    points2fit = find(data.mask > 0);
+
+    options = optimset('TolX',1e-3,'TolFun',1e-3,'Display','off');
+    params.b = data.bvals(IX_high);
+    tic
+    for pi=1:length(points2fit)
+        if(mod(pi,1000) == 0)
+            disp(['IVIM + free-water fit: ' num2str(pi/length(points2fit)*100) '%']);
+        end
+        params.S = data.img(IX_high,points2fit(pi));
+        x0(1) = params.S(1);
+        ub(1) = 2*params.S(1);
+        p = lsqnonlin(@IVIMFW3CompartmentsModel,x0,lb,ub,options,params);
+        Dhigh.img(points2fit(pi)) = p(4);
+        fivim.img(points2fit(pi)) = p(2);
+        ffw.img(points2fit(pi)) = p(3);
+        DStar.img(points2fit(pi)) = p(5);
+    end
+    toc
+end
+
