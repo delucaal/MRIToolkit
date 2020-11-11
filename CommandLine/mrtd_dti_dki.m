@@ -77,14 +77,23 @@ while(true)
     end
 end
 
-EDTI.b_Matrix_from_bval_bvec('bval_file',bval_file,'bvec_file',bvec_file,...
+MRTQuant.b_Matrix_from_bval_bvec('bval_file',bval_file,'bvec_file',bvec_file,...
     'output',[dest_basename '.txt']);
 
-EDTI.PerformDTI_DKIFit('nii_file',nii_file,'txt_file',[dest_basename '.txt'],...
+while(true)
+    temp_file = fullfile(tempdir,['tempnii_' num2str(randi(100000)) '.nii']);
+    if(exist(temp_file,'file') < 1)
+        break
+    end
+end
+
+MRTQuant.ConformSpatialDimensions('nii_file',nii_file,'output',temp_file);
+
+MRTQuant.PerformDTI_DKIFit('nii_file',temp_file,'txt_file',[dest_basename '.txt'],...
     'grad_perm',grad_perm,'grad_flip',grad_flip,'dki',dki,...
     'dki_constraints',dki_constraints,'output',[outfile '.mat'],...
     'mk_curve',mkcurve,'fit_mode',estimator);
 
-EDTI.MatMetrics2Nii([outfile '.mat'],1);
+MRTQuant.MatMetrics2Nii([outfile '.mat'],dki);
 
 end

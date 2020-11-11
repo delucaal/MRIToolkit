@@ -3,9 +3,9 @@
 % A guide on how to reach the .MAT is available in CSD_Tractography_Script.m
 
 % Converts a .MAT to the MRIToolkit format
-mrt_data = EDTI.EDTI_Data_2_MRIToolkit('mat_file','mymat.mat');
+mrt_data = MRTQuant.EDTI_Data_2_MRIToolkit('mat_file','mymat.mat');
 % Prepare the spherical deconvolution class on this dataset
-SD = SphericalDeconvolution('data',mrt_data);
+SD = MRTTrack('data',mrt_data);
 % Add an anisotropic response function using the DKI model
 SD.AddAnisotropicRF_DKI([1.7e-3 0.2e-3 0.2e-3],0); % WM
 % Add an isotropic response function with the ADC model
@@ -18,16 +18,16 @@ SD.setDeconvMethod('dRL'); % damped Richardson Lucy
 % Perform the actual deconvolution
 GRL_Results = SD.PerformDeconv();
 % Export everything to NIFTI
-SphericalDeconvolution.SaveOutputToNii(SD,GRL_Results,'GRL_Test');
+MRTTrack.SaveOutputToNii(SD,GRL_Results,'GRL_Test');
 
 % Run Fiber Tractography - needs to be adjusted
-EDTI.PerformFODBased_FiberTracking();
+MRTQuant.PerformFODBased_FiberTracking();
 % Constraint using the computed WM fraction
-SphericalDeconvolution.TerminateTractsWithFraction();
+MRTTrack.TerminateTractsWithFraction();
 %% Perform mFOD spherical deconvolution (https://www.biorxiv.org/content/10.1101/739136v1)
 
-mrt_data = EDTI.EDTI_Data_2_MRIToolkit('mat_file','mymat.mat');
-SD = SphericalDeconvolution('data',mrt_data);
+mrt_data = MRTQuant.EDTI_Data_2_MRIToolkit('mat_file','mymat.mat');
+SD = MRTTrack('data',mrt_data);
 % Add an anisotropic response function using the DKI model
 SD.AddAnisotropicRF_DKI([1.7e-3 0.2e-3 0.2e-3],0); % WM
 % Add an anisotropic response function using the NODDI model
@@ -36,4 +36,4 @@ SD.AddIsotropicRF(3e-3); % CSF
 SD.setInnerShellWeighting(1.0); % in mFOD this parameter has not been investigated
 SD.setDeconvMethod('L2LSQ');
 mFOD_Results = SD.PerformDeconv();
-SphericalDeconvolution.SaveOutputToNii(SD,mFOD_Results,'mFOD_TEST');
+MRTTrack.SaveOutputToNii(SD,mFOD_Results,'mFOD_TEST');
