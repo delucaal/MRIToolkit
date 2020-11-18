@@ -9,7 +9,7 @@
 classdef MRTQuant < handle
     methods(Static)
         
-       function data = LoadNifti(data_file,apply_intensity_scale)
+        function data = LoadNifti(data_file,apply_intensity_scale)
         % Loads a .nii(.gz) and returns it into a data structure with
         % fields: img (the data matrix) and VD (voxel dimension)
         % input arguments:
@@ -103,7 +103,7 @@ classdef MRTQuant < handle
         function bmat = b_Matrix_from_bval_bvec(varargin)
         % Computes bmat (b-matrix) from bvals and bvecs and writes it
         % to a .txt file with the same name. Specify only the
-        % bval file as input. The bvec must then be in the same folder with
+        % bval file (or variable) as input. The bvec must then be in the same folder with
         % the same naming. txt_file is the destination file of the b-matrix
         % (optional, otherwise the file is created in the same directory)
         % Arguments:
@@ -111,27 +111,39 @@ classdef MRTQuant < handle
         % bvec_file: the input .bvec file - optional. If not specified a
         % file with the same name of bval_file and extension .bvec will be
         % searched.
+        % or, alternatively
+        % bval: the input bvals as variable
+        % bvec: the input bvecs as variable
+        
         % output: the output b-matrix .txt file
             if( isempty(varargin))
                 my_help('MRTQuant.b_Matrix_from_bval_bvec');
                 bmat = [];
                 return;
             end
-
             coptions = varargin;
-            bval_file = GiveValueForName(coptions,'bval_file');
-            if(isempty(bval_file))
-                error('Missing mandatory parameter bval_file');
+            bval = GiveValueForName(coptions,'bval');
+            bvec = GiveValueForName(coptions,'bvec');
+            if(isempty(bval) || isempty(bvec))
+                bval_file = GiveValueForName(coptions,'bval_file');
+                if(isempty(bval_file))
+                    error('Missing mandatory parameter bval_file');
+                end
+                bvec_file = GiveValueForName(coptions,'bvec_file');
+                if(isempty(bvec_file))
+                   bvec_file = [bval_file(1:end-4) 'bvec'];
+                end
+                txt_file = GiveValueForName(coptions,'output');
+                if(isempty(txt_file))
+                    error('Missing mandatory parameter output');
+                end
+                EDTI_Library.E_DTI_convert_nii_dic_2_txt_exe2(bval_file,bvec_file,txt_file);
+            else
+                    g = bvec;
+                    bmat = repmat(bval,[1 6]).*[g(:,1).^2 2*g(:,1).*g(:,2) 2*g(:,1).*g(:,3) ...
+                        g(:,2).^2 2*g(:,2).*g(:,3) g(:,3).^2];
+                    return
             end
-            bvec_file = GiveValueForName(coptions,'bvec_file');
-            if(isempty(bvec_file))
-               bvec_file = [bval_file(1:end-4) 'bvec'];
-            end
-            txt_file = GiveValueForName(coptions,'output');
-            if(isempty(txt_file))
-                error('Missing mandatory parameter output');
-            end
-            EDTI_Library.E_DTI_convert_nii_dic_2_txt_exe2(bval_file,bvec_file,txt_file);
             if(nargout > 0)
                 if(isempty(txt_file))
                     bmat = load([bval_file(1:end-5) '.txt']);
@@ -2010,6 +2022,7 @@ classdef MRTQuant < handle
             % mask_file: a mask file defining the volume to fit
             % min_bval: Minimum b-value to use
             % max_bval: Maximum b-value to use
+            % fit_dt: (default 0), whether to fit a tensor for the tissue
             % b_thresh: The b-value after which IVIM is "negligible"
             % (typically b=200s/mm2)
             % output: the output prefix name (suffixes and .nii will be
@@ -2052,7 +2065,12 @@ classdef MRTQuant < handle
             if(isempty(mask_name))
                 error('Need to specify the mask file (mask_file)');
             end
-            
+
+            fit_dt = GiveValueForName(coptions,'fit_dt');
+            if(isempty(fit_dt))
+                fit_dt = 0;
+            end
+
             output_prefix = GiveValueForName(coptions,'output');
             if(isempty(output_prefix))
                 error('Need to specify the output prefix (output)');
@@ -2077,11 +2095,20 @@ classdef MRTQuant < handle
             mask = MRTQuant.LoadNifti(mask_name);
             data.mask = mask.img;
             
-            [Dhigh,Dlow,f] = SegmentedIVIMFit2Comp(data,parameters);
-
+            if(fit_dt == 0)
+                [Dhigh,Dlow,f] = SegmentedIVIMFit2Comp(data,parameters);
+                MRTQuant.WriteNifti(Dhigh,[output_prefix '_Dhigh.nii']);
+            else
+                [DT,Dlow,f] = SegmentedIVIMFit2Comp_DT(data,parameters);
+                [~, FA, ~, ~, eigval] = EDTI_Library.E_DTI_eigensystem_analytic(EDTI_Library.E_DTI_DWI_mat2cell(DT.img));
+                out_nii = f;
+                out_nii.img = FA;
+                MRTQuant.WriteNifti(out_nii,[output_prefix '_FA.nii']);
+                out_nii.img = mean(eigval,4);
+                MRTQuant.WriteNifti(out_nii,[output_prefix '_MD.nii']);                
+            end
             MRTQuant.WriteNifti(f,[output_prefix '_fivim.nii']);
             MRTQuant.WriteNifti(Dlow,[output_prefix '_Dstar.nii']);
-            MRTQuant.WriteNifti(Dhigh,[output_prefix '_Dhigh.nii']);
         end
         
         function PerformFW_Fit(varargin)
@@ -2172,8 +2199,12 @@ classdef MRTQuant < handle
             MRTQuant.WriteNifti(Dhigh,[output_prefix '_Dhigh.nii']);
             
             if(correct_data == 1)
-               for 
-               data.img = max(data.img - S0.img*f.img* 
+               for ij=1:size(data.img,4)
+                   data.img(:,:,:,ij) = max(data.img(:,:,:,ij) - S0.img.*f.img.*exp(-3e-3*data.bvals(ij)),0); 
+               end
+               MRTQuant.WriteNifti(data,[output_prefix '_FWcorrected.nii']);
+               bmat = MRTQuant.b_Matrix_from_bval_bvec('bval',data.bvals,'bvec',data.bvecs);
+               save([output_prefix '_FWcorrected.txt'],'bmat','-ascii');
             end
             
         end                
@@ -2980,6 +3011,7 @@ end
 
 % Geometrical average per shell/unique b-val
 function s1 = QuickGeoAverage(data)
+   data.img(data.img < 0 | isnan(data.img)) = 0;
    data.bvals = round(data.bvals);
    ub1 = unique(data.bvals);
 
@@ -3019,6 +3051,39 @@ function [Dhigh,Dlow,f] = SegmentedIVIMFit2Comp(data,parameters)
 
     data.img = exp(data.img);
     f.img = abs(data.img(:,1) - exp(HighD(2,:)'))./data.img(:,1);
+    f.img = reshape(f.img,siz(1:3));
+    f.VD = data.VD;
+    f.img(data.mask == 0) = 0;
+end
+
+% Segmented IVIM + tissue (isotropic) fit
+function [DT,Dlow,f] = SegmentedIVIMFit2Comp_DT(data,parameters)
+    IX_high = data.bvals >= parameters.bthresh & data.bvals <= parameters.max_bval;
+    IX_low = data.bvals >= parameters.min_bval & data.bvals < parameters.bthresh;   
+    
+    siz = size(data.img);
+%     data.img = log(reshape(data.img,siz(1)*siz(2)*siz(3),siz(4)));
+    data.img = (reshape(data.img,siz(1)*siz(2)*siz(3),siz(4)));
+    
+    bmat = MRTQuant.b_Matrix_from_bval_bvec('bval',data.bvals,'bvec',data.bvecs);
+    Xh = [-bmat(IX_high,:) ones(sum(IX_high==1),1)];
+%     DTp = Xh\data.img(:,IX_high)';
+    DTp = EDTI_Library.E_DTI_WLLS_WW(data.img(:,IX_high),Xh);
+    DTp = permute(DTp,[2 1]);
+
+    
+    DT.img = reshape(DTp(:,1:6),[siz(1:3) 6]);
+    DT.VD = data.VD;
+    DT.img(data.mask == 0) = 0;
+
+    Xl =[-data.bvals(IX_low) ones(sum(IX_low==1),1)];
+    LowD = Xl\data.img(:,IX_low)';
+    Dlow.img = reshape(LowD(1,:),siz(1:3));
+    Dlow.VD = data.VD;
+    Dlow.img(data.mask == 0) = 0;
+
+    data.img = exp(data.img);
+    f.img = abs(data.img(:,1) - exp(DTp(:,7)))./data.img(:,1);
     f.img = reshape(f.img,siz(1:3));
     f.VD = data.VD;
     f.img(data.mask == 0) = 0;

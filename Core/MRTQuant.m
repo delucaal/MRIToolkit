@@ -2022,6 +2022,7 @@ classdef MRTQuant < handle
             % mask_file: a mask file defining the volume to fit
             % min_bval: Minimum b-value to use
             % max_bval: Maximum b-value to use
+            % fit_dt: (default 0), whether to fit a tensor for the tissue
             % b_thresh: The b-value after which IVIM is "negligible"
             % (typically b=200s/mm2)
             % output: the output prefix name (suffixes and .nii will be
@@ -2064,7 +2065,12 @@ classdef MRTQuant < handle
             if(isempty(mask_name))
                 error('Need to specify the mask file (mask_file)');
             end
-            
+
+            fit_dt = GiveValueForName(coptions,'fit_dt');
+            if(isempty(fit_dt))
+                fit_dt = 0;
+            end
+
             output_prefix = GiveValueForName(coptions,'output');
             if(isempty(output_prefix))
                 error('Need to specify the output prefix (output)');
@@ -2089,11 +2095,20 @@ classdef MRTQuant < handle
             mask = MRTQuant.LoadNifti(mask_name);
             data.mask = mask.img;
             
-            [Dhigh,Dlow,f] = SegmentedIVIMFit2Comp(data,parameters);
-
+            if(fit_dt == 0)
+                [Dhigh,Dlow,f] = SegmentedIVIMFit2Comp(data,parameters);
+                MRTQuant.WriteNifti(Dhigh,[output_prefix '_Dhigh.nii']);
+            else
+                [DT,Dlow,f] = SegmentedIVIMFit2Comp_DT(data,parameters);
+                [~, FA, ~, ~, eigval] = EDTI_Library.E_DTI_eigensystem_analytic(EDTI_Library.E_DTI_DWI_mat2cell(DT.img));
+                out_nii = f;
+                out_nii.img = FA;
+                MRTQuant.WriteNifti(out_nii,[output_prefix '_FA.nii']);
+                out_nii.img = mean(eigval,4);
+                MRTQuant.WriteNifti(out_nii,[output_prefix '_MD.nii']);                
+            end
             MRTQuant.WriteNifti(f,[output_prefix '_fivim.nii']);
             MRTQuant.WriteNifti(Dlow,[output_prefix '_Dstar.nii']);
-            MRTQuant.WriteNifti(Dhigh,[output_prefix '_Dhigh.nii']);
         end
         
         function PerformFW_Fit(varargin)
@@ -3036,6 +3051,38 @@ function [Dhigh,Dlow,f] = SegmentedIVIMFit2Comp(data,parameters)
 
     data.img = exp(data.img);
     f.img = abs(data.img(:,1) - exp(HighD(2,:)'))./data.img(:,1);
+    f.img = reshape(f.img,siz(1:3));
+    f.VD = data.VD;
+    f.img(data.mask == 0) = 0;
+end
+
+% Segmented IVIM + tissue (isotropic) fit
+function [DT,Dlow,f] = SegmentedIVIMFit2Comp_DT(data,parameters)
+    IX_high = data.bvals >= parameters.bthresh & data.bvals <= parameters.max_bval;
+    IX_low = data.bvals >= parameters.min_bval & data.bvals < parameters.bthresh;   
+    
+    siz = size(data.img);
+    data.img = log(reshape(data.img,siz(1)*siz(2)*siz(3),siz(4)));
+%     data.img = (reshape(data.img,siz(1)*siz(2)*siz(3),siz(4)));
+    
+    bmat = MRTQuant.b_Matrix_from_bval_bvec('bval',data.bvals,'bvec',data.bvecs);
+    Xh = [-bmat(IX_high,:) ones(sum(IX_high==1),1)];
+    DTp = Xh\data.img(:,IX_high)';
+%     DTp = EDTI_Library.E_DTI_WLLS_WW(data.img(:,IX_high),Xh');
+    DTp = permute(DTp,[2 1]);
+    DTp(data.mask(:) == 0,:) = 0;
+    
+    DT.img = reshape(DTp(:,1:6),[siz(1:3) 6]);
+    DT.VD = data.VD;
+
+    Xl =[-data.bvals(IX_low) ones(sum(IX_low==1),1)];
+    LowD = Xl\data.img(:,IX_low)';
+    Dlow.img = reshape(LowD(1,:),siz(1:3));
+    Dlow.VD = data.VD;
+    Dlow.img(data.mask == 0) = 0;
+
+    data.img = exp(data.img);
+    f.img = abs(data.img(:,1) - exp(DTp(:,7)))./data.img(:,1);
     f.img = reshape(f.img,siz(1:3));
     f.VD = data.VD;
     f.img(data.mask == 0) = 0;
