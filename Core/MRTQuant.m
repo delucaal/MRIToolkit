@@ -1,3 +1,5 @@
+
+
 %%%$ Included in MRIToolkit (https://github.com/delucaal/MRIToolkit) %%%
 %%% Alberto De Luca - alberto@isi.uu.nl $%%%
 %%% Distributed under the terms of LGPLv3  %%%
@@ -22,6 +24,7 @@ classdef MRTQuant < handle
             [I,VD,~,hdr] = EDTI_Library.E_DTI_read_nifti_file(data_file);
             data.img = I;
             data.VD = VD;
+            data.hdr = hdr;
             
             if(apply_intensity_scale == 1 && hdr.dime.scl_slope ~= 0 && ...
                     isfinite(hdr.dime.scl_slope) && isfinite(hdr.dime.scl_inter))
@@ -38,7 +41,7 @@ classdef MRTQuant < handle
         
         function ConformSpatialDimensions(varargin)
         % Ensures consistency with the coordinate systems of MRIToolkit and
-        % ExplorMRTQuant. Input arguments:
+        % ExploreDTI. Input arguments:
         % nii_file: the input file
         % output: the output file
             if( isempty(varargin))
@@ -402,6 +405,7 @@ classdef MRTQuant < handle
                 my_help('MRTQuant.PerformDTI_DKIFit');
                 return;
             end                    
+            global MRIToolkit;
             
             json.CallFunction = 'MRTQuant.PerformDTI_DKIFit';
             json.Description = my_help('MRTQuant.PerformDTI_DKIFit');
@@ -495,9 +499,16 @@ classdef MRTQuant < handle
                 Mask_par = option_value;
                 json.mask_file = Mask_par;
             else
-                Mask_par.tune_NDWI = 0.5;
-                Mask_par.tune_DWI = 0.5;
-                Mask_par.mfs = 7;
+                if(isfield(MRIToolkit,'EDTI_settings') && ...
+                        isfield(MRIToolkit.EDTI_settings,'Mask_par'))
+                    Mask_par.tune_NDWI = MRIToolkit.EDTI_settings.Mask_par.tune_NDWI;
+                    Mask_par.tune_DWI = MRIToolkit.EDTI_settings.Mask_par.tune_DWI;
+                    Mask_par.mfs = 7;
+                else
+                    Mask_par.tune_NDWI = 0.5;
+                    Mask_par.tune_DWI = 0.5;
+                    Mask_par.mfs = 7;
+                end
             end
             
             if(isempty(perm) || isempty(flip))
@@ -585,375 +596,23 @@ classdef MRTQuant < handle
         end
         
         function PerformDTIBased_FiberTracking(varargin)
-        % This function performs whole volume deterministic fiber
-        % tractography using the first eigenvector of the DTI fit. Possible
-        % input arguments are:
-        % mat_file: The ExpoloreDTI-like .mat file
-        % output: The output tracts (must be .mat)
-        %  SeedPointRes: The seeding resolution in mm, as [2 2 2] (default)
-        %  StepSize: the step size in mm, as 1 (default)
-        %  FAThresh: The FA thredshold to stop tracking, as 0.2000 	(default)
-        %  AngleThresh: The angle threshold to stop tracking, as 30 (default)
-        %  FiberLengthRange: The mininum - maximum allowed fiber length in mm: [30 500]
-            if(isempty(varargin))
-                my_help('MRTQuant.PerformDTIBased_FiberTracking');
-                return;
-            end
-            
-            json.CallFunction = 'MRTQuant.PerformDTIBased_FiberTracking';
-            json.Description = my_help('MRTQuant.PerformDTIBased_FiberTracking');
-                        
-            coptions = varargin;
-            file_in = GiveValueForName(coptions,'mat_file');
-            if(isempty(file_in))
-                error('Need to specify the input .mat file');
-            end
-            
-            json.ReferenceFile = file_in;
-            json.ProcessingType = 'FiberTractography';
-            
-            filename_out = GiveValueForName(coptions,'output');
-            if(isempty(filename_out))
-                error('Need to specify the output .mat file');
-            end
-            
-            option = GiveValueForName(coptions,'SeedPointRes');
-            if(isempty(option))
-                parameters.SeedPointRes = [2 2 2];
-            else
-                parameters.SeedPointRes = option;
-            end
-            
-            option = GiveValueForName(coptions,'StepSize');
-            if(isempty(option))
-                parameters.StepSize = 1;
-            else
-                parameters.StepSize = option;
-            end
-            
-            option = GiveValueForName(coptions,'FAThresh');
-            if(isempty(option))
-                parameters.FAThresh = 0.2;
-            else
-                parameters.FAThresh = option;
-            end
-            
-            option = GiveValueForName(coptions,'AngleThresh');
-            if(isempty(option))
-                parameters.AngleThresh = 30;
-            else
-                parameters.AngleThresh = option;
-            end
-            
-            option = GiveValueForName(coptions,'FiberLengthRange');
-            if(isempty(option))
-                parameters.FiberLengthRange = [30 500];
-            else
-                parameters.FiberLengthRange = option;
-            end
-            
-            json.parameters = parameters;
-            
-            EDTI_Library.WholeBrainTrackingDTI_fast(file_in, filename_out, parameters);
-            NiftiIO_basic.WriteJSONDescription('output',filename_out(1:end-4),'props',json);
+            % This function is deprecated. Please use MRTTrack.PerformDTIBased_FiberTracking
+            warning('% This function is deprecated. Please use MRTTrack.PerformDTIBased_FiberTracking');            
         end
         
-        function CSD_FOD = PerformCSD(varargin)
-        % This function compute the fiber orientation distribution (FOD)
-        % using constrained spherical deconvolution (CSD) with recursive
-        % response function calibration. Input arguments:
-        % mat_file: The .mat file of the data in ExploreDTI-like format
-        % mscsd: Use multi-shell multi-tissue CSD in place of classic CSD.
-        % rc_mask_file: This is an optional argument to enforce the
-        % selection of the response function within the provided .nii mask
-        % output: The outout .nii where to save the FOD
-        % Lmax: order of the spherical harmonics. Default is 8.
-        % T1seg: pveseg file output of FSL FAST containing 3 tissue classes
-        %   (WM, GM, CSF)   
-        % save_sh: 0 or 1. Save the SH coefficients of the data (csd only)
-        % rf_dti: use a DTI based response function in place of recursive calibration.
-        %         input as "FA MDx10^3(mm2/s)" of the desired response function, e.g "0.7 1.0"
-        %         valid only in combination with csd
-            if(isempty(varargin))
-                my_help('MRTQuant.PerformCSD');
-                return;
-            end   
-                    
-            json.CallFunction = 'MRTQuant.PerformCSD';
-            json.Description = my_help('MRTQuant.PerformCSD');
-
-            coptions = varargin;
-            file_in = GiveValueForName(coptions,'mat_file');
-            if(isempty(file_in))
-                error('Need to specify the input .mat file');
-            end
-            
-            json.ReferenceFile = file_in;
-            json.ProcessingType = 'Quantification';
-            
-            rc_mask_file = GiveValueForName(coptions,'rc_mask_file');
-            if(isempty(rc_mask_file))
-                rc_mask_file = '';
-            end
-            
-            json.rc_mask_file = rc_mask_file;
-            
-            filename_out = GiveValueForName(coptions,'output');
-            if(isempty(filename_out))
-                filename_out = [file_in(1:end-4) '_CSD_FOD.nii'];
-            end
-            
-            option = GiveValueForName(coptions,'Lmax');
-            if(~isempty(option))
-                Lmax = option;
-            else
-                Lmax = 8;
-            end
-            
-            json.Lmax = Lmax;
-            
-            option = GiveValueForName(coptions,'T1seg');
-            if(~isempty(option))
-                t1_seg = option;
-            else
-                t1_seg = '';
-            end
-            
-            json.t1_seg = t1_seg;
-            
-            save_sh = GiveValueForName(coptions,'save_sh');
-            if(isempty(save_sh))
-                save_sh = 0;
-            end            
-
-            json.save_sh = save_sh;
-            
-            dti_rf = GiveValueForName(coptions,'rf_dti');
-            json.dti_rf = dti_rf;           
-            
-            mscsd = GiveValueForName(coptions,'mscsd');
-            if(isempty(mscsd) || mscsd == 0)
-                if(isempty(dti_rf))
-                    CSD_FOD = EDTI_Library.E_DTI_Get_HARDI_CSD_FOD_RC(file_in,Lmax,rc_mask_file,filename_out,save_sh);
-                else
-                    pieces = strsplit(dti_rf);
-                    sim_fa = str2double(pieces{1});
-                    sim_adc = str2double(pieces{2})*1e-3;
-                    CSD_FOD = EDTI_Library.E_DTI_Get_HARDI_CSD_FOD(file_in, 1, Lmax,sim_adc, sim_fa,filename_out,save_sh);
-                end
-            else
-                disp('Running MS-CSD (beta mode)...')
-                CSD_FOD = EDTI_Library.E_DTI_Get_HARDI_CSD_FOD_RC_MuSh(file_in,Lmax,rc_mask_file,filename_out,t1_seg);
-            end
-            json.mscsd = mscsd;
-                           
-            NiftiIO_basic.WriteJSONDescription('output',filename_out(1:end-4),'props',json);
-            if(nargout == 0)
-                CSD_FOD = [];
-            end
-            
+        function PerformCSD(varargin)
+           % This function is deprecated. Please use MRTTrack.PerformCSD
+            warning('% This function is deprecated. Please use MRTTrack.PerformCSD');            
         end   
 
         function PerformFODBased_FiberTracking(varargin)
-        % This function performs whole volume deterministic fiber
-        % tractography of an FOD in spherical harmonics. Possible
-        % input arguments are:
-        % mat_file: The ExpoloreDTI-like .mat file (for reference)
-        % fod_file: The ExpoloreDTI-like FOD .nii file (in SH basis)
-        % output: The output tracts (must be .mat)
-        % SeedPointRes: The seeding resolution in mm, as [2 2 2] (default)
-        % StepSize: the step size in mm, as 1 (default)
-        % FODThresh: The FOD thredshold to stop tracking, as 0.1000 	(default)
-        % AngleThresh: The angle threshold to stop tracking, as 30 (default)
-        % FiberLengthRange: The mininum - maximum allowed fiber length in mm: [30 500]
-        % SeedMask: A mask to perform the seeding. If empty, the whole
-        %   volume is used
-        % Default parameters:
-        %  SeedPointRes: [2 2 2]
-        %             StepSize: 1
-        %          AngleThresh: 30
-        %     FiberLengthRange: [30 500]
-        %     FODThresh: 0.1
-
-            if(isempty(varargin))
-                my_help('MRTQuant.PerformFODBased_FiberTracking');
-                return;
-            end  
-
-            json.CallFunction = 'MRTQuant.PerformFODBased_FiberTracking';
-            json.Description = my_help('MRTQuant.PerformFODBased_FiberTracking');
-
-            coptions = varargin;
-            file_in = GiveValueForName(coptions,'mat_file');
-            if(isempty(file_in))
-                error('Need to specify the input .mat file');
-            end
-            
-            json.ReferenceFile = file_in;
-            json.ProcessingType = 'FiberTractography';
-            
-            fod_file = GiveValueForName(coptions,'fod_file');
-            if(isempty(fod_file))
-                error('Need to specify the input FOD file/variable');
-            end
-            json.fod_file = fod_file;
-            
-            filename_out = GiveValueForName(coptions,'output');
-            if(isempty(filename_out))
-                error('Need to specify the output .mat file');
-            end
-            
-            option = GiveValueForName(coptions,'SeedPointRes');
-            if(isempty(option))
-                parameters.SeedPointRes = [2 2 2];
-            else
-                parameters.SeedPointRes = option;
-            end
-            
-            option = GiveValueForName(coptions,'StepSize');
-            if(isempty(option))
-                parameters.StepSize = 1;
-            else
-                parameters.StepSize = option;
-            end
-            
-            option = GiveValueForName(coptions,'FODThresh');
-            if(isempty(option))
-                parameters.blob_T = 0.1;
-            else
-                parameters.blob_T = option;
-            end
-            
-            option = GiveValueForName(coptions,'AngleThresh');
-            if(isempty(option))
-                parameters.AngleThresh = 30;
-            else
-                parameters.AngleThresh = option;
-            end
-            
-            option = GiveValueForName(coptions,'FiberLengthRange');
-            if(isempty(option))
-                parameters.FiberLengthRange = [30 500];
-            else
-                parameters.FiberLengthRange = option;
-            end
-            
-            option = GiveValueForName(coptions,'SeedMask');
-            if(isempty(option))
-                parameters.SeedMask = [];
-            else
-                parameters.SeedMask = option;
-            end
-            
-            parameters.randp = 0;
-            
-            json.TrackingParameters = parameters;
-            
-            EDTI_Library.WholeBrainFODTractography(file_in,fod_file,parameters,filename_out);
-            NiftiIO_basic.WriteJSONDescription('output',filename_out(1:end-4),'props',json);
+           % This function is deprecated. Please use MRTTrack.PerformFODBased_FiberTracking
+            warning('% This function is deprecated. Please use MRTTrack.PerformFODBased_FiberTracking');            
         end        
 
         function Perform_mFOD_FiberTracking(varargin)
-        % This function performs whole volume deterministic fiber
-        % tractography of multiple FODs in spherical harmonics. Possible
-        % input arguments are:
-        % mat_file: The ExpoloreDTI-like .mat file (for reference)
-        % fod_basename: The name prefix used for the mFOD output (see the SphericalDeconvolution class) (in SH basis)
-        % output: The output tracts (must be .mat)
-        % SeedPointRes: The seeding resolution in mm, as [2 2 2] (default)
-        % StepSize: the step size in mm, as 1 (default)
-        % FODThresh: The FOD thredshold to stop tracking, as 0.1000 	(default)
-        % AngleThresh: The angle threshold to stop tracking, as 30 (default)
-        % FiberLengthRange: The mininum - maximum allowed fiber length in mm: [30 500]
-        % SeedMask: A mask to perform the seeding. If empty, the whole
-        %   volume is used
-        % InterpolationMode: how to merge the mulitple FODs. 'linear'
-        %   corresponds to mFOD-WS (each FOD weighted by its fraction and
-        %   summed), whereas 'majority' tracks the locally larger
-        %   FOD
-
-            if(isempty(varargin))
-                my_help('MRTQuant.Perform_mFOD_FiberTracking');
-                return;
-            end  
-
-            json.CallFunction = 'MRTQuant.Perform_mFOD_FiberTracking';
-            json.Description = my_help('MRTQuant.PerformFODBased_FiberTracking');
-
-            coptions = varargin;
-            file_in = GiveValueForName(coptions,'mat_file');
-            if(isempty(file_in))
-                error('Need to specify the input .mat file');
-            end
-            json.ReferenceFile = file_in;
-            json.ProcessingType = 'FiberTractography';
-            
-            fod_basename = GiveValueForName(coptions,'fod_basename');
-            if(isempty(fod_basename))
-                error('Need to specify the input FOD basename');
-            end
-            json.fod_basename = fod_basename;
-            
-            filename_out = GiveValueForName(coptions,'output');
-            if(isempty(filename_out))
-                error('Need to specify the output .mat file');
-            end
-            
-            option = GiveValueForName(coptions,'SeedPointRes');
-            if(isempty(option))
-                parameters.SeedPointRes = [2 2 2];
-            else
-                parameters.SeedPointRes = option;
-            end
-            
-            option = GiveValueForName(coptions,'StepSize');
-            if(isempty(option))
-                parameters.StepSize = 1;
-            else
-                parameters.StepSize = option;
-            end
-            
-            option = GiveValueForName(coptions,'FODThresh');
-            if(isempty(option))
-                parameters.blob_T = 0.1;
-            else
-                parameters.blob_T = option;
-            end
-            
-            option = GiveValueForName(coptions,'AngleThresh');
-            if(isempty(option))
-                parameters.AngleThresh = 30;
-            else
-                parameters.AngleThresh = option;
-            end
-            
-            option = GiveValueForName(coptions,'FiberLengthRange');
-            if(isempty(option))
-                parameters.FiberLengthRange = [30 500];
-            else
-                parameters.FiberLengthRange = option;
-            end
-            
-            option = GiveValueForName(coptions,'SeedMask');
-            if(isempty(option))
-                parameters.SeedMask = [];
-            else
-                parameters.SeedMask = option;
-            end
-            
-            option = GiveValueForName(coptions,'InterpolationMode');
-            if(isempty(option))
-                interpolation_mode = 'linear';
-            else
-                interpolation_mode = option;
-            end
-            
-            parameters.randp = 0;
-            json.TrackingParameters = parameters;
-            
-            EDTI_Library.WholeBrainTracking_mDRL_fast_exe(file_in, fod_basename, filename_out, parameters, interpolation_mode); 
-
-            NiftiIO_basic.WriteJSONDescription('output',filename_out(1:end-4),'props',json);
+           % This function is deprecated. Please use MRTTrack.Perform_mFOD_FiberTracking
+            warning('% This function is deprecated. Please use MRTTrack.Perform_mFOD_FiberTracking');            
         end
         
         function MatMetrics2Nii(mat_file_in,dki_export)
@@ -1114,7 +773,7 @@ classdef MRTQuant < handle
         % do_moco: 0-1 disabling/enabling the motion/eddy currents correction part
         % epi_tgt: The T1/T2 to use for EPI correction (via registration).
         %       If set, this automatically enables the registration step
-        % constraint_epi: a vector in the form 010 enabling or disabling
+        % constraint_epi: a vector in the form [0 1 0] enabling or disabling
         %       LR/AP/FH deformations
         % epi_reg_mode: Which image to use for registration toward the epi_tgt
         %       'b0' (use the first b=0s/mm2, default), 'avg_dwis' (use the average
@@ -1178,12 +837,22 @@ classdef MRTQuant < handle
             par = basic_info.par;
             par.cust_mask.NS = '';
             par.cust_mask.TS = '';
-            par.mask_P.NS.mfs = 5;
-            par.mask_P.NS.NDWI = 0.7;
-            par.mask_P.NS.DWI = 0.7;
-            par.mask_P.TS.mfs = 5;
-            par.mask_P.TS.NDWI = 0.7;
-            par.mask_P.TS.DWI = 0.7;
+            try
+                mpar = load(file_in,'Mask_par');
+                par.mask_P.NS.mfs = 5;
+                par.mask_P.NS.NDWI = mpar.Mask_par.tune_NDWI;
+                par.mask_P.NS.DWI = mpar.Mask_par.tune_DWI;
+                par.mask_P.TS.mfs = 5;
+                par.mask_P.TS.NDWI = mpar.Mask_par.tune_NDWI;
+                par.mask_P.TS.DWI = mpar.Mask_par.tune_DWI;
+            catch
+                par.mask_P.NS.mfs = 5;
+                par.mask_P.NS.NDWI = 0.7;
+                par.mask_P.NS.DWI = 0.7;
+                par.mask_P.TS.mfs = 5;
+                par.mask_P.TS.NDWI = 0.7;
+                par.mask_P.TS.DWI = 0.7;
+            end
             par.R2D.type = 0;
             par.R2D.FN = '';
             par.R2D.contrast = 1;
@@ -1242,7 +911,11 @@ classdef MRTQuant < handle
             
             option_value = GiveValueForName(coptions,'constraint_epi');
             if(~isempty(option_value))
-                par.EPI.Deriv_Scales = [(option_value(1)) (option_value(2)) (option_value(3))];
+                if(~ischar(option_value))
+                    par.EPI.Deriv_Scales = [(option_value(1)) (option_value(2)) (option_value(3))];
+                else
+                    par.EPI.Deriv_Scales = [str2double(option_value(1)) str2double(option_value(2)) str2double(option_value(3))];
+                end
             end
             
             option_value = GiveValueForName(coptions,'epi_reg_mode');
@@ -1254,7 +927,7 @@ classdef MRTQuant < handle
                 elseif(strcmpi(option_value,'fa'))
                     par.R2D.contrast = 2;
                 else
-                    error(['Unexpected constrain_epi value: ' option_value]);
+                    error(['Unexpected epi_reg_mode value: ' option_value]);
                 end
             end
             
@@ -1357,10 +1030,11 @@ classdef MRTQuant < handle
         
         function SelectVolumesWithBvals(varargin)
         % Select a subset of volumes in 4D .nii file based on their diffusion weighting. 
-        % The function expects a .bval/.bvec files couple or a .txt (b-matrix) file in the folder
-        % of the .nii file and with the same name 
+        % The function expects a .mat file, or a .bval/.bvec files couple or a .txt (b-matrix) file in the folder
+        % of the .nii file and with the same name
         % Input arguments:
         % nii_file: the .nii file of the original data
+        % mat_file: the .mat file of the original data
         % bvals: an array containing the b-values to select, e.g. [0 1000]
         % output: the new .nii file containing a subset of the volumes.
         % tol: the tolerance around the specified b-values
@@ -1373,10 +1047,13 @@ classdef MRTQuant < handle
             json.Description = my_help('MRTQuant.SelectVolumesWithBvals');
 
             coptions = varargin;
-            file_in = GiveValueForName(coptions,'nii_file');
+            file_in = GiveValueForName(coptions,'mat_file');
             if(isempty(file_in))
-                error('Need to specify the input .nii file');
-            end       
+                file_in = GiveValueForName(coptions,'nii_file');
+                if(isempty(file_in))
+                    error('Need to specify the input .nii or .mat file');
+                end       
+            end
             
             json.ReferenceFile = file_in;
             json.ProcessingType = 'Preprocessing';
@@ -1394,13 +1071,23 @@ classdef MRTQuant < handle
             tol = GiveValueForName(coptions,'tol');
 
             use_txt = 0;
-            if(exist([file_in(1:end-4) '.bval'],'file'))
-                bval = load([file_in(1:end-4) '.bval']);
-                bvec = load([file_in(1:end-4) '.bvec']);
+            if(contains(file_in(end-4:end),'mat'))
+               dta = load(file_in,'DWI','b','VDims');
+               [bval,bvec] = MRTQuant.bval_bvec_from_b_Matrix(dta.b);
+               bval = bval';
+               bvec = bvec';
+               data = EDTI_Library.E_DTI_DWI_cell2mat(dta.DWI);
+               VD = dta.VDims;
             else
-                use_txt = 1;
-                bmat = load([file_in(1:end-4) '.txt']);
-                [bval,~] = MRTQuant.bval_bvec_from_b_Matrix(bmat);
+                [data,VD] = EDTI_Library.E_DTI_read_nifti_file(file_in);
+                if(exist([file_in(1:end-4) '.bval'],'file'))
+                    bval = load([file_in(1:end-4) '.bval']);
+                    bvec = load([file_in(1:end-4) '.bvec']);
+                else
+                    use_txt = 1;
+                    bmat = load([file_in(1:end-4) '.txt']);
+                    [bval,~] = MRTQuant.bval_bvec_from_b_Matrix(bmat);
+                end
             end
             IX = false(size(bval));
             for ij=1:length(bvals_list)
@@ -1411,7 +1098,6 @@ classdef MRTQuant < handle
                 end
                 IX(abs(round(bval)-bvals_list(ij)) <= u_tol) = true;
             end     
-            [data,VD] = EDTI_Library.E_DTI_read_nifti_file(file_in);
             data = data(:,:,:,IX);
             bval = bval(IX);
             if(use_txt == 1)
@@ -2027,6 +1713,8 @@ classdef MRTQuant < handle
             % (typically b=200s/mm2)
             % output: the output prefix name (suffixes and .nii will be
             % added automatically)   
+            % do_geoavg: 0-1, whether to perform geometric averaging
+            % (default 1)
             
             coptions = varargin;
 
@@ -2070,6 +1758,11 @@ classdef MRTQuant < handle
             if(isempty(fit_dt))
                 fit_dt = 0;
             end
+            
+            do_geoavg = GiveValueForName(coptions,'do_geoavg');
+            if(isempty(do_geoavg))
+                do_geoavg = 1;
+            end
 
             output_prefix = GiveValueForName(coptions,'output');
             if(isempty(output_prefix))
@@ -2094,6 +1787,10 @@ classdef MRTQuant < handle
 
             mask = MRTQuant.LoadNifti(mask_name);
             data.mask = mask.img;
+            
+            if(do_geoavg == 1)
+                data = QuickGeoAverage(data);
+            end
             
             if(fit_dt == 0)
                 [Dhigh,Dlow,f] = SegmentedIVIMFit2Comp(data,parameters);
@@ -2130,6 +1827,8 @@ classdef MRTQuant < handle
             % added automatically)   
             % correct_data: 0 or 1. Whether to remove the FW signal from the data
             % (which can be later fit with DTI to get FW-corrected FA/MD)
+            % do_geoavg: 0-1, whether to perform geometric averaging
+            % (default 1)
             
             coptions = varargin;
 
@@ -2193,6 +1892,15 @@ classdef MRTQuant < handle
                 correct_data = 0;
             end            
             
+            do_geoavg = GiveValueForName(coptions,'do_geoavg');
+            if(isempty(do_geoavg))
+                do_geoavg = 1;
+            end
+
+            if(do_geoavg == 1)
+                data = QuickGeoAverage(data);
+            end
+            
             [Dhigh,f,S0] = FWFit2Comp(data,parameters);
 
             MRTQuant.WriteNifti(f,[output_prefix '_ffw.nii']);
@@ -2208,11 +1916,10 @@ classdef MRTQuant < handle
             end
             
         end                
- 
-        function PerformIVIM_FW_Fit(varargin)
-            % Perform an IVIM + FW + ADC non-linear fit.
+
+        function PerformIVIM_Fit(varargin)
+            % Perform an IVIM + ADC non-linear fit.
             % The input MUST have multiple diffusion weightings (2+) including low b-values (b<=200s/mm2)
-            % as well as intermediate b-values (200 < b < 1000s/mm2). 
             % Input arguments:
             % nii_file: the target .nii file
             % bval_file: the corresponding .bval file
@@ -2222,10 +1929,12 @@ classdef MRTQuant < handle
             % mat_file: the target .mat file (overrides nii_file,
             % bval_file, bvec_file)
             % mask_file: a mask file defining the volume to fit
-            % parameters.min_bval: Minimum b-value to use
-            % parameters.max_bval: Maximum b-value to use
+            % min_bval: Minimum b-value to use
+            % max_bval: Maximum b-value to use
             % output: the output prefix name (suffixes and .nii will be
             % added automatically)   
+            % do_geoavg: 0-1, whether to perform geometric averaging
+            % (default 1)
             
             coptions = varargin;
 
@@ -2280,8 +1989,109 @@ classdef MRTQuant < handle
                 error('Need to specify the maximum b-value (max_bval)');
             end
             
+            do_geoavg = GiveValueForName(coptions,'do_geoavg');
+            if(isempty(do_geoavg))
+                do_geoavg = 1;
+            end
+            
             mask = MRTQuant.LoadNifti(mask_name);
             data.mask = mask.img;
+            
+            if(do_geoavg == 1)
+                data = QuickGeoAverage(data);
+            end
+            
+            [Dhigh,fivim,DStar] = IVIMFit2Comp(data,parameters);
+
+            MRTQuant.WriteNifti(fivim,[output_prefix '_fivim.nii']);
+            MRTQuant.WriteNifti(DStar,[output_prefix '_Dstar.nii']);
+            MRTQuant.WriteNifti(Dhigh,[output_prefix '_Dhigh.nii']);
+        end                
+        
+        function PerformIVIM_FW_Fit(varargin)
+            % Perform an IVIM + FW + ADC non-linear fit.
+            % The input MUST have multiple diffusion weightings (2+) including low b-values (b<=200s/mm2)
+            % as well as intermediate b-values (200 < b < 1000s/mm2). 
+            % Input arguments:
+            % nii_file: the target .nii file
+            % bval_file: the corresponding .bval file
+            % bvec_file: the corresponding .bvec file
+            % txt_file: the target .txt file (overrides
+            % bval_file,bvec_file)
+            % mat_file: the target .mat file (overrides nii_file,
+            % bval_file, bvec_file)
+            % mask_file: a mask file defining the volume to fit
+            % min_bval: Minimum b-value to use
+            % max_bval: Maximum b-value to use
+            % output: the output prefix name (suffixes and .nii will be
+            % added automatically)   
+            % do_geoavg: 0-1, whether to perform geometric averaging
+            % (default 1)
+            
+            coptions = varargin;
+
+            mat_name = GiveValueForName(coptions,'mat_file');           
+            
+            if(isempty(mat_name))
+                data_name = GiveValueForName(coptions,'nii_file');
+                if(isempty(data_name))
+                    error('Need to specify the target file (nii_file)');
+                end
+                data = MRTQuant.LoadNifti(data_name);
+
+                txt_name = GiveValueForName(coptions,'txt_file');
+
+                if(isempty(txt_name))
+                    bvec_name = GiveValueForName(coptions,'bvec_file');
+                    if(isempty(bvec_name))
+                        error('Need to specify the bvec file (bvec_file)');
+                    end
+
+                    bval_name = GiveValueForName(coptions,'bval_file');
+                    if(isempty(bval_name))
+                        error('Need to specify the bval file (bval_file)');
+                    end
+                    data.bvals = load(bval_name)';
+                    data.bvecs = load(bvec_name)';
+                else
+                    gmat = load(txt_name);
+                    [data.bvals,data.bvecs] = MRTQuant.bval_bvec_from_b_Matrix(gmat);
+                end
+            else
+                data = MRTQuant.EDTI_Data_2_MRIToolkit('mat_file',mat_name);
+            end
+            
+            mask_name = GiveValueForName(coptions,'mask_file');
+            if(isempty(mask_name))
+                error('Need to specify the mask file (mask_file)');
+            end
+            
+            output_prefix = GiveValueForName(coptions,'output');
+            if(isempty(output_prefix))
+                error('Need to specify the output prefix (output)');
+            end
+            
+            parameters.min_bval = GiveValueForName(coptions,'min_bval');
+            if(isempty(parameters.min_bval))
+                error('Need to specify the minimum b-value (min_bval)');
+            end
+            
+            parameters.max_bval = GiveValueForName(coptions,'max_bval');
+            if(isempty(parameters.max_bval))
+                error('Need to specify the maximum b-value (max_bval)');
+            end
+            
+            do_geoavg = GiveValueForName(coptions,'do_geoavg');
+            if(isempty(do_geoavg))
+                do_geoavg = 1;
+            end
+            
+            mask = MRTQuant.LoadNifti(mask_name);
+            data.mask = mask.img;
+            
+            if(do_geoavg == 1)
+                data = QuickGeoAverage(data);
+            end
             
             [Dhigh,Dlow,ffw,fivim] = IVIMFWFit3Comp(data,parameters);
 
@@ -3030,7 +2840,7 @@ end
 
 % Segmented IVIM + tissue (isotropic) fit
 function [Dhigh,Dlow,f] = SegmentedIVIMFit2Comp(data,parameters)
-    data = QuickGeoAverage(data);
+    data.img = single(data.img);
     IX_high = data.bvals >= parameters.bthresh & data.bvals <= parameters.max_bval;
     IX_low = data.bvals >= parameters.min_bval & data.bvals < parameters.bthresh;
 
@@ -3096,7 +2906,7 @@ end
 
 % FW + Tissue (isotropic) non-linear fit
 function [Dhigh,f,S0] = FWFit2Comp(data,parameters)
-    data = QuickGeoAverage(data);
+    data.img = double(data.img);
     IX_high = data.bvals >= parameters.min_bval & data.bvals <= parameters.max_bval;
 
     x0 = [1 0.05 0.7e-3];
@@ -3134,6 +2944,55 @@ function [Dhigh,f,S0] = FWFit2Comp(data,parameters)
     toc
 end
 
+% IVIM + D model
+function [out,S] = IVIM2CompartmentsModel(x0,params)
+    S = x0(1)*((1-x0(2))*exp(-params.b*x0(3))+x0(2)*exp(-params.b*x0(4)));
+    out = params.S - S;
+end
+
+% FW + Tissue (isotropic) non-linear fit
+function [Dhigh,f,DStar,S0] = IVIMFit2Comp(data,parameters)
+    data.img = double(data.img);
+    IX_high = data.bvals >= parameters.min_bval & data.bvals <= parameters.max_bval;
+
+    x0 = [1 0.05 0.7e-3 50e-3];
+    lb = [0 0 0 5e-3];
+    ub = [1 1 3e-3 300e-3];
+    
+    Dhigh.img = zeros(size(data.img(:,:,:,1)));
+    Dhigh.VD = data.VD;
+    f.img = zeros(size(data.img(:,:,:,1)));
+    f.VD = data.VD;
+    S0.img = zeros(size(data.img(:,:,:,1)));
+    S0.VD = data.VD;
+    DStar.img = zeros(size(data.img(:,:,:,1)));
+    DStar.VD = data.VD;
+    
+    siz = size(data.img);
+    
+    data.img = (reshape(data.img,siz(1)*siz(2)*siz(3),siz(4)));
+    data.img = permute(data.img,[2 1]);
+    points2fit = find(data.mask > 0);
+
+    options = optimset('TolX',1e-3,'TolFun',1e-3,'Display','off');
+    params.b = data.bvals(IX_high);
+    tic
+    for pi=1:length(points2fit)
+        if(mod(pi,1000) == 0)
+            disp(['IVIM fit: ' num2str(pi/length(points2fit)*100) '%']);
+        end
+        params.S = data.img(IX_high,points2fit(pi));
+        x0(1) = params.S(1);
+        ub(1) = 2*params.S(1);
+        p = lsqnonlin(@IVIM2CompartmentsModel,x0,lb,ub,options,params);
+        DStar.img(points2fit(pi)) = p(4);
+        Dhigh.img(points2fit(pi)) = p(3);
+        f.img(points2fit(pi)) = p(2);
+        S0.img(points2fit(pi)) = p(1);
+    end
+    toc
+end
+
 % IVIM + FW + D model
 function [out,S] = IVIMFW3CompartmentsModel(x0,params)
     S0 = x0(1);
@@ -3148,7 +3007,7 @@ end
 
 % IVIM + FW + Tissue (isotropic) non-linear fit
 function [Dhigh,DStar,ffw,fivim] = IVIMFWFit3Comp(data,parameters)
-    data = QuickGeoAverage(data);
+    data.img = double(data.img);
     IX_high = data.bvals >= parameters.min_bval & data.bvals <= parameters.max_bval;
 
     x0 = [1 0.05 0.05 0.7e-3 10e-3];
@@ -3190,7 +3049,7 @@ function [Dhigh,DStar,ffw,fivim] = IVIMFWFit3Comp(data,parameters)
 end
 
 % This function implements the MK curve fit and is not part of the 
-% original code of ExplorMRTQuant. (10.1016/j.neuroimage.2019.04.015)
+% original code of ExploreDTI. (10.1016/j.neuroimage.2019.04.015)
 function mkcurve_fit_mat(input_file,output_file)
     data = MRTQuant.EDTI_Data_2_MRIToolkit('mat_file',input_file);
     gradient_info = load(input_file,'b','g','NrB0');

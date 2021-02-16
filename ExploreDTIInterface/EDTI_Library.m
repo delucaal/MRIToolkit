@@ -4574,6 +4574,11 @@ classdef EDTI_Library < handle
             global MRIToolkit;
             
             [DWI,VDims] = EDTI_Library.E_DTI_read_nifti_file(f_DWI);
+            hdr = [];
+            try
+                hdr = load_untouch_header_only(f_DWI);
+            catch
+            end
             
             b = textread(f_BM);
             
@@ -4682,10 +4687,10 @@ classdef EDTI_Library < handle
             
             try
                 save(fnam,'DWI','VDims','b','bval','g','info','FEFA','NrB0','MDims',...
-                    'FA','FE','SE','eigval','DT','outlier','DWIB0','chi_sq','chi_sq_iqr','par','-v7.3')
+                    'FA','FE','SE','eigval','DT','outlier','DWIB0','chi_sq','chi_sq_iqr','par','Mask_par','hdr','-v7.3')
             catch
                 save(fnam,'DWI','VDims','b','bval','g','info','FEFA','NrB0','MDims',...
-                    'FA','FE','SE','eigval','DT','outlier','DWIB0','chi_sq','chi_sq_iqr','par')
+                    'FA','FE','SE','eigval','DT','outlier','DWIB0','chi_sq','chi_sq_iqr','par','Mask_par','hdr')
             end
             
             if exist('KT','var') > 0
@@ -5854,7 +5859,7 @@ classdef EDTI_Library < handle
             EDTI_Library.E_DTI_write_nifti_file(single(gm_mask), VDims, [f_pn filesep nm '_GM_mask.nii']);
             EDTI_Library.E_DTI_write_nifti_file(single(cs_mask), VDims, [f_pn filesep nm '_CSF_mask.nii']);
             
-            [D, max_kernel] = E_DTI_MS_CSD_deconvolution_MuSh_mask(file_in, par, wm_mask, gm_mask, cs_mask, FA_thresh, rc_mask_file);
+            [D, max_kernel] = EDTI_Library.E_DTI_MS_CSD_deconvolution_MuSh_mask(file_in, par, wm_mask, gm_mask, cs_mask, FA_thresh, rc_mask_file);
             
             lmax = EDTI_Library.E_DTI_n2lmax(max_kernel);
             

@@ -259,7 +259,6 @@ classdef MRTTrack < handle
             N = sm;
             op_e2 = optimset('TolX',1e-2);
             op = optimset();
-            max_discarded_vols = round(max_outlier_rejection*st);
             
             [~,DeconvMethodCode] = SphericalDeconvolution.isSupportedMethod(obj.deconv_method); % -1 = failure; 1 = LSQNONNEG; 2 = DW_RegularizedDeconv; 3 = dRL
             if(DeconvMethodCode == -1)
@@ -284,7 +283,6 @@ classdef MRTTrack < handle
                     end
                     
                     Stot = double(obj.data.img(:,x));
-                    fit_data = true(size(Stot));
                     
                     % This normalization assumes there is some b=0s/mm2 data. It is not
                     % essential to do it as long as fractions is normalized at the end
@@ -301,11 +299,11 @@ classdef MRTTrack < handle
                     % fractions guess (with LSQNONNEG)
                     for iter=1:50 % 50 = max number of iterations but usually exits way before
                         
-                        DS = max(Stot-weighted_LRKernel(fit_data,end-NC+1:end)*piso,0); % Subtract GM and CSF contributions
+                        DS = max(Stot-weighted_LRKernel(:,end-NC+1:end)*piso,0); % Subtract GM and CSF contributions
                         
                         if(DeconvMethodCode == 4)
                             %                         fODFC = mat_dRL(DS, weighted_LRKernel(:,1:end-NC), 200, obj.NN_L, 8);
-                            fODFC = ADT_deconv_RLdamp_1D_noEP(DS, weighted_LRKernel(fit_data,1:end-NC),200, obj.NN_H);
+                            fODFC = ADT_deconv_RLdamp_1D_noEP(DS, weighted_LRKernel(:,1:end-NC),200, obj.NN_H);
                         elseif(DeconvMethodCode == 3)
                             %                         fODFC = mat_RL(DS, weighted_LRKernel(:,1:end-NC), 200);
                             fODF = RichardsonLucy(DS, weighted_LRKernel(:,1:end-NC), 200);
@@ -327,7 +325,7 @@ classdef MRTTrack < handle
                             Y(:,1) = Y(:,1)/max(Y(:,1)); % Normalize WM signal
                         end
                         
-                        p = lsqnonneg(Y(fit_data,:),Stot(fit_data)./shell_weight(fit_data)); % Compute the signal fractions
+                        p = lsqnonneg(Y,Stot./shell_weight); % Compute the signal fractions
                         piso = p(end-NC+1:end);
                         
                         % if nothing changed compared to previous iter, exit. (Tol may need to be
@@ -337,26 +335,26 @@ classdef MRTTrack < handle
                         end
                         p_old = p;
                         
-                        if(obj.robust_deconv == 1 && sum(fit_data == 0) < max_discarded_vols)
+                        if(robust_deconv == 1 && sum(fit_data == 0) < max_discarded_vols)
                            residuals = Stot./shell_weight - Y*p;
-                           fit_data = abs(residuals - median(residuals)) < obj.robust_kappa*1.4826*mad(residuals,1);
+                           fit_data = abs(residuals - median(residuals)) < robust_kappa*1.4826*mad(residuals,1);
                         end
                         
                     end
                     
                     % NEW FINAL STEP 05/02/2018
-                    DS = max(Stot(fit_data) - weighted_HRKernel(fit_data,end-NC+1:end)*piso,0); % Subtract GM and CSF contributions
+                    DS = max(Stot - weighted_HRKernel(:,end-NC+1:end)*piso,0); % Subtract GM and CSF contributions
                     
                     if(DeconvMethodCode == 4)
                         %                     fODF = mat_dRL(DS, weighted_HRKernel(:,1:end-NC),200, obj.NN_H, 8);
-                        fODF = ADT_deconv_RLdamp_1D_noEP(DS, weighted_HRKernel(fit_data,1:end-NC),200, obj.NN_H);
+                        fODF = ADT_deconv_RLdamp_1D_noEP(DS, weighted_HRKernel(:,1:end-NC),200, obj.NN_H);
                     elseif(DeconvMethodCode == 3)
                         %                     fODF = mat_RL(DS, weighted_HRKernel(:,1:end-NC), 200);
-                        fODF = RichardsonLucy(DS, weighted_HRKernel(fit_data,1:end-NC), 200);
+                        fODF = RichardsonLucy(DS, weighted_HRKernel(:,1:end-NC), 200);
                     elseif(DeconvMethodCode == 2)
-                        fODF = DW_RegularizedDeconv(weighted_HRKernel(fit_data,1:end-NC),DS,op, obj.L2LSQ_reg);
+                        fODF = DW_RegularizedDeconv(weighted_HRKernel(:,1:end-NC),DS,op, obj.L2LSQ_reg);
                     elseif(DeconvMethodCode == 1)
-                        fODF = lsqnonneg(weighted_HRKernel(fit_data,1:end-NC),DS);
+                        fODF = lsqnonneg(weighted_HRKernel(:,1:end-NC),DS);
                     end
                     fODFC = fODF;
                     fODFC(fODFC < median(fODFC)) = 0;
@@ -379,7 +377,7 @@ classdef MRTTrack < handle
                         end
                         Y = [Y weighted_HRKernel(:,end-NC+1:end)]; % 3 columns (WM-SIGNAL GM-SIGNAL CSF-SIGNAL)
                     end
-                    p = lsqnonneg(Y(fit_data,:),Stot(fit_data)./shell_weight(fit_data),op_e2); % Compute the signal fractions
+                    p = lsqnonneg(Y,Stot./shell_weight,op_e2); % Compute the signal fractions
                     RSS(x) = sum((Stot-Y*p).^2);
                     
                     fractions(x,:) = p;
@@ -1956,379 +1954,6 @@ classdef MRTTrack < handle
                 %         'field_file',fullfile(subj_dest_folder,'anat','T1_FP_CAT12','mri','y_T1_FP.nii'));
             end
         end
-        
-        function PerformDTIBased_FiberTracking(varargin)
-        % This function performs whole volume deterministic fiber
-        % tractography using the first eigenvector of the DTI fit. Possible
-        % input arguments are:
-        % mat_file: The ExpoloreDTI-like .mat file
-        % output: The output tracts (must be .mat)
-        %  SeedPointRes: The seeding resolution in mm, as [2 2 2] (default)
-        %  StepSize: the step size in mm, as 1 (default)
-        %  FAThresh: The FA thredshold to stop tracking, as 0.2000 	(default)
-        %  AngleThresh: The angle threshold to stop tracking, as 30 (default)
-        %  FiberLengthRange: The mininum - maximum allowed fiber length in mm: [30 500]
-            if(isempty(varargin))
-                my_help('MRTQuant.PerformDTIBased_FiberTracking');
-                return;
-            end
-            
-            json.CallFunction = 'MRTQuant.PerformDTIBased_FiberTracking';
-            json.Description = my_help('MRTQuant.PerformDTIBased_FiberTracking');
-                        
-            coptions = varargin;
-            file_in = GiveValueForName(coptions,'mat_file');
-            if(isempty(file_in))
-                error('Need to specify the input .mat file');
-            end
-            
-            json.ReferenceFile = file_in;
-            json.ProcessingType = 'FiberTractography';
-            
-            filename_out = GiveValueForName(coptions,'output');
-            if(isempty(filename_out))
-                error('Need to specify the output .mat file');
-            end
-            
-            option = GiveValueForName(coptions,'SeedPointRes');
-            if(isempty(option))
-                parameters.SeedPointRes = [2 2 2];
-            else
-                parameters.SeedPointRes = option;
-            end
-            
-            option = GiveValueForName(coptions,'StepSize');
-            if(isempty(option))
-                parameters.StepSize = 1;
-            else
-                parameters.StepSize = option;
-            end
-            
-            option = GiveValueForName(coptions,'FAThresh');
-            if(isempty(option))
-                parameters.FAThresh = 0.2;
-            else
-                parameters.FAThresh = option;
-            end
-            
-            option = GiveValueForName(coptions,'AngleThresh');
-            if(isempty(option))
-                parameters.AngleThresh = 30;
-            else
-                parameters.AngleThresh = option;
-            end
-            
-            option = GiveValueForName(coptions,'FiberLengthRange');
-            if(isempty(option))
-                parameters.FiberLengthRange = [30 500];
-            else
-                parameters.FiberLengthRange = option;
-            end
-            
-            json.parameters = parameters;
-            
-            EDTI_Library.WholeBrainTrackingDTI_fast(file_in, filename_out, parameters);
-            NiftiIO_basic.WriteJSONDescription('output',filename_out(1:end-4),'props',json);
-        end
-        
-        function CSD_FOD = PerformCSD(varargin)
-        % This function compute the fiber orientation distribution (FOD)
-        % using constrained spherical deconvolution (CSD) with recursive
-        % response function calibration. Input arguments:
-        % mat_file: The .mat file of the data in ExploreDTI-like format
-        % mscsd: Use multi-shell multi-tissue CSD in place of classic CSD.
-        % rc_mask_file: This is an optional argument to enforce the
-        % selection of the response function within the provided .nii mask
-        % output: The outout .nii where to save the FOD
-        % Lmax: order of the spherical harmonics. Default is 8.
-        % T1seg: pveseg file output of FSL FAST containing 3 tissue classes
-        %   (WM, GM, CSF)   
-        % save_sh: 0 or 1. Save the SH coefficients of the data (csd only)
-        % rf_dti: use a DTI based response function in place of recursive calibration.
-        %         input as "FA MDx10^3(mm2/s)" of the desired response function, e.g "0.7 1.0"
-        %         valid only in combination with csd
-            if(isempty(varargin))
-                my_help('MRTQuant.PerformCSD');
-                return;
-            end   
-                    
-            json.CallFunction = 'MRTQuant.PerformCSD';
-            json.Description = my_help('MRTQuant.PerformCSD');
-
-            coptions = varargin;
-            file_in = GiveValueForName(coptions,'mat_file');
-            if(isempty(file_in))
-                error('Need to specify the input .mat file');
-            end
-            
-            json.ReferenceFile = file_in;
-            json.ProcessingType = 'Quantification';
-            
-            rc_mask_file = GiveValueForName(coptions,'rc_mask_file');
-            if(isempty(rc_mask_file))
-                rc_mask_file = '';
-            end
-            
-            json.rc_mask_file = rc_mask_file;
-            
-            filename_out = GiveValueForName(coptions,'output');
-            if(isempty(filename_out))
-                filename_out = [file_in(1:end-4) '_CSD_FOD.nii'];
-            end
-            
-            option = GiveValueForName(coptions,'Lmax');
-            if(~isempty(option))
-                Lmax = option;
-            else
-                Lmax = 8;
-            end
-            
-            json.Lmax = Lmax;
-            
-            option = GiveValueForName(coptions,'T1seg');
-            if(~isempty(option))
-                t1_seg = option;
-            else
-                t1_seg = '';
-            end
-            
-            json.t1_seg = t1_seg;
-            
-            save_sh = GiveValueForName(coptions,'save_sh');
-            if(isempty(save_sh))
-                save_sh = 0;
-            end            
-
-            json.save_sh = save_sh;
-            
-            dti_rf = GiveValueForName(coptions,'rf_dti');
-            json.dti_rf = dti_rf;           
-            
-            mscsd = GiveValueForName(coptions,'mscsd');
-            if(isempty(mscsd) || mscsd == 0)
-                if(isempty(dti_rf))
-                    CSD_FOD = EDTI_Library.E_DTI_Get_HARDI_CSD_FOD_RC(file_in,Lmax,rc_mask_file,filename_out,save_sh);
-                else
-                    pieces = strsplit(dti_rf);
-                    sim_fa = str2double(pieces{1});
-                    sim_adc = str2double(pieces{2})*1e-3;
-                    CSD_FOD = EDTI_Library.E_DTI_Get_HARDI_CSD_FOD(file_in, 1, Lmax,sim_adc, sim_fa,filename_out,save_sh);
-                end
-            else
-                disp('Running MS-CSD (beta mode)...')
-                CSD_FOD = EDTI_Library.E_DTI_Get_HARDI_CSD_FOD_RC_MuSh(file_in,Lmax,rc_mask_file,filename_out,t1_seg);
-            end
-            json.mscsd = mscsd;
-                           
-            NiftiIO_basic.WriteJSONDescription('output',filename_out(1:end-4),'props',json);
-            if(nargout == 0)
-                CSD_FOD = [];
-            end
-            
-        end   
-
-        function PerformFODBased_FiberTracking(varargin)
-        % This function performs whole volume deterministic fiber
-        % tractography of an FOD in spherical harmonics. Possible
-        % input arguments are:
-        % mat_file: The ExpoloreDTI-like .mat file (for reference)
-        % fod_file: The ExpoloreDTI-like FOD .nii file (in SH basis)
-        % output: The output tracts (must be .mat)
-        % SeedPointRes: The seeding resolution in mm, as [2 2 2] (default)
-        % StepSize: the step size in mm, as 1 (default)
-        % FODThresh: The FOD thredshold to stop tracking, as 0.1000 	(default)
-        % AngleThresh: The angle threshold to stop tracking, as 30 (default)
-        % FiberLengthRange: The mininum - maximum allowed fiber length in mm: [30 500]
-        % SeedMask: A mask to perform the seeding. If empty, the whole
-        %   volume is used
-        % Default parameters:
-        %  SeedPointRes: [2 2 2]
-        %             StepSize: 1
-        %          AngleThresh: 30
-        %     FiberLengthRange: [30 500]
-        %     FODThresh: 0.1
-
-            if(isempty(varargin))
-                my_help('MRTQuant.PerformFODBased_FiberTracking');
-                return;
-            end  
-
-            json.CallFunction = 'MRTQuant.PerformFODBased_FiberTracking';
-            json.Description = my_help('MRTQuant.PerformFODBased_FiberTracking');
-
-            coptions = varargin;
-            file_in = GiveValueForName(coptions,'mat_file');
-            if(isempty(file_in))
-                error('Need to specify the input .mat file');
-            end
-            
-            json.ReferenceFile = file_in;
-            json.ProcessingType = 'FiberTractography';
-            
-            fod_file = GiveValueForName(coptions,'fod_file');
-            if(isempty(fod_file))
-                error('Need to specify the input FOD file/variable');
-            end
-            json.fod_file = fod_file;
-            
-            filename_out = GiveValueForName(coptions,'output');
-            if(isempty(filename_out))
-                error('Need to specify the output .mat file');
-            end
-            
-            option = GiveValueForName(coptions,'SeedPointRes');
-            if(isempty(option))
-                parameters.SeedPointRes = [2 2 2];
-            else
-                parameters.SeedPointRes = option;
-            end
-            
-            option = GiveValueForName(coptions,'StepSize');
-            if(isempty(option))
-                parameters.StepSize = 1;
-            else
-                parameters.StepSize = option;
-            end
-            
-            option = GiveValueForName(coptions,'FODThresh');
-            if(isempty(option))
-                parameters.blob_T = 0.1;
-            else
-                parameters.blob_T = option;
-            end
-            
-            option = GiveValueForName(coptions,'AngleThresh');
-            if(isempty(option))
-                parameters.AngleThresh = 30;
-            else
-                parameters.AngleThresh = option;
-            end
-            
-            option = GiveValueForName(coptions,'FiberLengthRange');
-            if(isempty(option))
-                parameters.FiberLengthRange = [30 500];
-            else
-                parameters.FiberLengthRange = option;
-            end
-            
-            option = GiveValueForName(coptions,'SeedMask');
-            if(isempty(option))
-                parameters.SeedMask = [];
-            else
-                parameters.SeedMask = option;
-            end
-            
-            parameters.randp = 0;
-            
-            json.TrackingParameters = parameters;
-            
-            EDTI_Library.WholeBrainFODTractography(file_in,fod_file,parameters,filename_out);
-            NiftiIO_basic.WriteJSONDescription('output',filename_out(1:end-4),'props',json);
-        end        
-
-        function Perform_mFOD_FiberTracking(varargin)
-        % This function performs whole volume deterministic fiber
-        % tractography of multiple FODs in spherical harmonics. Possible
-        % input arguments are:
-        % mat_file: The ExpoloreDTI-like .mat file (for reference)
-        % fod_basename: The name prefix used for the mFOD output (see the SphericalDeconvolution class) (in SH basis)
-        % output: The output tracts (must be .mat)
-        % SeedPointRes: The seeding resolution in mm, as [2 2 2] (default)
-        % StepSize: the step size in mm, as 1 (default)
-        % FODThresh: The FOD thredshold to stop tracking, as 0.1000 	(default)
-        % AngleThresh: The angle threshold to stop tracking, as 30 (default)
-        % FiberLengthRange: The mininum - maximum allowed fiber length in mm: [30 500]
-        % SeedMask: A mask to perform the seeding. If empty, the whole
-        %   volume is used
-        % InterpolationMode: how to merge the mulitple FODs. 'linear'
-        %   corresponds to mFOD-WS (each FOD weighted by its fraction and
-        %   summed), whereas 'majority' tracks the locally larger
-        %   FOD
-
-            if(isempty(varargin))
-                my_help('MRTQuant.Perform_mFOD_FiberTracking');
-                return;
-            end  
-
-            json.CallFunction = 'MRTQuant.Perform_mFOD_FiberTracking';
-            json.Description = my_help('MRTQuant.PerformFODBased_FiberTracking');
-
-            coptions = varargin;
-            file_in = GiveValueForName(coptions,'mat_file');
-            if(isempty(file_in))
-                error('Need to specify the input .mat file');
-            end
-            json.ReferenceFile = file_in;
-            json.ProcessingType = 'FiberTractography';
-            
-            fod_basename = GiveValueForName(coptions,'fod_basename');
-            if(isempty(fod_basename))
-                error('Need to specify the input FOD basename');
-            end
-            json.fod_basename = fod_basename;
-            
-            filename_out = GiveValueForName(coptions,'output');
-            if(isempty(filename_out))
-                error('Need to specify the output .mat file');
-            end
-            
-            option = GiveValueForName(coptions,'SeedPointRes');
-            if(isempty(option))
-                parameters.SeedPointRes = [2 2 2];
-            else
-                parameters.SeedPointRes = option;
-            end
-            
-            option = GiveValueForName(coptions,'StepSize');
-            if(isempty(option))
-                parameters.StepSize = 1;
-            else
-                parameters.StepSize = option;
-            end
-            
-            option = GiveValueForName(coptions,'FODThresh');
-            if(isempty(option))
-                parameters.blob_T = 0.1;
-            else
-                parameters.blob_T = option;
-            end
-            
-            option = GiveValueForName(coptions,'AngleThresh');
-            if(isempty(option))
-                parameters.AngleThresh = 30;
-            else
-                parameters.AngleThresh = option;
-            end
-            
-            option = GiveValueForName(coptions,'FiberLengthRange');
-            if(isempty(option))
-                parameters.FiberLengthRange = [30 500];
-            else
-                parameters.FiberLengthRange = option;
-            end
-            
-            option = GiveValueForName(coptions,'SeedMask');
-            if(isempty(option))
-                parameters.SeedMask = [];
-            else
-                parameters.SeedMask = option;
-            end
-            
-            option = GiveValueForName(coptions,'InterpolationMode');
-            if(isempty(option))
-                interpolation_mode = 'linear';
-            else
-                interpolation_mode = option;
-            end
-            
-            parameters.randp = 0;
-            json.TrackingParameters = parameters;
-            
-            EDTI_Library.WholeBrainTracking_mDRL_fast_exe(file_in, fod_basename, filename_out, parameters, interpolation_mode); 
-
-            NiftiIO_basic.WriteJSONDescription('output',filename_out(1:end-4),'props',json);
-        end        
-        
     end
 end
 
