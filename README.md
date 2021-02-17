@@ -4,12 +4,18 @@
  </a> 
  </p>
  
- # [MRIToolkit](https://github.com/delucaal/MRIToolkit) [update 14-03-2020] 
-
+ # [MRIToolkit](https://github.com/delucaal/MRIToolkit) [update 17-02-2021] 
+New in this version:
+- Code re-organization into two main classes: MRTQuant (preprocessing/DTI/DKI) and MRTrack (Tractography related)
+- Support for automatic fiber clustering (see below for reference)
+- Early support for integration with Python (needed for the point above)
+- Support for VTK poly data 4.2 and 5.1 (also needed for the clustering)
+- Added a robust option to GRL/mFOD deconvolution
+- Initial support for storing the NIFTI Q/S form (to improve interoperability with other tools, not implemented yet)
  ## What is it?
 MRIToolkit is a set of [command line tools](https://github.com/delucaal/MRIToolkit/tree/master/CommandLine) and a MATLAB (R) toolbox/library to process (diffusion) magnetic resonance imaging (MRI) data. Binaries of the command line version will be provided soon!
 
-The idea behind MRIToolkit is to integrate [methods I develop](https://www.isi.uu.nl/people/alberto-de-luca/) with existing state-of-the-art methods for (diffusion) MRI processing. 
+The idea behind MRIToolkit is to integrate [my research output](https://www.isi.uu.nl/people/alberto-de-luca/) with existing state-of-the-art methods for (diffusion) MRI processing. 
 
 ## Where do I find it?
 - The MATLAB (R) toolbox is available [here](https://github.com/delucaal/MRIToolkit) on Github!
@@ -19,6 +25,14 @@ The idea behind MRIToolkit is to integrate [methods I develop](https://www.isi.u
 <a href="GettingStarted"> 
 <span style='align:center'> <img src="img/MRIToolkitBanner.png" style="width:300px;  display: block;  margin-left: auto;  margin-right: auto;"/> </span>
  </a> 
+
+The toolbox is referenced for the first time in [Guo et al.](https://arxiv.org/abs/1910.05372). Additionally, please cite the original works corresponding to the steps you use: 
+- [ExploreDTI](http://www.exploredti.com): Leemans, A., Jeurissen, B., Sijbers, J., & Jones, D. K. (2009). ExploreDTI: a graphical toolbox for processing, analyzing, and visualizing diffusion MR data. 17th Annual Meeting of the International Society for Magnetic Resonance in Medicine, Honolulu, Hawaii, USA, 3537.
+- Diffusion MRI pre-processing: ([signal drift correction](https://onlinelibrary.wiley.com/doi/full/10.1002/mrm.26124), [Gibbs ringing correction](https://www.ncbi.nlm.nih.gov/pubmed/26142273), motion and eddy currents correction, [B-matrix rotation](https://www.ncbi.nlm.nih.gov/pubmed/19319973), EPI correction, MPPCA denoising)
+- [Diffusion Tensor Imaging (DTI)](https://pubmed.ncbi.nlm.nih.gov/8130344/) and [Diffusion Kurtosis Imaging (DKI)](https://pubmed.ncbi.nlm.nih.gov/15906300/) fit including the [MK-curve method](https://www.ncbi.nlm.nih.gov/pubmed/30978492);
+- Spherical deconvolution using the Constrained Spherical Deconvolution [(CSD)](https://www.ncbi.nlm.nih.gov/pubmed/18583153), [Multi-shell CSD](https://www.sciencedirect.com/science/article/pii/S1053811914006442?via%3Dihub), [damped Richardson Lucy](https://www.ncbi.nlm.nih.gov/pubmed/19781650), the [Generalized Richardson Lucy](https://arxiv.org/abs/1910.05372) and [mFOD](https://www.biorxiv.org/content/10.1101/739136v1);
+- Robust deconvolution of multiple water pools (NNLS/L2NNLS/PL2NNLS) as in [De Luca et al. 2018](https://onlinelibrary.wiley.com/doi/full/10.1002/nbm.3965)
+- [NEW!] Automatic fiber clustering thanks to [WMA pipeline](https://github.com/SlicerDMRI/whitematteranalysis/tree/master/whitematteranalysis)
 
 ## Quick installation 
 Please, see [this guide](img/MRIToolkitInstallationNotes.pdf)
@@ -44,14 +58,6 @@ Examples of some functionalities can be found in [here](https://github.com/deluc
 ###### License:
 - This software is distributed under the LGPLv3 license (https://opensource.org/licenses/lgpl-3.0.html).
 
-## References:
-The toolbox is referenced for the first time in [Guo et al.](https://arxiv.org/abs/1910.05372). Additionally, please cite the original works corresponding to the steps you use: 
-- [ExploreDTI](http://www.exploredti.com): Leemans, A., Jeurissen, B., Sijbers, J., & Jones, D. K. (2009). ExploreDTI: a graphical toolbox for processing, analyzing, and visualizing diffusion MR data. 17th Annual Meeting of the International Society for Magnetic Resonance in Medicine, Honolulu, Hawaii, USA, 3537.
-- Diffusion MRI pre-processing: ([signal drift correction](https://onlinelibrary.wiley.com/doi/full/10.1002/mrm.26124), [Gibbs ringing correction](https://www.ncbi.nlm.nih.gov/pubmed/26142273), motion and eddy currents correction, [B-matrix rotation](https://www.ncbi.nlm.nih.gov/pubmed/19319973), EPI correction, MPPCA denoising)
-- [Diffusion Tensor Imaging (DTI)](https://pubmed.ncbi.nlm.nih.gov/8130344/) and [Diffusion Kurtosis Imaging (DKI)](https://pubmed.ncbi.nlm.nih.gov/15906300/) fit including the [MK-curve method](https://www.ncbi.nlm.nih.gov/pubmed/30978492);
-- Spherical deconvolution using the Constrained Spherical Deconvolution [(CSD)](https://www.ncbi.nlm.nih.gov/pubmed/18583153), [Multi-shell CSD](https://www.sciencedirect.com/science/article/pii/S1053811914006442?via%3Dihub), [damped Richardson Lucy](https://www.ncbi.nlm.nih.gov/pubmed/19781650), the [Generalized Richardson Lucy](https://arxiv.org/abs/1910.05372) and [mFOD](https://www.biorxiv.org/content/10.1101/739136v1);
-- Robust deconvolution of multiple water pools (NNLS/L2NNLS/PL2NNLS) as in [De Luca et al. 2018](https://onlinelibrary.wiley.com/doi/full/10.1002/nbm.3965)
-
 ###### Keywords:
 - Magnetic Resonance Imaging (MRI)
 - Image segmentation
@@ -62,8 +68,9 @@ The toolbox is referenced for the first time in [Guo et al.](https://arxiv.org/a
 - dMRI preprocessing - motion correction - eddy currents correction - EPI distortions correction
 - Fiber tractography - Constrained Spherical Deconvolution (CSD) - Generalized Richardson Lucy (GRL) - mFOD
 - Laplacian fit - Spectral Fit - Robust Deconvolution
+- Automatic tractography clustering
 
-## Toolbox components 
+## Toolbox components  [Content to be updated]
 ###### Ready to use:
 - [x] **'ExploreDTIInterface'**: I am pleased to announce that MRIToolkit now contains, distributes and develops many functions originally developed as part of [ExploreDTI](www.exploredti.com). They are here available as a consolidated library and are planned to also become command line tools. A big thank to [Alexander Leemans](http://providi-lab.org) and Ben Jeurissen for this! <br><img src="img/EDTICollaborationLogo.png" style="width:300px"/>
 - [x] **'SphericalDeconvolution'**: Methods used for two novel deconvolution methods we developed, namely the [Generalized Richardson Lucy](https://arxiv.org/abs/1910.05372) and [mFOD](https://www.biorxiv.org/content/10.1101/739136v1). Some of the functions here included have been taken from [Hardi Tools](https://www.neuroimagen.es/webs/hardi_tools/) of Erick Canales-Rodriguez.
