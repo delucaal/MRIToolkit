@@ -7,36 +7,38 @@ function mrtd_deconv_fod(varargin)
     %     disp(varargin)
 
     if(isempty(coptions) || isempty(coptions{1}) || strcmpi(coptions{1},'-help'))
-    help = 'This tool performs spherical deconvolution of (multi-shell) diffusion MRI data';
-    help = [help newline];
-    help = [help newline 'usage: mrtd_deconv_fod -method chosen_method -nii file.nii -bval file.bval -bvec file.bvec -out corrected_file.nii (other_options)'];
-    help = [help newline];
-    help = [help newline '-grad_perm: how to permute the diffusion gradients 1=[x y z] 2=[y x z] 3=[z y x]' ....
-        ' 4=[x z y] =[y z x] 6=[z x y]'];
-    help = [help newline '-grad_flip: how to flip the sign of the diffusion gradients 1=[x y z] 2=[-x y z] 3=[x -y z] 4=[x y -z]'];
-    help = [help newline '-method: one in "csd","mscsd","grl","mfod"'];
-    help = [help newline '-t1_seg: T1 segmentation file derived from "fsl_anat" (mscsd only)'];
-    help = [help newline '-lmax: spherical harmonic'' order'];
-    help = [help newline];
-    help = [help newline 'GRL - mFOD specific options'];
-    help = [help newline];
-    help = [help newline '-aniso_rf_dti: Add an anisotropic RF using the DTI model. Specify the eigenvalues in ms2/um2 as "1.7 0.2 0.2"'];
-    help = [help newline '-aniso_rf_dki: Add an anisotropic RF using the DKI model. Specify the eigenvalues in ms2/um2 and the mean kurtosis as "1.7 0.2 0.2 1" or "auto" to estimate from the data'];
-    help = [help newline '-aniso_rf_noddi: Add an anisotropic RF using the NODDI model. Specify 6 parameters  "intra-cellular-volume free-diffusivity*10^9 watson-concentration isotropic-fraction isotropic-diffusivity b0-amplitude"'];
-    help = [help newline '-iso_rf: Add an isotropic RF using the ADC model. Specify the diffusivity in um2/ms, as 0.7 for GM and 3 for CSF'];
-    help = [help newline '-shell_weight: Inner-shell weighting factor (GRL only)'];
-    help = [help newline];
-    help = [help newline 'GRL default usage: mrtd_deconv_fod -method grl -nii file.nii -bval file.bval -bvec file.bvec -out corrected_file.nii -aniso_rf_dti "2.1 0 0" -iso_rf 0.7 -iso_rf 3'];
-    help = [help newline 'mFOD default usage: mrtd_deconv_fod -method mfod -nii file.nii -bval file.bval -bvec file.bvec -out corrected_file.nii -aniso_rf_dki "auto" -aniso_rf_noddi "0.4 1.7 1 0 3 1" -iso_rf 3'];
-    help = [help newline];
-    fprintf(help);
-    
-    return
-end
+        help = 'This tool performs spherical deconvolution of (multi-shell) diffusion MRI data';
+        help = [help newline];
+        help = [help newline 'usage: mrtd_deconv_fod -method chosen_method -nii file.nii -bval file.bval -bvec file.bvec -out corrected_file.nii (other_options)'];
+        help = [help newline];
+        help = [help newline '-grad_perm: how to permute the diffusion gradients 1=[x y z] 2=[y x z] 3=[z y x]' ....
+            ' 4=[x z y] =[y z x] 6=[z x y]'];
+        help = [help newline '-grad_flip: how to flip the sign of the diffusion gradients 1=[x y z] 2=[-x y z] 3=[x -y z] 4=[x y -z]'];
+        help = [help newline '-method: one in "csd","mscsd","grl","mfod"'];
+        help = [help newline '-t1_seg: T1 segmentation file derived from "fsl_anat" (mscsd only)'];
+        help = [help newline '-lmax: spherical harmonics order'];
+        help = [help newline '-mat: provide an ExploreDTI-compatible .MAT file. Overrides -nii -bval -bvec'];
+        help = [help newline];
+        help = [help newline 'GRL - mFOD specific options'];
+        help = [help newline];
+        help = [help newline '-aniso_rf_dti: Add an anisotropic RF using the DTI model. Specify the eigenvalues in ms2/um2 as "1.7 0.2 0.2"'];
+        help = [help newline '-aniso_rf_dki: Add an anisotropic RF using the DKI model. Specify the eigenvalues in ms2/um2 and the mean kurtosis as "1.7 0.2 0.2 1" or "auto" to estimate from the data'];
+        help = [help newline '-aniso_rf_noddi: Add an anisotropic RF using the NODDI model. Specify 6 parameters  "intra-cellular-volume free-diffusivity*10^9 watson-concentration isotropic-fraction isotropic-diffusivity b0-amplitude"'];
+        help = [help newline '-iso_rf: Add an isotropic RF using the ADC model. Specify the diffusivity in um2/ms, as 0.7 for GM and 3 for CSF'];
+        help = [help newline '-shell_weight: Inner-shell weighting factor (GRL only)'];
+        help = [help newline];
+        help = [help newline 'GRL default usage: mrtd_deconv_fod -method grl -nii file.nii -bval file.bval -bvec file.bvec -out corrected_file.nii -aniso_rf_dti "2.1 0 0" -iso_rf 0.7 -iso_rf 3'];
+        help = [help newline 'mFOD default usage: mrtd_deconv_fod -method mfod -nii file.nii -bval file.bval -bvec file.bvec -out corrected_file.nii -aniso_rf_dki "auto" -aniso_rf_noddi "0.4 1.7 1 0 3 1" -iso_rf 3'];
+        help = [help newline];
+        fprintf(help);
+
+        return
+    end
 
 nii_file = '';
 bval_file = '';
 bvec_file = '';
+mat_file = '';
 outfile = '';
 grad_perm = 1;
 grad_flip = 1;
@@ -74,23 +76,30 @@ for input_id =1:2:length(coptions)
         aniso_rf(end+1) = {{'aniso_rf_noddi',coptions{input_id+1}}};
     elseif(strcmp(value,'-iso_rf'))
         iso_rf(end+1) = {coptions{input_id+1}};
+    elseif(strcmp(value,'-mat'))
+        mat_file = {coptions{input_id+1}};
     end
     
 end
 
-if(isempty(nii_file))
-    error('Missing mandatory argument -nii');
-elseif(isempty(bval_file))
-    error('Missing mandatory argument -bval');
-elseif(isempty(bvec_file))
-    error('Missing mandatory argument -bvec');
-elseif(isempty(deconv_method))
+if(isempty(deconv_method))
     error('Missing mandatory argument -method');
 end
 
-temp_mat_file = MRTD.QuickNiiBvalBvecToMat('nii_file',nii_file,...
-'bval_file',bval_file,'bvec_file',bvec_file,'grad_perm',grad_perm,...
-'grad_flip',grad_flip);
+if(isempty(mat_file))
+    if(isempty(nii_file))
+        error('Missing mandatory argument -nii');
+    elseif(isempty(bval_file))
+        error('Missing mandatory argument -bval');
+    elseif(isempty(bvec_file))
+        error('Missing mandatory argument -bvec');
+    end
+    temp_mat_file = MRTD.QuickNiiBvalBvecToMat('nii_file',nii_file,...
+    'bval_file',bval_file,'bvec_file',bvec_file,'grad_perm',grad_perm,...
+    'grad_flip',grad_flip);
+else
+    temp_mat_file = mat_file;
+end
 
 if(strcmp(deconv_method,'csd') || strcmp(deconv_method,'mscsd'))
     if(strcmp(deconv_method,'mscsd'))
@@ -106,13 +115,13 @@ elseif(strcmp(deconv_method,'grl') || strcmp(deconv_method,'mfod'))
     mrt_data = EDTI.EDTI_Data_2_MRIToolkit('mat_file',temp_mat_file);
     other_props = load(temp_mat_file,'FA');
     % Prepare the spherical deconvolution class on this dataset
-    SD = SphericalDeconvolution('data',mrt_data);
+    SD = MRTTrack('data',mrt_data);
     % Add an anisotropic response function using the DKI model
     for rf_id=1:length(aniso_rf)
         requested_rf = aniso_rf{rf_id};
         eigvals = requested_rf{2};
         if(contains(requested_rf{1},'dki') > 0 && contains(eigvals,'auto'))
-            [eigvals,isok] = SphericalDeconvolution.Eigenval_IsoK_WM_FromData(mrt_data,other_props.FA,~isnan(other_props.FA));
+            [eigvals,isok] = MRTTrack.Eigenval_IsoK_WM_FromData(mrt_data,other_props.FA,~isnan(other_props.FA));
             SD.AddAnisotropicRF_DKI(eigvals,isok); % WM
         else
             J = strsplit(eigvals,' ');
@@ -148,7 +157,7 @@ elseif(strcmp(deconv_method,'grl') || strcmp(deconv_method,'mfod'))
     end
     
     GRL_Results = SD.PerformDeconv();
-    SphericalDeconvolution.SaveOutputToNii(SD,GRL_Results,outfile);
+    MRTTrack.SaveOutputToNii(SD,GRL_Results,outfile);
 
 else
     error(['Unknown deconvolution method ' method]);

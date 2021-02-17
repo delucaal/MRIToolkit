@@ -12,5 +12,5 @@ MRIToolkit.thirdparty_version = 1.0;
 
 addpath(get_executed_file_path())
 addpath(fullfile(get_executed_file_path(),'EPG'))
-addpath(fullfile(get_executed_file_path(),'TRK'))
 addpath(fullfile(get_executed_file_path(),'TCK'))
+addpath(fullfile(get_executed_file_path(),'TRK'))

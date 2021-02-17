@@ -8,7 +8,7 @@ function mrtd_moco_epi(varargin)
     %     disp(varargin)
 
     if(isempty(coptions) || isempty(coptions{1}) || strcmpi(coptions{1},'-help'))
-        help = 'This tools perform motion correction / Eddy currents correction / EPI distorion correction (optional) of diffusion MRI data';
+        help = 'This tools perform common preprocessing (denoising, drift correction, Gibbs ringing correction) + motion correction / Eddy currents correction / EPI distorion correction (optional) of diffusion MRI data';
         help = [help newline 'The gradient b-matrix is automatically reoriented.'];
         help = [help newline];
         help = [help newline 'usage: mrtd_moco_epi -nii file.nii -bval file.bval -bvec file.bvec -out corrected_file (other_options)'];
@@ -20,6 +20,9 @@ function mrtd_moco_epi(varargin)
         help = [help newline '-epi_constraint: allow deformation on specific axis. Input between quotas "1 1 1"'];
         help = [help newline '-epi_reg_mode: image to use for registration to structural. One between "fa" (default), "b0", "dwis"'];
         help = [help newline '-epi_normcorr: 0 or 1. Use normalized correlation in place of mutual information to drive the registration.'];        
+        help = [help newline '-denoise: 0 or 1. Perform MP-PCA denoising'];        
+        help = [help newline '-sdc: 0 or 1. Perform signal drift correction'];        
+        help = [help newline '-gibbs: 0 or 1. Perform Gibbs ringing correction'];        
         help = [help newline];
         fprintf(help);
         
@@ -94,22 +97,77 @@ function mrtd_moco_epi(varargin)
     else
         epi_normcorr = str2double(epi_normcorr);
     end      
+    sdc = GiveValueForName(coptions,'-sdc');
+    if(isempty(sdc))
+        sdc = 0;
+    else
+        sdc = str2double(sdc);
+    end      
+    gibbs = GiveValueForName(coptions,'-gibbs');
+    if(isempty(gibbs))
+        gibbs = 0;
+    else
+        gibbs = str2double(gibbs);
+    end      
+    denoise = GiveValueForName(coptions,'-denoise');
+    if(isempty(gibbs))
+        denoise = 0;
+    else
+        denoise = str2double(denoise);
+    end      
     
-    temp_mat_file = MRTD.QuickNiiBvalBvecToMat('nii_file',file_in,...
+    ext = '.nii';
+    shift = 4;
+%     if(contains(file_in,'.nii.gz'))
+%         ext = '.nii.gz';
+%         shift = 7;
+%     end
+    while(true)
+        temp_file = fullfile(tempdir,['tempnii_' num2str(randi(10000)) ext]);
+        if(exist(temp_file,'file') < 1)
+            break
+        end
+    end
+
+    disp(['Temp file is ' temp_file]);
+%     system(['cp ' file_in ' '  temp_file]);
+    MRTQuant.ConformSpatialDimensions('nii_file',file_in,'output',temp_file);
+    MRTQuant.b_Matrix_from_bval_bvec('bval_file',bval_file,'bvec_file',bvec_file,'output',[temp_file(1:end-shift) '.txt']);
+    if(sdc == 1)
+        new_file = [temp_file(1:end-shift) '_sdc.nii'];
+        disp('Signal drift correction');
+        MRTQuant.PerformSignalDriftCorrection('nii_file',temp_file,'output',new_file);
+        temp_file = new_file;
+    end
+    if(denoise == 1)
+        new_file = [temp_file(1:end-shift) '_denoise.nii'];
+        disp('MPPCA denoising');
+        MRTQuant.MPPCADenoising('nii_file',temp_file,'output',new_file);
+        temp_file = new_file;
+    end
+    if(gibbs == 1)
+        new_file = [temp_file(1:end-shift) '_gibbs.nii'];
+        disp('Gibbs Ringing correction');
+        MRTQuant.PerformGibbsRingingCorrection('nii_file',temp_file,'output',new_file);
+        temp_file = new_file;
+    end
+    
+    temp_mat_file = MRTQuant.QuickNiiBvalBvecToMat('nii_file',temp_file,...
         'bval_file',bval_file,'bvec_file',bvec_file,'grad_perm',grad_perm,...
         'grad_flip',grad_flip);
     
+    disp('Motion correction');
     if(~isempty(epi_tgt))
-        EDTI.PerformMocoEPI('mat_file',temp_mat_file,'epi_tgt',epi_tgt,'constraint_epi',epi_constraint,'epi_reg_mode',epi_reg_mode,'use_normcorr',epi_normcorr);
-        mrt_data = EDTI.EDTI_Data_2_MRIToolkit('mat_file',[temp_mat_file(1:end-4) '_MD_C_trafo.mat']);
+        MRTQuant.PerformMocoEPI('mat_file',temp_mat_file,'epi_tgt',epi_tgt,'constraint_epi',epi_constraint,'epi_reg_mode',epi_reg_mode,'use_normcorr',epi_normcorr);
+        mrt_data = MRTQuant.EDTI_Data_2_MRIToolkit('mat_file',[temp_mat_file(1:end-4) '_MD_C_trafo.mat']);
     else
-        EDTI.PerformMocoEPI('mat_file',temp_mat_file);
-        mrt_data = EDTI.EDTI_Data_2_MRIToolkit('mat_file',[temp_mat_file(1:end-4) '_MD_C_native.mat']);
+        MRTQuant.PerformMocoEPI('mat_file',temp_mat_file);
+        mrt_data = MRTQuant.EDTI_Data_2_MRIToolkit('mat_file',[temp_mat_file(1:end-4) '_MD_C_native.mat']);
     end
     
     [fp,fn,~] = fileparts(output_file);
     output_file = fullfile(fp,fn);
-    EDTI.WriteNifti(mrt_data,[output_file '.nii']);
+    MRTQuant.WriteNifti(mrt_data,[output_file '.nii']);
     
     fout = fopen([output_file '.bval'],'wt');
     for ij=1:length(mrt_data.bvals)
@@ -129,10 +187,12 @@ function mrtd_moco_epi(varargin)
     h = figure('Visible','off');
 
     filename = [output_file '.gif'];
-    delay = 0.5;
+    delay = 0.2;
     for n = 1:size(mrt_data.img,4)
       V = rot90(squeeze(mrt_data.img(round(end/2),:,:,n)));
-      V2 = squeeze(mrt_data.img(:,:,round(end/2),:));
+      V2 = squeeze(mrt_data.img(:,:,round(end/2),n));
+      V(~isfinite(V)) = 0;
+      V2(~isfinite(V2)) = 0;
       subplot(1,2,1)
       imagesc(V,[0 prctile(V(:),95)]);
       axis image; % this ensures that getframe() returns a consistent size

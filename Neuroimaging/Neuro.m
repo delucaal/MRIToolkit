@@ -1,7 +1,18 @@
+%%%$ Included in MRIToolkit (https://github.com/delucaal/MRIToolkit) %%%
+%%% Alberto De Luca - alberto@isi.uu.nl $%%%
+%%% Distributed under the terms of LGPLv3  %%%
+
+% This class executes common automatic pipelines and structures their
+% output in an MRIToolkit friendly way
+
 classdef Neuro < handle
    methods (Static)
        
        function CAT12Pipeline(varargin)
+            global MRIToolkit
+            if(isempty(MRIToolkit.spm_path))
+               error('No SPM path was specified. Please add it to the MRIToolkitDefineLocalVars.m file');               
+            end
             coptions = varargin;
             nii_file = GiveValueForName(coptions,'nii_file');
             if(isempty(nii_file))
@@ -15,21 +26,22 @@ classdef Neuro < handle
             if(isempty(output))
                 output = fullfile(fp,[fn '_CAT12']);
             end
-            mkdir(output);
-            copyfile(nii_file,fullfile(output,[fn ext]));
-
+            
+            if(contains(output,pwd) == false)
+                mkdir(output);
+                copyfile(nii_file,fullfile(output,[fn ext]));
+            end
+            force_wmh = GiveValueForName(coptions,'force_wmh');
+            if(isempty(force_wmh))
+                force_wmh = 0;
+            end
+            
             flair_file = GiveValueForName(coptions,'flair_file');
-            if(isempty(nii_file))
-                use_flair = 0;
-            else
-                use_flair = 1;
+            if(isempty(flair_file))
+                flair_file = [];
             end            
             
-            if(use_flair == 0)
-                ExecuteCat12_T1(fullfile(output,[fn ext]),1,0);
-            else        
-                ExecuteCat12_T1_FLAIR(fullfile(output,[fn ext]),flair_file,1,0);
-            end
+            ExecuteCat12_T1_FLAIR(fullfile(output,[fn ext]),flair_file,0,0,force_wmh);
        end
        
        function CAT12ApplyDeformation(varargin)
@@ -155,9 +167,13 @@ for ij=1:2:length(coptions)
 end
 end
 
-function ExecuteCat12_T1(tgt_file,ncores,showreport)
+
+function ExecuteCat12_T1_FLAIR(t1_file,flair_file,ncores,showreport,force_wmh)
 global MRIToolkit;
+% global cat;
 spm_path = MRIToolkit.spm_path;
+
+disp(['ExecuteCat12_T1_FLAIR T1:' t1_file ' FLAIR:' flair_file]);
 
 if(isempty(which('spm')))
     addpath(genpath(spm_path));
@@ -167,42 +183,77 @@ if(nargin < 2 || showreport > 0)
     showreport = 2;
 end
 
-% if(ispc)
-if(true)
-matlabbatch{1}.spm.tools.cat.estwrite.data = {tgt_file};
-matlabbatch{1}.spm.tools.cat.estwrite.nproc = 0;
+if(nargin < 3)
+    ncores = 0;
+    showreport = 0;
+    force_wmh = 0;
+end
+
+matlabbatch{1}.spm.tools.cat.estwrite.data = {t1_file};
+if(~isempty(flair_file) || force_wmh == 1)
+    matlabbatch{1}.spm.tools.cat.estwrite.data_wmh = {flair_file};
+end
+matlabbatch{1}.spm.tools.cat.estwrite.nproc = ncores;
 matlabbatch{1}.spm.tools.cat.estwrite.opts.tpm = {fullfile(spm_path,'tpm','TPM.nii')};
 matlabbatch{1}.spm.tools.cat.estwrite.opts.affreg = 'mni';
-matlabbatch{1}.spm.tools.cat.estwrite.opts.biasstr = 0.5;
-matlabbatch{1}.spm.tools.cat.estwrite.opts.samp = 3;
+matlabbatch{1}.spm.tools.cat.estwrite.opts.ngaus = [1 1 2 3 4 2];
+matlabbatch{1}.spm.tools.cat.estwrite.opts.warpreg = [0 0.001 0.5 0.05 0.2];
+matlabbatch{1}.spm.tools.cat.estwrite.opts.bias.biasstr = 0.5;
+matlabbatch{1}.spm.tools.cat.estwrite.opts.acc.accstr = 0.5;
+matlabbatch{1}.spm.tools.cat.estwrite.opts.redspmres = 0;
 matlabbatch{1}.spm.tools.cat.estwrite.extopts.segmentation.APP = 1070;
 matlabbatch{1}.spm.tools.cat.estwrite.extopts.segmentation.NCstr = -Inf;
+matlabbatch{1}.spm.tools.cat.estwrite.extopts.segmentation.spm_kamap = 0;
 matlabbatch{1}.spm.tools.cat.estwrite.extopts.segmentation.LASstr = 0.5;
-matlabbatch{1}.spm.tools.cat.estwrite.extopts.segmentation.gcutstr = 0;
+matlabbatch{1}.spm.tools.cat.estwrite.extopts.segmentation.gcutstr = 2;
 matlabbatch{1}.spm.tools.cat.estwrite.extopts.segmentation.cleanupstr = 0.5;
-matlabbatch{1}.spm.tools.cat.estwrite.extopts.segmentation.WMHCstr = 0;
-matlabbatch{1}.spm.tools.cat.estwrite.extopts.segmentation.WMHC = 0;
-matlabbatch{1}.spm.tools.cat.estwrite.extopts.segmentation.restypes.best = [0.5 0.3];
-matlabbatch{1}.spm.tools.cat.estwrite.extopts.registration.darteltpm = {fullfile(spm_path,'toolbox','cat12','templates_1.50mm','Template_1_IXI555_MNI152.nii')};
-matlabbatch{1}.spm.tools.cat.estwrite.extopts.registration.shootingtpm = {fullfile(spm_path,'toolbox','cat12','templates_1.50mm','Template_0_IXI555_MNI152_GS.nii')};
-matlabbatch{1}.spm.tools.cat.estwrite.extopts.registration.regstr = 0;
+matlabbatch{1}.spm.tools.cat.estwrite.extopts.segmentation.BVCstr = 0.5;
+if(~isempty(flair_file) || force_wmh == 1)
+    matlabbatch{1}.spm.tools.cat.estwrite.extopts.segmentation.WMHC = 3;
+else
+    matlabbatch{1}.spm.tools.cat.estwrite.extopts.segmentation.WMHC = 1;
+end
+matlabbatch{1}.spm.tools.cat.estwrite.extopts.segmentation.SLC = 0;
+matlabbatch{1}.spm.tools.cat.estwrite.extopts.segmentation.mrf = 1;
+matlabbatch{1}.spm.tools.cat.estwrite.extopts.segmentation.restypes.optimal = [1 0.1];
+matlabbatch{1}.spm.tools.cat.estwrite.extopts.registration.T1 = {fullfile(spm_path,'toolbox','FieldMap','T1.nii')};
+matlabbatch{1}.spm.tools.cat.estwrite.extopts.registration.brainmask = {fullfile(spm_path,'toolbox','FieldMap','brainmask.nii')};
+matlabbatch{1}.spm.tools.cat.estwrite.extopts.registration.cat12atlas = {fullfile(spm_path,'toolbox','cat12','templates_volumes','cat.nii')};
+matlabbatch{1}.spm.tools.cat.estwrite.extopts.registration.darteltpm = {fullfile(spm_path,'toolbox','cat12','templates_volumes','Template_1_IXI555_MNI152.nii')};
+matlabbatch{1}.spm.tools.cat.estwrite.extopts.registration.shootingtpm = {fullfile(spm_path,'toolbox','cat12','templates_volumes','Template_0_IXI555_MNI152_GS.nii')};
+matlabbatch{1}.spm.tools.cat.estwrite.extopts.registration.regstr = 0.5;
 matlabbatch{1}.spm.tools.cat.estwrite.extopts.vox = 1.5;
 matlabbatch{1}.spm.tools.cat.estwrite.extopts.surface.pbtres = 0.5;
+matlabbatch{1}.spm.tools.cat.estwrite.extopts.surface.pbtmethod = 'pbt2x';
+matlabbatch{1}.spm.tools.cat.estwrite.extopts.surface.pbtlas = 0;
+matlabbatch{1}.spm.tools.cat.estwrite.extopts.surface.collcorr = 0;
+matlabbatch{1}.spm.tools.cat.estwrite.extopts.surface.reduce_mesh = 1;
+matlabbatch{1}.spm.tools.cat.estwrite.extopts.surface.vdist = 1.33333333333333;
 matlabbatch{1}.spm.tools.cat.estwrite.extopts.surface.scale_cortex = 0.7;
 matlabbatch{1}.spm.tools.cat.estwrite.extopts.surface.add_parahipp = 0.1;
 matlabbatch{1}.spm.tools.cat.estwrite.extopts.surface.close_parahipp = 0;
+matlabbatch{1}.spm.tools.cat.estwrite.extopts.admin.experimental = 0;
+matlabbatch{1}.spm.tools.cat.estwrite.extopts.admin.new_release = 0;
+matlabbatch{1}.spm.tools.cat.estwrite.extopts.admin.lazy = 0;
 matlabbatch{1}.spm.tools.cat.estwrite.extopts.admin.ignoreErrors = 1;
 matlabbatch{1}.spm.tools.cat.estwrite.extopts.admin.verb = 2;
-matlabbatch{1}.spm.tools.cat.estwrite.extopts.admin.print = 2;
+matlabbatch{1}.spm.tools.cat.estwrite.extopts.admin.print = showreport;
 matlabbatch{1}.spm.tools.cat.estwrite.output.surface = 1;
+matlabbatch{1}.spm.tools.cat.estwrite.output.surf_measures = 1;
 matlabbatch{1}.spm.tools.cat.estwrite.output.ROImenu.atlases.neuromorphometrics = 1;
-matlabbatch{1}.spm.tools.cat.estwrite.output.ROImenu.atlases.lpba40 = 1;
-matlabbatch{1}.spm.tools.cat.estwrite.output.ROImenu.atlases.cobra = 1;
-matlabbatch{1}.spm.tools.cat.estwrite.output.ROImenu.atlases.hammers = 1;
-matlabbatch{1}.spm.tools.cat.estwrite.output.ROImenu.atlases.ibsr = 1;
-matlabbatch{1}.spm.tools.cat.estwrite.output.ROImenu.atlases.aal = 1;
+matlabbatch{1}.spm.tools.cat.estwrite.output.ROImenu.atlases.lpba40 = 0;
+matlabbatch{1}.spm.tools.cat.estwrite.output.ROImenu.atlases.cobra = 0;
+matlabbatch{1}.spm.tools.cat.estwrite.output.ROImenu.atlases.hammers = 0;
+matlabbatch{1}.spm.tools.cat.estwrite.output.ROImenu.atlases.ibsr = 0;
+matlabbatch{1}.spm.tools.cat.estwrite.output.ROImenu.atlases.aal3 = 1;
 matlabbatch{1}.spm.tools.cat.estwrite.output.ROImenu.atlases.mori = 1;
-matlabbatch{1}.spm.tools.cat.estwrite.output.ROImenu.atlases.anatomy = 1;
+matlabbatch{1}.spm.tools.cat.estwrite.output.ROImenu.atlases.anatomy = 0;
+matlabbatch{1}.spm.tools.cat.estwrite.output.ROImenu.atlases.julichbrain = 0;
+matlabbatch{1}.spm.tools.cat.estwrite.output.ROImenu.atlases.Schaefer2018_100Parcels_17Networks_order = 0;
+matlabbatch{1}.spm.tools.cat.estwrite.output.ROImenu.atlases.Schaefer2018_200Parcels_17Networks_order = 0;
+matlabbatch{1}.spm.tools.cat.estwrite.output.ROImenu.atlases.Schaefer2018_400Parcels_17Networks_order = 0;
+matlabbatch{1}.spm.tools.cat.estwrite.output.ROImenu.atlases.Schaefer2018_600Parcels_17Networks_order = 0;
+matlabbatch{1}.spm.tools.cat.estwrite.output.ROImenu.atlases.ownatlas = {''};
 matlabbatch{1}.spm.tools.cat.estwrite.output.GM.native = 1;
 matlabbatch{1}.spm.tools.cat.estwrite.output.GM.warped = 1;
 matlabbatch{1}.spm.tools.cat.estwrite.output.GM.mod = 1;
@@ -213,187 +264,59 @@ matlabbatch{1}.spm.tools.cat.estwrite.output.WM.mod = 1;
 matlabbatch{1}.spm.tools.cat.estwrite.output.WM.dartel = 0;
 matlabbatch{1}.spm.tools.cat.estwrite.output.CSF.native = 1;
 matlabbatch{1}.spm.tools.cat.estwrite.output.CSF.warped = 1;
-matlabbatch{1}.spm.tools.cat.estwrite.output.CSF.mod = 1;
+matlabbatch{1}.spm.tools.cat.estwrite.output.CSF.mod = 0;
 matlabbatch{1}.spm.tools.cat.estwrite.output.CSF.dartel = 0;
+matlabbatch{1}.spm.tools.cat.estwrite.output.ct.native = 1;
+matlabbatch{1}.spm.tools.cat.estwrite.output.ct.warped = 1;
+matlabbatch{1}.spm.tools.cat.estwrite.output.ct.dartel = 0;
+matlabbatch{1}.spm.tools.cat.estwrite.output.pp.native = 0;
+matlabbatch{1}.spm.tools.cat.estwrite.output.pp.warped = 0;
+matlabbatch{1}.spm.tools.cat.estwrite.output.pp.dartel = 0;
+if(~isempty(flair_file) || force_wmh == 1)
+    matlabbatch{1}.spm.tools.cat.estwrite.output.WMH.native = 1;
+    matlabbatch{1}.spm.tools.cat.estwrite.output.WMH.warped = 1;
+else
+    matlabbatch{1}.spm.tools.cat.estwrite.output.WMH.native = 0;
+    matlabbatch{1}.spm.tools.cat.estwrite.output.WMH.warped = 0;
+end
+matlabbatch{1}.spm.tools.cat.estwrite.output.WMH.mod = 0;
+matlabbatch{1}.spm.tools.cat.estwrite.output.WMH.dartel = 0;
+matlabbatch{1}.spm.tools.cat.estwrite.output.SL.native = 0;
+matlabbatch{1}.spm.tools.cat.estwrite.output.SL.warped = 0;
+matlabbatch{1}.spm.tools.cat.estwrite.output.SL.mod = 0;
+matlabbatch{1}.spm.tools.cat.estwrite.output.SL.dartel = 0;
+matlabbatch{1}.spm.tools.cat.estwrite.output.TPMC.native = 0;
+matlabbatch{1}.spm.tools.cat.estwrite.output.TPMC.warped = 0;
+matlabbatch{1}.spm.tools.cat.estwrite.output.TPMC.mod = 0;
+matlabbatch{1}.spm.tools.cat.estwrite.output.TPMC.dartel = 0;
 matlabbatch{1}.spm.tools.cat.estwrite.output.atlas.native = 1;
+matlabbatch{1}.spm.tools.cat.estwrite.output.atlas.warped = 1;
 matlabbatch{1}.spm.tools.cat.estwrite.output.atlas.dartel = 0;
 matlabbatch{1}.spm.tools.cat.estwrite.output.label.native = 1;
-matlabbatch{1}.spm.tools.cat.estwrite.output.label.warped = 1;
+matlabbatch{1}.spm.tools.cat.estwrite.output.label.warped = 0;
 matlabbatch{1}.spm.tools.cat.estwrite.output.label.dartel = 0;
+matlabbatch{1}.spm.tools.cat.estwrite.output.labelnative = 1;
 matlabbatch{1}.spm.tools.cat.estwrite.output.bias.native = 1;
 matlabbatch{1}.spm.tools.cat.estwrite.output.bias.warped = 1;
 matlabbatch{1}.spm.tools.cat.estwrite.output.bias.dartel = 0;
 matlabbatch{1}.spm.tools.cat.estwrite.output.las.native = 1;
 matlabbatch{1}.spm.tools.cat.estwrite.output.las.warped = 1;
 matlabbatch{1}.spm.tools.cat.estwrite.output.las.dartel = 0;
-matlabbatch{1}.spm.tools.cat.estwrite.output.jacobian.warped = 0;
-matlabbatch{1}.spm.tools.cat.estwrite.output.warps = [1 1];  
+matlabbatch{1}.spm.tools.cat.estwrite.output.jacobianwarped = 0;
+matlabbatch{1}.spm.tools.cat.estwrite.output.warps = [0 1];
+matlabbatch{1}.spm.tools.cat.estwrite.output.rmat = 0;
 
-else
-    
-matlabbatch{1}.spm.tools.cat.estwrite.data = {tgt_file};
-matlabbatch{1}.spm.tools.cat.estwrite.nproc = 0;
-matlabbatch{1}.spm.tools.cat.estwrite.opts.tpm = {fullfile(spm_path,'/tpm/TPM.nii')};
-matlabbatch{1}.spm.tools.cat.estwrite.opts.affreg = 'mni';
-matlabbatch{1}.spm.tools.cat.estwrite.opts.biasstr = 0.5;
-matlabbatch{1}.spm.tools.cat.estwrite.opts.samp = 3;
-matlabbatch{1}.spm.tools.cat.estwrite.extopts.segmentation.APP = 1070;
-matlabbatch{1}.spm.tools.cat.estwrite.extopts.segmentation.NCstr = -Inf;
-matlabbatch{1}.spm.tools.cat.estwrite.extopts.segmentation.LASstr = 0.5;
-matlabbatch{1}.spm.tools.cat.estwrite.extopts.segmentation.gcutstr = 0;
-matlabbatch{1}.spm.tools.cat.estwrite.extopts.segmentation.cleanupstr = 0.5;
-matlabbatch{1}.spm.tools.cat.estwrite.extopts.segmentation.WMHCstr = 0;
-matlabbatch{1}.spm.tools.cat.estwrite.extopts.segmentation.WMHC = 0;
-matlabbatch{1}.spm.tools.cat.estwrite.extopts.segmentation.restypes.best = [0.5 0.3];
-matlabbatch{1}.spm.tools.cat.estwrite.extopts.registration.darteltpm = {fullfile(spm_path,'/toolbox/cat12/templates_1.50mm/Template_1_IXI555_MNI152.nii')};
-matlabbatch{1}.spm.tools.cat.estwrite.extopts.registration.shootingtpm = {fullfile(spm_path,'/toolbox/cat12/templates_1.50mm/Template_0_IXI555_MNI152_GS.nii')};
-matlabbatch{1}.spm.tools.cat.estwrite.extopts.registration.regstr = 0;
-matlabbatch{1}.spm.tools.cat.estwrite.extopts.vox = 1.5;
-matlabbatch{1}.spm.tools.cat.estwrite.extopts.surface.pbtres = 0.5;
-matlabbatch{1}.spm.tools.cat.estwrite.extopts.surface.scale_cortex = 0.7;
-matlabbatch{1}.spm.tools.cat.estwrite.extopts.surface.add_parahipp = 0.1;
-matlabbatch{1}.spm.tools.cat.estwrite.extopts.surface.close_parahipp = 0;
-matlabbatch{1}.spm.tools.cat.estwrite.extopts.admin.ignoreErrors = 1;
-matlabbatch{1}.spm.tools.cat.estwrite.extopts.admin.verb = 1;
-matlabbatch{1}.spm.tools.cat.estwrite.extopts.admin.print = 0;%showreport;
-matlabbatch{1}.spm.tools.cat.estwrite.output.surface = 1;
-matlabbatch{1}.spm.tools.cat.estwrite.output.ROImenu.atlases.neuromorphometrics = 1;
-matlabbatch{1}.spm.tools.cat.estwrite.output.ROImenu.atlases.lpba40 = 1;
-matlabbatch{1}.spm.tools.cat.estwrite.output.ROImenu.atlases.cobra = 1;
-matlabbatch{1}.spm.tools.cat.estwrite.output.ROImenu.atlases.hammers = 1;
-matlabbatch{1}.spm.tools.cat.estwrite.output.ROImenu.atlases.ibsr = 1;
-matlabbatch{1}.spm.tools.cat.estwrite.output.ROImenu.atlases.aal = 1;
-matlabbatch{1}.spm.tools.cat.estwrite.output.ROImenu.atlases.mori = 1;
-matlabbatch{1}.spm.tools.cat.estwrite.output.ROImenu.atlases.anatomy = 1;
-matlabbatch{1}.spm.tools.cat.estwrite.output.GM.native = 1;
-matlabbatch{1}.spm.tools.cat.estwrite.output.GM.warped = 0;
-matlabbatch{1}.spm.tools.cat.estwrite.output.GM.mod = 0;
-matlabbatch{1}.spm.tools.cat.estwrite.output.GM.dartel = 0;
-matlabbatch{1}.spm.tools.cat.estwrite.output.WM.native = 1;
-matlabbatch{1}.spm.tools.cat.estwrite.output.WM.warped = 0;
-matlabbatch{1}.spm.tools.cat.estwrite.output.WM.mod = 0;
-matlabbatch{1}.spm.tools.cat.estwrite.output.WM.dartel = 0;
-matlabbatch{1}.spm.tools.cat.estwrite.output.CSF.native = 1;
-matlabbatch{1}.spm.tools.cat.estwrite.output.CSF.warped = 0;
-matlabbatch{1}.spm.tools.cat.estwrite.output.CSF.mod = 0;
-matlabbatch{1}.spm.tools.cat.estwrite.output.CSF.dartel = 0;
-matlabbatch{1}.spm.tools.cat.estwrite.output.atlas.native = 1;
-matlabbatch{1}.spm.tools.cat.estwrite.output.atlas.dartel = 0;
-matlabbatch{1}.spm.tools.cat.estwrite.output.label.native = 1;
-matlabbatch{1}.spm.tools.cat.estwrite.output.label.warped = 0;
-matlabbatch{1}.spm.tools.cat.estwrite.output.label.dartel = 0;
-matlabbatch{1}.spm.tools.cat.estwrite.output.bias.native = 1;
-matlabbatch{1}.spm.tools.cat.estwrite.output.bias.warped = 0;
-matlabbatch{1}.spm.tools.cat.estwrite.output.bias.dartel = 0;
-matlabbatch{1}.spm.tools.cat.estwrite.output.las.native = 1;
-matlabbatch{1}.spm.tools.cat.estwrite.output.las.warped = 0;
-matlabbatch{1}.spm.tools.cat.estwrite.output.las.dartel = 0;
-matlabbatch{1}.spm.tools.cat.estwrite.output.jacobian.warped = 0;
-matlabbatch{1}.spm.tools.cat.estwrite.output.warps = [0 0];
-end
+% save('test_job','matlabbatch')
 
 spm('defaults', 'FMRI');
-spm_jobman('run', matlabbatch);
-
+try
+    spm_jobman('run', matlabbatch);
+catch err
+   disp('Error in CAT12');
+   global cat
+   disp(cat)
+   disp(err.message);
 end
-
-function ExecuteCat12_T1_FLAIR(t1_file,flair_file,ncores,showreport)
-global MRIToolkit;
-spm_path = MRIToolkit.spm_path;
-
-if(isempty(which('spm')))
-    addpath(genpath(spm_path));
-end
-
-if(nargin < 2 || showreport > 0)
-    showreport = 2;
-end
-
-matlabbatch{1}.spm.tools.cat.estwrite.data = {t1_file};
-matlabbatch{1}.spm.tools.cat.estwrite.data_wmh = {flair_file};
-matlabbatch{1}.spm.tools.cat.estwrite.nproc = 0;
-matlabbatch{1}.spm.tools.cat.estwrite.opts.tpm = {fullfile(spm_path,'tpm','TPM.nii')};
-matlabbatch{1}.spm.tools.cat.estwrite.opts.affreg = 'mni';
-matlabbatch{1}.spm.tools.cat.estwrite.opts.bias.biasstr = 0.5;
-matlabbatch{1}.spm.tools.cat.estwrite.opts.ngaus = [1 1 2 3 4 2];
-matlabbatch{1}.spm.tools.cat.estwrite.opts.warpreg = [0 0.001 0.5 0.05 0.2];
-matlabbatch{1}.spm.tools.cat.estwrite.opts.samp = 3;
-matlabbatch{1}.spm.tools.cat.estwrite.extopts.segmentation.APP = 1070;
-matlabbatch{1}.spm.tools.cat.estwrite.extopts.segmentation.NCstr = -Inf;
-matlabbatch{1}.spm.tools.cat.estwrite.extopts.segmentation.LASstr = 0.5;
-matlabbatch{1}.spm.tools.cat.estwrite.extopts.segmentation.gcutstr = 2;
-matlabbatch{1}.spm.tools.cat.estwrite.extopts.segmentation.cleanupstr = 0.5;
-matlabbatch{1}.spm.tools.cat.estwrite.extopts.segmentation.BVCstr = 0.5;
-matlabbatch{1}.spm.tools.cat.estwrite.extopts.segmentation.WMHCstr = 2.22044604925031e-16;
-matlabbatch{1}.spm.tools.cat.estwrite.extopts.segmentation.WMHC = 3;
-matlabbatch{1}.spm.tools.cat.estwrite.extopts.segmentation.mrf = 1;
-matlabbatch{1}.spm.tools.cat.estwrite.extopts.segmentation.restypes.fixed = [1 0.1];
-matlabbatch{1}.spm.tools.cat.estwrite.extopts.registration.T1 = {fullfile(spm_path,'toolbox','FieldMap','T1.nii')};
-matlabbatch{1}.spm.tools.cat.estwrite.extopts.registration.brainmask = {fullfile(spm_path,'toolbox','FieldMap','brainmask.nii')};
-matlabbatch{1}.spm.tools.cat.estwrite.extopts.registration.cat12atlas = {fullfile(spm_path,'toolbox','cat12','templates_1.50mm','cat.nii')};
-matlabbatch{1}.spm.tools.cat.estwrite.extopts.registration.darteltpm = {fullfile(spm_path,'toolbox','cat12','templates_1.50mm','Template_1_IXI555_MNI152.nii')};
-matlabbatch{1}.spm.tools.cat.estwrite.extopts.registration.shootingtpm = {fullfile(spm_path,'toolbox','cat12','templates_1.50mm','Template_0_IXI555_MNI152_GS.nii')};
-matlabbatch{1}.spm.tools.cat.estwrite.extopts.registration.regstr = 0.5;
-matlabbatch{1}.spm.tools.cat.estwrite.extopts.vox = 1;
-matlabbatch{1}.spm.tools.cat.estwrite.extopts.surface.pbtres = 0.5;
-matlabbatch{1}.spm.tools.cat.estwrite.extopts.surface.scale_cortex = 0.7;
-matlabbatch{1}.spm.tools.cat.estwrite.extopts.surface.add_parahipp = 0.1;
-matlabbatch{1}.spm.tools.cat.estwrite.extopts.surface.close_parahipp = 0;
-matlabbatch{1}.spm.tools.cat.estwrite.extopts.admin.experimental = 1;
-matlabbatch{1}.spm.tools.cat.estwrite.extopts.admin.lazy = 0;
-matlabbatch{1}.spm.tools.cat.estwrite.extopts.admin.ignoreErrors = 0;
-matlabbatch{1}.spm.tools.cat.estwrite.extopts.admin.verb = 2;
-matlabbatch{1}.spm.tools.cat.estwrite.extopts.admin.print = 1;
-matlabbatch{1}.spm.tools.cat.estwrite.output.surface = 12;
-matlabbatch{1}.spm.tools.cat.estwrite.output.ROImenu.atlases.neuromorphometrics = 1;
-matlabbatch{1}.spm.tools.cat.estwrite.output.ROImenu.atlases.lpba40 = 0;
-matlabbatch{1}.spm.tools.cat.estwrite.output.ROImenu.atlases.cobra = 0;
-matlabbatch{1}.spm.tools.cat.estwrite.output.ROImenu.atlases.hammers = 0;
-matlabbatch{1}.spm.tools.cat.estwrite.output.ROImenu.atlases.ibsr = 0;
-matlabbatch{1}.spm.tools.cat.estwrite.output.ROImenu.atlases.aal = 0;
-matlabbatch{1}.spm.tools.cat.estwrite.output.ROImenu.atlases.mori = 0;
-matlabbatch{1}.spm.tools.cat.estwrite.output.ROImenu.atlases.anatomy = 0;
-matlabbatch{1}.spm.tools.cat.estwrite.output.GM.native = 1;
-matlabbatch{1}.spm.tools.cat.estwrite.output.GM.warped = 0;
-matlabbatch{1}.spm.tools.cat.estwrite.output.GM.mod = 1;
-matlabbatch{1}.spm.tools.cat.estwrite.output.GM.dartel = 0;
-matlabbatch{1}.spm.tools.cat.estwrite.output.WM.native = 1;
-matlabbatch{1}.spm.tools.cat.estwrite.output.WM.warped = 0;
-matlabbatch{1}.spm.tools.cat.estwrite.output.WM.mod = 1;
-matlabbatch{1}.spm.tools.cat.estwrite.output.WM.dartel = 0;
-matlabbatch{1}.spm.tools.cat.estwrite.output.CSF.native = 1;
-matlabbatch{1}.spm.tools.cat.estwrite.output.CSF.warped = 0;
-matlabbatch{1}.spm.tools.cat.estwrite.output.CSF.mod = 0;
-matlabbatch{1}.spm.tools.cat.estwrite.output.CSF.dartel = 0;
-matlabbatch{1}.spm.tools.cat.estwrite.output.ct.native = 1;
-matlabbatch{1}.spm.tools.cat.estwrite.output.ct.warped = 1;
-matlabbatch{1}.spm.tools.cat.estwrite.output.ct.dartel = 0;
-matlabbatch{1}.spm.tools.cat.estwrite.output.WMH.native = 1;
-matlabbatch{1}.spm.tools.cat.estwrite.output.WMH.warped = 0;
-matlabbatch{1}.spm.tools.cat.estwrite.output.WMH.mod = 1;
-matlabbatch{1}.spm.tools.cat.estwrite.output.WMH.dartel = 0;
-matlabbatch{1}.spm.tools.cat.estwrite.output.TPMC.native = 1;
-matlabbatch{1}.spm.tools.cat.estwrite.output.TPMC.warped = 0;
-matlabbatch{1}.spm.tools.cat.estwrite.output.TPMC.mod = 1;
-matlabbatch{1}.spm.tools.cat.estwrite.output.TPMC.dartel = 0;
-matlabbatch{1}.spm.tools.cat.estwrite.output.atlas.native = 1;
-matlabbatch{1}.spm.tools.cat.estwrite.output.atlas.warped = 0;
-matlabbatch{1}.spm.tools.cat.estwrite.output.atlas.dartel = 0;
-matlabbatch{1}.spm.tools.cat.estwrite.output.label.native = 1;
-matlabbatch{1}.spm.tools.cat.estwrite.output.label.warped = 0;
-matlabbatch{1}.spm.tools.cat.estwrite.output.label.dartel = 0;
-matlabbatch{1}.spm.tools.cat.estwrite.output.bias.native = 0;
-matlabbatch{1}.spm.tools.cat.estwrite.output.bias.warped = 1;
-matlabbatch{1}.spm.tools.cat.estwrite.output.bias.dartel = 0;
-matlabbatch{1}.spm.tools.cat.estwrite.output.las.native = 0;
-matlabbatch{1}.spm.tools.cat.estwrite.output.las.warped = 0;
-matlabbatch{1}.spm.tools.cat.estwrite.output.las.dartel = 0;
-matlabbatch{1}.spm.tools.cat.estwrite.output.jacobian.warped = 0;
-matlabbatch{1}.spm.tools.cat.estwrite.output.warps = [1 1];
-
-spm('defaults', 'FMRI');
-spm_jobman('run', matlabbatch);
-
 end
 
 function ExecuteBiasFieldCorrection(input_file)

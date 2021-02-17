@@ -2,14 +2,12 @@
 %%% Alberto De Luca - alberto@isi.uu.nl $%%%
 %%% Distributed under the terms of LGPLv3  %%%
 
-
-
-% Spherical deconvolution class - including GRL and mFOD
+% MRTTrack (former Spherical deconvolution) class - including GRL and mFOD
 % A. De Luca - UMC Utrecht - 28/10/2019 - alberto@isi.uu.nl -
 % alberto.deluca.06@gmail.com
 % First version: 28/10/2019
 
-classdef SphericalDeconvolution < handle
+classdef MRTTrack < handle
     properties
         data;
         n_isotropic;
@@ -25,11 +23,15 @@ classdef SphericalDeconvolution < handle
         nDirections;
         NN_L, NN_H;
         data_size;
+        % for robust deconvolution (outlier rejection)
+        max_outlier_rejection = 0.1; % 10%
+        robust_kappa = 3;
+        robust_deconv  = 0;% whether to use robust_deconv
     end
     
     methods
         
-        function obj = SphericalDeconvolution(varargin)
+        function obj = MRTTrack(varargin)
             % Class constructor. Accepts only 1 optional argument:
             % data, a structure with fields "img" (the 4D data matrix), "bvals"
             % the b-values, "bvecs" the gradient vectors
@@ -197,8 +199,7 @@ classdef SphericalDeconvolution < handle
             if(nargin < 2)
                 myCluster = parcluster('local');
                 nof_workers = myCluster.NumWorkers;
-            end
-            
+            end            
             if(nargin < 3)
                 low_mem_mode = 0;
             end
@@ -258,6 +259,7 @@ classdef SphericalDeconvolution < handle
             N = sm;
             op_e2 = optimset('TolX',1e-2);
             op = optimset();
+            max_discarded_vols = round(max_outlier_rejection*st);
             
             [~,DeconvMethodCode] = SphericalDeconvolution.isSupportedMethod(obj.deconv_method); % -1 = failure; 1 = LSQNONNEG; 2 = DW_RegularizedDeconv; 3 = dRL
             if(DeconvMethodCode == -1)
@@ -280,34 +282,35 @@ classdef SphericalDeconvolution < handle
                     if(obj.data.mask(x) < 1)
                         continue
                     end
-
+                    
                     Stot = double(obj.data.img(:,x));
-
+                    fit_data = true(size(Stot));
+                    
                     % This normalization assumes there is some b=0s/mm2 data. It is not
                     % essential to do it as long as fractions is normalized at the end
                     NormFactor = mean(Stot(obj.data.bvals<=min_bval));
                     S0(x) = NormFactor;
                     Stot = Stot/NormFactor;
-
+                    
                     Stot = Stot.*shell_weight; % Weight the lower shells
-
+                    
                     piso = zeros(NC,1);
                     p_old = Inf; % store the fractions at previous iter
-
+                    
                     % The following loop will iterate WM-FOD estimation (with mDRL) and
                     % fractions guess (with LSQNONNEG)
                     for iter=1:50 % 50 = max number of iterations but usually exits way before
-
-                        DS = max(Stot-weighted_LRKernel(:,end-NC+1:end)*piso,0); % Subtract GM and CSF contributions
-
+                        
+                        DS = max(Stot-weighted_LRKernel(fit_data,end-NC+1:end)*piso,0); % Subtract GM and CSF contributions
+                        
                         if(DeconvMethodCode == 4)
                             %                         fODFC = mat_dRL(DS, weighted_LRKernel(:,1:end-NC), 200, obj.NN_L, 8);
-                            fODFC = ADT_deconv_RLdamp_1D_noEP(DS, weighted_LRKernel(:,1:end-NC),200, obj.NN_H);
+                            fODFC = ADT_deconv_RLdamp_1D_noEP(DS, weighted_LRKernel(fit_data,1:end-NC),200, obj.NN_H);
                         elseif(DeconvMethodCode == 3)
                             %                         fODFC = mat_RL(DS, weighted_LRKernel(:,1:end-NC), 200);
                             fODF = RichardsonLucy(DS, weighted_LRKernel(:,1:end-NC), 200);
-%                         elseif(DeconvMethodCode == 2)
-%                             fODFC = DW_RegularizedDeconv(weighted_LRKernel(:,1:end-NC),DS,op_e2,obj.L2LSQ_reg);
+                            %                         elseif(DeconvMethodCode == 2)
+                            %                             fODFC = DW_RegularizedDeconv(weighted_LRKernel(:,1:end-NC),DS,op_e2,obj.L2LSQ_reg);
                         elseif(DeconvMethodCode == 2 || DeconvMethodCode == 1)
                             fODFC = lsqnonneg(weighted_LRKernel(:,1:end-NC),DS);
                         end
@@ -316,38 +319,44 @@ classdef SphericalDeconvolution < handle
                         % 2) flat - spread fods enforcing sparsity.
                         % Without this line the code DOESN'T work. (WM is over-estimated).
                         fODFC(fODFC < median(fODFC)) = 0;
-
+                        
                         % Build a dictionary to fit the complete signal (Stot)
                         Y = [obj.LRKernel(:,1:end-NC)*fODFC obj.LRKernel(:,end-NC+1:end)]; % 3 columns (WM-SIGNAL GM-SIGNAL CSF-SIGNAL)
-
+                        
                         if(sum(Y(:,1)) > 0) % i.e. if the FOD is non-zero
                             Y(:,1) = Y(:,1)/max(Y(:,1)); % Normalize WM signal
                         end
-
-                        p = lsqnonneg(Y,Stot./shell_weight); % Compute the signal fractions
+                        
+                        p = lsqnonneg(Y(fit_data,:),Stot(fit_data)./shell_weight(fit_data)); % Compute the signal fractions
                         piso = p(end-NC+1:end);
-
+                        
                         % if nothing changed compared to previous iter, exit. (Tol may need to be
                         % adjusted)
                         if(sum(abs(p-p_old) < TheTol) == 3)
                             break
                         end
                         p_old = p;
+                        
+                        if(obj.robust_deconv == 1 && sum(fit_data == 0) < max_discarded_vols)
+                           residuals = Stot./shell_weight - Y*p;
+                           fit_data = abs(residuals - median(residuals)) < obj.robust_kappa*1.4826*mad(residuals,1);
+                        end
+                        
                     end
-
+                    
                     % NEW FINAL STEP 05/02/2018
-                    DS = max(Stot - weighted_HRKernel(:,end-NC+1:end)*piso,0); % Subtract GM and CSF contributions
-
+                    DS = max(Stot(fit_data) - weighted_HRKernel(fit_data,end-NC+1:end)*piso,0); % Subtract GM and CSF contributions
+                    
                     if(DeconvMethodCode == 4)
                         %                     fODF = mat_dRL(DS, weighted_HRKernel(:,1:end-NC),200, obj.NN_H, 8);
-                        fODF = ADT_deconv_RLdamp_1D_noEP(DS, weighted_HRKernel(:,1:end-NC),200, obj.NN_H);
+                        fODF = ADT_deconv_RLdamp_1D_noEP(DS, weighted_HRKernel(fit_data,1:end-NC),200, obj.NN_H);
                     elseif(DeconvMethodCode == 3)
                         %                     fODF = mat_RL(DS, weighted_HRKernel(:,1:end-NC), 200);
-                        fODF = RichardsonLucy(DS, weighted_HRKernel(:,1:end-NC), 200);
+                        fODF = RichardsonLucy(DS, weighted_HRKernel(fit_data,1:end-NC), 200);
                     elseif(DeconvMethodCode == 2)
-                        fODF = DW_RegularizedDeconv(weighted_HRKernel(:,1:end-NC),DS,op, obj.L2LSQ_reg);
+                        fODF = DW_RegularizedDeconv(weighted_HRKernel(fit_data,1:end-NC),DS,op, obj.L2LSQ_reg);
                     elseif(DeconvMethodCode == 1)
-                        fODF = lsqnonneg(weighted_HRKernel(:,1:end-NC),DS);
+                        fODF = lsqnonneg(weighted_HRKernel(fit_data,1:end-NC),DS);
                     end
                     fODFC = fODF;
                     fODFC(fODFC < median(fODFC)) = 0;
@@ -370,9 +379,9 @@ classdef SphericalDeconvolution < handle
                         end
                         Y = [Y weighted_HRKernel(:,end-NC+1:end)]; % 3 columns (WM-SIGNAL GM-SIGNAL CSF-SIGNAL)
                     end
-                    p = lsqnonneg(Y,Stot./shell_weight,op_e2); % Compute the signal fractions
+                    p = lsqnonneg(Y(fit_data,:),Stot(fit_data)./shell_weight(fit_data),op_e2); % Compute the signal fractions
                     RSS(x) = sum((Stot-Y*p).^2);
-
+                    
                     fractions(x,:) = p;
                     WM_fod(x,:) = single(fODF);
                 end
@@ -385,9 +394,9 @@ classdef SphericalDeconvolution < handle
                     if(obj.data.mask(x) < 1)
                         continue
                     end
-
+                    
                     Stot = double(obj.data.img(:,x));
-
+                    
                     % This normalization assumes there is some b=0s/mm2 data. It is not
                     % essential to do it as long as fractions is normalized at the end
                     NormFactor = mean(Stot(obj.data.bvals<=min_bval));
@@ -400,7 +409,7 @@ classdef SphericalDeconvolution < handle
                     RSS(x) = sum((Stot-weighted_HRKernel*FOD).^2);
                 end
             end
-            % Restructure data
+            % Reshape data
             
             fsum = sum(fractions,2);
             for ij=1:size(fractions,2)
@@ -441,27 +450,6 @@ classdef SphericalDeconvolution < handle
             obj.L2LSQ_reg = reg_val;
         end
         
-    end
-    
-    methods(Static)
-        function methods = SupportedMethods()
-            % List the supported deconvolution methods
-            methods = {'LSQ','L2LSQ','RL','dRL'};
-        end
-        
-        % Check whether a method is actually supported
-        function [boolean,method_id] = isSupportedMethod(method)
-            methods = SphericalDeconvolution.SupportedMethods();
-            for method_id=1:length(methods)
-                if(strcmpi(methods{method_id},method))
-                    boolean = true;
-                    return;
-                end
-            end
-            boolean = false;
-            method_id = -1;
-        end
-        
         function SaveOutputToNii(SpherDec,output,file_prefix)
             % Save the content of a deconvolution data structure to nifti. SpherDec
             % is an instance of this class, output is the structure returned
@@ -469,9 +457,9 @@ classdef SphericalDeconvolution < handle
             % the desired outputs.
             lmax = 16;
             super_scheme = gen_scheme(SpherDec.nDirections,lmax); % the reconstruction scheme. Change 300 to any number
-%             super_scheme.vert = super_scheme.vert(:,[2 1 3]);
-%             super_scheme.vert(:,3) = -super_scheme.vert(:,3);
-
+            %             super_scheme.vert = super_scheme.vert(:,[2 1 3]);
+            %             super_scheme.vert(:,3) = -super_scheme.vert(:,3);
+            
             sh = SH(lmax,super_scheme.vert);
             
             if(SpherDec.n_anisotropic == 1)
@@ -496,11 +484,11 @@ classdef SphericalDeconvolution < handle
                 else
                     data_struct.img = fod;
                     data_struct.VD = SpherDec.data.VD;
-                    EDTI.WriteNifti(data_struct,[file_prefix '_CSD_FOD.nii']);
+                    MRTQuant.WriteNifti(data_struct,[file_prefix '_CSD_FOD.nii']);
                     data_struct.img = output.fractions;
-                    EDTI.WriteNifti(data_struct,[file_prefix '_fractions.nii']);
+                    MRTQuant.WriteNifti(data_struct,[file_prefix '_fractions.nii']);
                     data_struct.img = sh.coef(output.FOD*mult);
-                    EDTI.WriteNifti(data_struct,[file_prefix '_CSD_FOD_scaled.nii']);
+                    MRTQuant.WriteNifti(data_struct,[file_prefix '_CSD_FOD_scaled.nii']);
                 end
             else
                 % multi-FOD case
@@ -512,14 +500,14 @@ classdef SphericalDeconvolution < handle
                     else
                         data_struct.img = fod;
                         data_struct.VD = SpherDec.data.VD;
-                        EDTI.WriteNifti(data_struct,[file_prefix '_CSD_FOD_' num2str(fod_id) '.nii']);
+                        MRTQuant.WriteNifti(data_struct,[file_prefix '_CSD_FOD_' num2str(fod_id) '.nii']);
                     end
                 end
                 if(isfield(SpherDec.data,'hdr'))
                     DW_SaveVolumeLikeNii(output.fractions,SpherDec.data,[file_prefix '_fractions'],0);
                 else
                     data_struct.img = output.fractions;
-                    EDTI.WriteNifti(data_struct,[file_prefix '_fractions.nii']);
+                    MRTQuant.WriteNifti(data_struct,[file_prefix '_fractions.nii']);
                 end
                 
                 json.CallFunction = 'SphericalDeconvolution.PerformDeconv';
@@ -531,12 +519,33 @@ classdef SphericalDeconvolution < handle
                 json.parameters.rf_models = SpherDec.rf_models;
                 json.parameters.L2LSQ_reg = SpherDec.L2LSQ_reg;
                 json.parameters.nDirections = SpherDec.nDirections;
-                json.parameters.NN_L = SpherDec.NN_L; 
+                json.parameters.NN_L = SpherDec.NN_L;
                 json.parameters.NN_H = SpherDec.NN_H;
-        
+                
                 NiftiIO_basic.WriteJSONDescription('output',file_prefix,'props',json);
-
+                
             end
+        end
+        
+    end
+    
+    methods(Static)
+        function methods = SupportedMethods()
+            % List the supported deconvolution methods
+            methods = {'LSQ','L2LSQ','RL','dRL'};
+        end
+        
+        % Check whether a method is actually supported
+        function [boolean,method_id] = isSupportedMethod(method)
+            methods = SphericalDeconvolution.SupportedMethods();
+            for method_id=1:length(methods)
+                if(strcmpi(methods{method_id},method))
+                    boolean = true;
+                    return;
+                end
+            end
+            boolean = false;
+            method_id = -1;
         end
         
         function mrt_data = LoadNiiBvalBvec(varargin)
@@ -576,48 +585,6 @@ classdef SphericalDeconvolution < handle
             mrt_data.img = permute(mrt_data.img,[2 1 3 4]);
             mrt_data.img = flip(mrt_data.img,1);
             mrt_data.img = flip(mrt_data.img,2);
-        end
-        
-        function [EigVal,IsoK] = EstimatedAverageEigval_IsoK(data)
-            % Estimate the average eigenvalues and isotropic kurtosis in a
-            % dataset to initialize the RF
-            [sx,sy,sz,st] = size(data.img);
-            signal_stack = reshape(data.img,sx*sy*sz,st);
-            
-            [G,WG,GoodIndexes] = DW_BuildDTMat(data,unique(data.bvals),1);
-            Gt = G;
-            G = [Gt(:,1:6) 1/6*(data.bvals*1e-3).^2 Gt(:,end)];
-            
-            msk = sum(signal_stack==0,2) == 0;
-            p = zeros(length(signal_stack),8);
-            K = zeros(length(signal_stack),1);
-            autovals = zeros(length(signal_stack),3);
-            parfor ij=1:length(signal_stack)
-                if(msk(ij) < 1)
-                    continue
-                end
-                S = signal_stack(ij,:)';
-                if(sum(S==0) > 0)
-                    continue
-                end
-                p1 = E_DTI_WLLS_WW(S,G)
-                p(ij,:) = p1;%G\log(S);
-                if(sum(~isfinite(p(ij,:))) > 0)
-                    continue
-                end
-                autoval = eig(D2Dtensor(p(ij,:)));
-                autovals(ij,:) = sort(autoval,'descend');
-                K(ij) = 1e-6*p1(end-1)/mean(autoval.^2);
-            end
-            
-            p = reshape(p,sx,sy,sz,8);
-            
-            [~,m_FA,m_DEC,~,~,m_lambdas,eigenvectors] = DW_ComputeTensorMetrics(p,1:6);
-            U = m_FA(:) > 0.7 & data.mask(:) > 0;
-            
-            EigVal = mean(autovals(U > 0,:));
-            EigVal(2:3) = mean(EigVal(2:3));
-            IsoK = mean(K(U(:) > 0 & K(:) > 0 & K(:) < 4));
         end
         
         function TerminateTractsWithFraction(varargin)
@@ -665,7 +632,7 @@ classdef SphericalDeconvolution < handle
             
             [sx,sy,sz] = size(FA);
             
-            intersect_mask = EDTI.LoadNifti(fraction_file);
+            intersect_mask = MRTQuant.LoadNifti(fraction_file);
             intersect_mask = intersect_mask.img;
             [~,intersect_mask] = max(intersect_mask,[],4);
             if(strcmp(mask_mode,'wm'))
@@ -788,17 +755,29 @@ classdef SphericalDeconvolution < handle
                 'TractAng','TractGEO','TractLambdas','TractMD','FList','TractMask','VDims','-v7.3');
         end
         
-        function [init_lambdas,init_K] = Eigenval_IsoK_WM_FromData(data,FA,mask)
+        function [init_lambdas,init_K] = Eigenval_IsoK_WM_FromData(data,mask,fit_dki)
             % Estimate the tensor eigenvalues and isotropic kurtosis from the data, in a mask where FA >= 0.7
             data.img = single(data.img);
             [sx,sy,sz,st] = size(data.img);
             signal_stack = reshape(data.img,sx*sy*sz,st);
             
+            if(exist('fit_dki','var') < 1)
+                fit_dki = 1;
+            end
+            
+            if(fit_dki == 1)
+                Np = 8;
+            else
+                Np = 7;
+            end
+            
             [G,WG,GoodIndexes] = DW_BuildDTMat(data,unique(data.bvals),1);
             Gt = G;
-            G = [Gt(:,1:6) 1/6*(data.bvals*1e-3).^2 Gt(:,end)]; % Extend for isotropic kurtosis
+            if(fit_dki == 1)
+                G = [Gt(:,1:6) 1/6*(data.bvals*1e-3).^2 Gt(:,end)]; % Extend for isotropic kurtosis
+            end
             msk = sum(signal_stack==0,2) == 0;
-            p = zeros(length(signal_stack),8);
+            p = zeros(length(signal_stack),Np);
             K = zeros(length(signal_stack),1);
             autovals = zeros(length(signal_stack),3);
             parfor ij=1:length(signal_stack)
@@ -809,7 +788,7 @@ classdef SphericalDeconvolution < handle
                 if(sum(S==0) > 0)
                     continue
                 end
-                p1 = E_DTI_WLLS_WW(S,G); % This uses the weighted least squares as implemented in ExploreDTI
+                p1 = EDTI_Library.E_DTI_WLLS_WW(S,G); % This uses the weighted least squares as implemented in ExploreDTI
                 p(ij,:) = p1;%G\log(S);
                 if(sum(~isfinite(p(ij,:))) > 0)
                     continue
@@ -819,13 +798,24 @@ classdef SphericalDeconvolution < handle
                 K(ij) = 1e-6*p1(end-1)/mean(autoval.^2);
             end
             
-            p = reshape(p,sx,sy,sz,8);
+            p = reshape(p,sx,sy,sz,Np);
+            DT = EDTI_Library.E_DTI_DWI_mat2cell(p(:,:,:,1:6));
+            [~,m_FA,~,~,m_lambdas] = EDTI_Library.E_DTI_eigensystem_analytic(DT);
+            m_lambdas = real(m_lambdas);
+            K = real(K);
+            m_FA = m_FA / sqrt(3);
             
-            U = FA(:) > 0.7 & mask(:) > 0;
+            U = m_FA(:) > 0.7 & mask(:) > 0;
             
-            init_lambdas = real(mean(autovals(U > 0,:)));
+            m_lambdas = reshape(m_lambdas,sx*sy*sz,3);
+            init_lambdas = median(m_lambdas(U > 0,:));
             init_lambdas(2:3) = mean(init_lambdas(2:3));
-            init_K = real(mean(K(U(:) > 0 & K(:) > 0 & K(:) < 4)));
+            
+            if(fit_dki == 1)
+                init_K = mean(K(U(:) > 0 & K(:) < 4));
+            else
+                init_K = 0;
+            end
             
             disp(['Calibrated lambdas are:' num2str(init_lambdas)]);
             disp(['Calibrated K is:' num2str(init_K)]);
@@ -856,7 +846,7 @@ classdef SphericalDeconvolution < handle
             basis_type = GiveValueForName(varargin,'basis');
             bvalue = GiveValueForName(varargin,'bvalue');
             lmax = GiveValueForName(varargin,'lmax');
-
+            
             if(isempty(txt_file) && (isempty(bvals_file) || isempty(bvecs_file)))
                 error('Missing mandatory argument bvals/bvecs or txt');
             end
@@ -866,12 +856,12 @@ classdef SphericalDeconvolution < handle
             end
             
             if(~isempty(txt_file))
-               if(ischar(txt_file))
-                   bmat = load(txt_file);
-               else
-                   bmat = txt_file;
-               end
-               [bvals,bvecs] = EDTI.bval_bvec_from_b_Matrix(bmat); 
+                if(ischar(txt_file))
+                    bmat = load(txt_file);
+                else
+                    bmat = txt_file;
+                end
+                [bvals,bvecs] = MRTQuant.bval_bvec_from_b_Matrix(bmat);
             else
                 if(ischar(bvals_file))
                     bvals = load(bvals_file);
@@ -892,9 +882,9 @@ classdef SphericalDeconvolution < handle
             end
             
             IX = abs(bvals-bvalue) < 0.1*bvalue;
-%             bvals = bvals(IX);
+            %             bvals = bvals(IX);
             bvecs = bvecs(IX,:);
-                        
+            
             if(isempty(lmax))
                 lmax = min(2.*(floor((sqrt(1+8.*size(bvecs,1))-3)./4)),32);
             end
@@ -938,7 +928,7 @@ classdef SphericalDeconvolution < handle
                     end
                 end
             elseif(strcmp(basis_type,'mrtrix'))
-%                 bvecs_mrtrix = bvecs;
+                %                 bvecs_mrtrix = bvecs;
                 bvecs_mrtrix = bvecs(:,[2 1 3]);
                 bvecs_mrtrix(:,1) = -bvecs_mrtrix(:,1);
                 angle_rep_mrtrix = c2s(bvecs_mrtrix);
@@ -959,14 +949,14 @@ classdef SphericalDeconvolution < handle
             else
                 error('Unknown basis type');
             end
-
+            
         end
         
         function SHFittedData = dMRI_2_SH(varargin)
             % Converts dMRI data to the SH representation of ExploreDTI,
             % Dipy or mrtrix3.
             % Input arguments:
-            % data: the input data structure. 
+            % data: the input data structure.
             % basis: the desired SH basis, one in
             % "edti" (default),"dipy","mrtrix"
             % bvalue: which b-value to fit. Defaults to the maximum
@@ -983,7 +973,7 @@ classdef SphericalDeconvolution < handle
             end
             if(isempty(bvalue))
                 bvalue = max(round(data.bvals));
-            end      
+            end
             
             IX = abs(data.bvals-bvalue)<0.1*bvalue;
             data.bvals = data.bvals(IX);
@@ -1018,7 +1008,7 @@ classdef SphericalDeconvolution < handle
             % bvecs: the gradient orientations (variable or file)
             % bvals: the corresponding diffusion weightings (variable or
             % file)
-            % bmat: alternatively, the b-matrix (variable or file)    
+            % bmat: alternatively, the b-matrix (variable or file)
             % bvalue: the shell b-value. Defaults to the max
             % lmax: the order of the spherical harmonics
             bvals = GiveValueForName(varargin,'bvals');
@@ -1037,7 +1027,7 @@ classdef SphericalDeconvolution < handle
             end
             
             if(isempty(bvals))
-               [bvals,bvecs] = EDTI.bval_bvec_from_b_Matrix(bmat); 
+                [bvals,bvecs] = MRTQuant.bval_bvec_from_b_Matrix(bmat);
             end
             
             if(ischar(bvals))
@@ -1045,11 +1035,11 @@ classdef SphericalDeconvolution < handle
                 bvecs = load(bvecs);
                 bvals = bvals';
                 bvecs = bvecs';
-            end                
+            end
             
             if(isempty(bvalue))
                 bvalue = max(round(bvals));
-            end      
+            end
             
             IX = abs(bvals-bvalue)<0.1*bvalue;
             bvals = bvals(IX);
@@ -1057,13 +1047,13 @@ classdef SphericalDeconvolution < handle
             
             SHB = SphericalDeconvolution.SHFitMatrix('basis',basis,'bvals',bvals,...
                 'bvecs',bvecs,'bmat',bmat,'lmax',lmax);
-
+            
             [sx,sy,sz,st] = size(shcoeffs);
             if(~ismatrix(shcoeffs))
                 shcoeffs = reshape(shcoeffs,sx*sy*sz,st)';
             end
-            data.img = SHB*shcoeffs;           
-
+            data.img = SHB*shcoeffs;
+            
             data.bvals = bvals;
             data.bvecs = bvecs;
             
@@ -1104,7 +1094,7 @@ classdef SphericalDeconvolution < handle
             
             VD = [];
             if(ischar(shcoeffs))
-                img = EDTI.LoadNifti(shcoeffs);
+                img = MRTQuant.LoadNifti(shcoeffs);
                 shcoeffs = img.img;
                 VD = img.VD;
                 clear img;
@@ -1114,9 +1104,9 @@ classdef SphericalDeconvolution < handle
                 if(isempty(nvert))
                     nvert = 300;
                 end
-               bvals = 3000*ones(nvert,1); 
-               Q = gen_scheme(nvert,4);
-               bvecs = Q.vert;
+                bvals = 3000*ones(nvert,1);
+                Q = gen_scheme(nvert,4);
+                bvecs = Q.vert;
             end
             
             if(isempty(basis_in))
@@ -1126,9 +1116,9 @@ classdef SphericalDeconvolution < handle
                 error('Missing mandatory argument basis_out');
             end
             if(~isempty(bmat))
-               if(ischar(bmat))
-                   bmat = load(bmat);
-               end
+                if(ischar(bmat))
+                    bmat = load(bmat);
+                end
             end
             
             data = SphericalDeconvolution.SH_2_dMRI('bvals',bvals,...
@@ -1137,10 +1127,10 @@ classdef SphericalDeconvolution < handle
                 basis_out,'lmax',lmax);
             
             if(~isempty(VD) && ~isempty(output))
-               out.VD = VD;
-               out.img = SHCoeffs;
-               clear data SHCoeffs
-               EDTI.WriteNifti(out,output); 
+                out.VD = VD;
+                out.img = SHCoeffs;
+                clear data SHCoeffs
+                MRTQuant.WriteNifti(out,output);
             end
         end
         
@@ -1158,9 +1148,9 @@ classdef SphericalDeconvolution < handle
             if(isempty(nvert))
                 nvert = 720;
             end
-
+            
             if(ischar(fod_file))
-                DATA = EDTI.LoadNifti(fod_file);
+                DATA = MRTQuant.LoadNifti(fod_file);
             else
                 DATA.img = fod_file;
                 clear fod_file
@@ -1178,10 +1168,10 @@ classdef SphericalDeconvolution < handle
                     case 163
                         lmax = 16;
                 end
-            end            
+            end
             
             SV = gen_scheme(nvert,4);
-            vertices = SV.vert;            
+            vertices = SV.vert;
             
             mySH = SH(lmax,SV.vert);
             fod_amp = mySH.amp(DATA.img);
@@ -1203,7 +1193,7 @@ classdef SphericalDeconvolution < handle
                 error('Missing mandatory argument fod');
             end
             if(ischar(fod))
-                C = EDTI.LoadNifti(fod);
+                C = MRTQuant.LoadNifti(fod);
                 fod = C.img;
                 clear C
             end
@@ -1231,12 +1221,16 @@ classdef SphericalDeconvolution < handle
                 max_cores = 1;
             end
             
-            [peak_dir,peak_amp] = SHPrecomp.all_peaks(fod,peak_threshold,max_peaks,max_cores);
+            if(parallel == 1)
+                [peak_dir,peak_amp] = SHPrecomp.all_peaks_parallel(fod,peak_threshold,max_peaks,max_cores,lmax,300);
+            else
+                [peak_dir,peak_amp] = SHPrecomp.all_peaks(fod,peak_threshold,max_peaks,max_cores,lmax,300);
+            end
             
             if(nargout > 2)
-               NuFO = zeros(size(peak_dir));
-               AFD = zeros(size(peak_dir));
-                           
+                NuFO = zeros(size(peak_dir));
+                AFD = zeros(size(peak_dir));
+                
                 for x=1:size(AFD,1)
                     for y=1:size(AFD,2)
                         for z=1:size(AFD,3)
@@ -1248,7 +1242,7 @@ classdef SphericalDeconvolution < handle
                         end
                     end
                 end
-               
+                
             end
             
         end
@@ -1266,29 +1260,29 @@ classdef SphericalDeconvolution < handle
             if(isempty(output))
                 error('Missing mandatory argument output');
             end
-           
+            
             T = load(mat_file,'Tracts','TractMask','VDims');
             tracks.max_num_tracks = num2str(length(T.Tracts));
             tracks.unidirectional = 0;
             tracks.data = cell(1,length(T.Tracts));
-%             shift = round(size(T.TractMask).*T.VDims)/2;
+            %             shift = round(size(T.TractMask).*T.VDims)/2;
             shift = (size(T.TractMask).*T.VDims)/2;
             for ij=1:length(T.Tracts)
-               TR = T.Tracts{ij}(:,[2 1 3]);
-               TR(:,1) = -TR(:,1)+shift(2);
-               TR(:,2) = -TR(:,2)+shift(1);
-               TR(:,3) = TR(:,3) - shift(3);
-               tracks.data(ij) = {TR}; 
+                TR = T.Tracts{ij}(:,[2 1 3]);
+                TR(:,1) = -TR(:,1) + shift(2);
+                TR(:,2) = -TR(:,2) + shift(1);
+                TR(:,3) = TR(:,3) - shift(3);
+                tracks.data(ij) = {TR};
             end
             write_mrtrix_tracks(tracks,output);
         end
-     
+        
         function ConvertTCKTractography2Mat(varargin)
             % Converts TCK tractography 2 the ExploreDTI format
             % input arguments:
             % tck_file: the input tractography mat file
             % nii_file: a reference .nii file in the same space of the tck
-            % output: the output MAT file            
+            % output: the output MAT file
             tck_file = GiveValueForName(varargin,'tck_file');
             if(isempty(tck_file))
                 error('Missing mandatory argument tck_file');
@@ -1297,7 +1291,7 @@ classdef SphericalDeconvolution < handle
             if(isempty(output))
                 error('Missing mandatory argument output');
             end
-            nii_file = GiveValueForName(varargin,'nii_file');            
+            nii_file = GiveValueForName(varargin,'nii_file');
             if(isempty(nii_file))
                 error('Missing mandatory argument nii_file');
             end
@@ -1313,32 +1307,32 @@ classdef SphericalDeconvolution < handle
             TractLambdas = cell(1,tracks.max_num_tracks);
             FList = (1:length(Tracts))';
             
-            ref = EDTI.LoadNifti(nii_file);
+            ref = MRTQuant.LoadNifti(nii_file);
             VDims = ref.VD;
             TractMask = ones(size(ref.img));
             TractMask = permute(TractMask,[2 1 3]);
-%             shift = (size(TractMask).*VDims)/2;
+            %             shift = (size(TractMask).*VDims)/2;
             shift = round(size(TractMask).*VDims)/2;
             for tid=1:length(tracks.data)
-               T = tracks.data{tid}; 
-               T(:,3) = T(:,3) + shift(3);
-               T(:,2) = -T(:,2) + shift(2);
-               T(:,1) = -T(:,1) + shift(1);
-               T = T(:,[2 1 3]);
-               
-               Tracts(tid) = {T};
-               TractFA(tid) = {ones(size(T,1),1)};
-               TractMD(tid) = {ones(size(T,1),1)};
-               TractAng(tid) = {ones(size(T,1),1)};
-               TractFE(tid) = {ones(size(T,1),3)};
-               for pid=2:size(T,1)
-                  D = abs(T(pid,:)-T(pid-1,:));
-                  D = D/norm(D);
-                  TractFE{tid}(pid,:) = (D);
-               end
-               TractGEO(tid) = {ones(size(T,1),1)};
-               TractLambdas(tid) = {ones(size(T,1),3)};
-               TractL(tid) = {size(T,1)};
+                T = tracks.data{tid};
+                T(:,3) = T(:,3) + shift(3);
+                T(:,2) = -T(:,2) + shift(2);
+                T(:,1) = -T(:,1) + shift(1);
+                T = T(:,[2 1 3]);
+                
+                Tracts(tid) = {T};
+                TractFA(tid) = {ones(size(T,1),1)};
+                TractMD(tid) = {ones(size(T,1),1)};
+                TractAng(tid) = {ones(size(T,1),1)};
+                TractFE(tid) = {ones(size(T,1),3)};
+                for pid=2:size(T,1)
+                    D = abs(T(pid,:)-T(pid-1,:));
+                    D = D/norm(D);
+                    TractFE{tid}(pid,:) = (D);
+                end
+                TractGEO(tid) = {ones(size(T,1),1)};
+                TractLambdas(tid) = {ones(size(T,1),3)};
+                TractL(tid) = {size(T,1)};
             end
             
             save(output,'Tracts','TractL','TractFA','TractFE','TractFE',...
@@ -1350,7 +1344,7 @@ classdef SphericalDeconvolution < handle
             % Converts MAT tractography 2 the TRK format
             % input arguments:
             % mat_file: the input tractography mat file
-            % output: the output vtk file            
+            % output: the output vtk file
             mat_file = GiveValueForName(varargin,'mat_file');
             if(isempty(mat_file))
                 error('Missing mandatory argument mat_file');
@@ -1359,11 +1353,11 @@ classdef SphericalDeconvolution < handle
             if(isempty(output))
                 error('Missing mandatory argument output');
             end
-
+            
             TR = load(mat_file,'Tract','VDims','TractMask');
-        
+            
         end
-
+        
         function ConvertTRKTractography2Mat(varargin)
             % Converts TRK tractography 2 the ExploreDTI format
             % input arguments:
@@ -1378,14 +1372,14 @@ classdef SphericalDeconvolution < handle
             if(isempty(output))
                 error('Missing mandatory argument output');
             end
-            nii_file = GiveValueForName(varargin,'nii_file');            
+            nii_file = GiveValueForName(varargin,'nii_file');
             if(isempty(nii_file))
                 error('Missing mandatory argument nii_file');
             end
-
+            
             [header,tracks] = trk_read(trk_file);
-            SEG = EDTI.LoadNifti(nii_file);
-
+            SEG = MRTQuant.LoadNifti(nii_file);
+            
             Tracts.VDims = REF.VD;
             Tracts.Tracts = cell(1,length(Lines));
             Tracts.TractAng = cell(1,length(Lines));
@@ -1414,31 +1408,31 @@ classdef SphericalDeconvolution < handle
                 cTractLambdas = zeros([size(PL,1),3]);
                 cTractMD = zeros([size(PL,1),1]);
                 for point=1:size(PL,1)
-                   P = PL(point,:)./REF.VD; 
-                   PC = floor(P)+1;
-                   cTractFA(point) = DIFF_PROP.FA(PC(1),PC(2),PC(3))/sqrt(3);
-                   cTractFE(point,:) = abs(squeeze(DIFF_PROP.FE(PC(1),PC(2),PC(3),:)));
-                   cTractLambdas(point,:) = squeeze(DIFF_PROP.eigval(PC(1),PC(2),PC(3),:));
-                   cTractMD(point) = mean(cTractLambdas(point,:));
+                    P = PL(point,:)./REF.VD;
+                    PC = floor(P)+1;
+                    %                    cTractFA(point) = DIFF_PROP.FA(PC(1),PC(2),PC(3))/sqrt(3);
+                    %                    cTractFE(point,:) = abs(squeeze(DIFF_PROP.FE(PC(1),PC(2),PC(3),:)));
+                    %                    cTractLambdas(point,:) = squeeze(DIFF_PROP.eigval(PC(1),PC(2),PC(3),:));
+                    cTractMD(point) = mean(cTractLambdas(point,:));
                 end
                 Tracts.TractAng(tid) = {cTractAng};
                 Tracts.TractFA(tid) = {cTractFA};
                 Tracts.TractFE(tid) = {cTractFE};
                 Tracts.TractGEO(tid) = {cTractGEO};
                 Tracts.TractLambdas(tid) = {cTractLambdas};
-                Tracts.TractMD(tid) = {cTractMD};       
+                Tracts.TractMD(tid) = {cTractMD};
                 Tracts.TractL(tid) = {cTractL};
             end
             save(output,'-struct','Tracts');
         end
-
+        
         function [mx,my,mz] = ConvertMatTractography2VTK(varargin)
             % Converts MAT tractography 2 the VTK format
             % The output mx,my,mz are the shifts from the EDTI space to the
             % Slicer space
             % input arguments:
             % mat_file: the input tractography mat file
-            % output: the output vtk file            
+            % output: the output vtk file
             mat_file = GiveValueForName(varargin,'mat_file');
             if(isempty(mat_file))
                 error('Missing mandatory argument mat_file');
@@ -1465,25 +1459,25 @@ classdef SphericalDeconvolution < handle
             if(isempty(output))
                 error('Missing mandatory argument output');
             end
-            nii_file = GiveValueForName(varargin,'nii_file');            
+            nii_file = GiveValueForName(varargin,'nii_file');
             if(isempty(nii_file))
                 error('Missing mandatory argument nii_file');
             end
             
-            REF = EDTI.LoadNifti(nii_file);
+            REF = MRTQuant.LoadNifti(nii_file);
             
             try
                 [Points,Lines] = VTKImport_test(fullfile(vtk_files(vid).folder,vtk_files(vid).name));
-            catch 
+            catch
                 disp('Error trying to read the VTK file');
                 return
             end
             Points(:,1) = Points(:,1) + mx;
             Points(:,2) = Points(:,2) + my;
             Points(:,3) = Points(:,3) + mz;
-            Points(:,1) = size(REF.img,2) - Points(:,1); 
-            Points(:,2) = size(REF.img,1) - Points(:,2); 
-            Points = Points(:,[2 1 3]); 
+            Points(:,1) = size(REF.img,2) - Points(:,1);
+            Points(:,2) = size(REF.img,1) - Points(:,2);
+            Points = Points(:,[2 1 3]);
             Tracts.VDims = REF.VD;
             Tracts.Tracts = cell(1,length(Lines));
             Tracts.TractAng = cell(1,length(Lines));
@@ -1507,24 +1501,833 @@ classdef SphericalDeconvolution < handle
                 cTractLambdas = zeros([size(PL,1),3]);
                 cTractMD = zeros([size(PL,1),1]);
                 for point=1:size(PL,1)
-                   P = PL(point,:)./REF.VD; 
-                   PC = floor(P)+1;
-                   cTractFA(point) = DIFF_PROP.FA(PC(1),PC(2),PC(3))/sqrt(3);
-                   cTractFE(point,:) = abs(squeeze(DIFF_PROP.FE(PC(1),PC(2),PC(3),:)));
-                   cTractLambdas(point,:) = squeeze(DIFF_PROP.eigval(PC(1),PC(2),PC(3),:));
-                   cTractMD(point) = mean(cTractLambdas(point,:));
+                    P = PL(point,:)./REF.VD;
+                    PC = floor(P)+1;
+                    %                    cTractFA(point) = DIFF_PROP.FA(PC(1),PC(2),PC(3))/sqrt(3);
+                    %                    cTractFE(point,:) = abs(squeeze(DIFF_PROP.FE(PC(1),PC(2),PC(3),:)));
+                    %                    cTractLambdas(point,:) = squeeze(DIFF_PROP.eigval(PC(1),PC(2),PC(3),:));
+                    cTractMD(point) = mean(cTractLambdas(point,:));
                 end
                 Tracts.TractAng(tid) = {cTractAng};
                 Tracts.TractFA(tid) = {cTractFA};
                 Tracts.TractFE(tid) = {cTractFE};
                 Tracts.TractGEO(tid) = {cTractGEO};
                 Tracts.TractLambdas(tid) = {cTractLambdas};
-                Tracts.TractMD(tid) = {cTractMD};       
+                Tracts.TractMD(tid) = {cTractMD};
                 Tracts.TractL(tid) = {cTractL};
             end
             save(output,'-struct','Tracts');
-
+            
         end
+        
+        function FilterTractsANDGate(varargin)
+            % filt_type 0: pass once in params.mask1
+            % filt_type 1: pass at least twice in params.mask1
+            % filt_type 2: start in params.mask1 and end in params.mask2
+            % filt_type 3: discard if passing in params.mask1
+            coptions = varargin;
+            base_file = GiveValueForName(coptions,'mat_file');
+            if(isempty(base_file))
+                error('Need to specify the input .mat file');
+            end
+            tract_file = GiveValueForName(coptions,'tract_file');
+            if(isempty(tract_file))
+                error('Need to specify the input Tract.mat file');
+            end
+            out_file = GiveValueForName(coptions,'output');
+            if(isempty(out_file))
+                error('Need to specify the output file');
+            end
+            params = GiveValueForName(coptions,'params');
+            if(isempty(out_file))
+                error('Need to specify input parameters');
+            end
+            filt_type = GiveValueForName(coptions,'filt_type');
+            if(isempty(filt_type))
+                error('Need to specify input parameters');
+            end
+            
+            load(tract_file);
+            load(base_file,'FA','VDims');
+            
+            [sx,sy,sz] = size(FA);
+            
+            good_tracts = true(length(Tracts),1);
+            
+            if(filt_type < 2)
+                params.mask2 = params.mask1;
+            end
+            
+            if(exist('min_length','var') < 1)
+                min_length = 2;
+            end
+            
+            try
+                
+                for tid=1:length(Tracts)
+                    tract = Tracts{tid};
+                    passed_1 = 0;
+                    passed_2 = 0;
+                    
+                    for l=1:size(tract,1)
+                        point = round(tract(l,:)./VDims);
+                        if(params.mask1(point(1),point(2),point(3)))
+                            passed_1 = passed_1 + 1;
+                        end
+                        if(params.mask2(point(1),point(2),point(3)))
+                            passed_2 = passed_2 + 1;
+                        end
+                    end
+                    if(filt_type == 0)
+                        if(passed_1 < 1)
+                            good_tracts(tid) = false;
+                        end
+                    elseif(filt_type == 1)
+                        if(passed_1 < 2)
+                            good_tracts(tid) = false;
+                        end
+                    elseif(filt_type == 2)
+                        if(passed_1 < 1 || passed_2 < 1)
+                            good_tracts(tid) = false;
+                        end
+                    elseif(filt_type == 3)
+                        if(passed_1 > 0 || passed_2 > 0)
+                            good_tracts(tid) = false;
+                        end
+                    end
+                    
+                    if(TractL{tid} < min_length)
+                        good_tracts(tid) = false;
+                    end
+                    
+                end
+                
+                Tracts = Tracts(good_tracts);
+                if(exist('TractsFOD','var') > 0)
+                    TractsFOD = TractsFOD(good_tracts);
+                else
+                    TractsFOD = [];
+                end
+                TractL = TractL(good_tracts);
+                TractFA = TractFA(good_tracts);
+                TractFE = TractFE(good_tracts);
+                TractAng = TractAng(good_tracts);
+                TractGEO = TractGEO(good_tracts);
+                TractLambdas = TractLambdas(good_tracts);
+                TractMD = TractMD(good_tracts);
+                FList = 1:length(Tracts);
+                
+                disp(['Gated ' num2str(sum(good_tracts == true)) ' out of ' num2str(length(good_tracts)) ' ' ...
+                    sprintf('%.2f',single(sum(good_tracts == true))/single(length(good_tracts))) '%']);
+                
+                save(out_file,'Tracts','TractsFOD','TractL','TractFA','TractFE','TractFE',...
+                    'TractAng','TractGEO','TractLambdas','TractMD','TractMask','FList','VDims');
+                
+            catch err
+                disp(err.message);
+            end
+        end
+        
+        function ConcatenateMATTractographies(varargin)
+            % filt_type 0: pass once in params.mask1
+            % filt_type 1: pass at least twice in params.mask1
+            % filt_type 2: start in params.mask1 and end in params.mask2
+            % filt_type 3: discard if passing in params.mask1
+            coptions = varargin;
+            mat_file1 = GiveValueForName(coptions,'mat_file1');
+            if(isempty(mat_file1))
+                error('Need to specify at least 2 tractography mat files .mat file');
+            end
+            output = GiveValueForName(coptions,'output');
+            if(isempty(output))
+                error('Need to specify the output .mat file');
+            end
+            TB = load(mat_file1);
+            idx = 2;
+            while true
+                mat_file1 = GiveValueForName(coptions,['mat_file' num2str(idx)]);
+                if(isempty(mat_file1))
+                    if(idx == 2)
+                        error('Need to specify at least 2 tractography mat files .mat file');
+                    else
+                        break
+                    end
+                else
+                    TA = load(mat_file1);
+                    if(any(TA.VDims ~= TB.VDims))
+                        error('Incompatible voxel sizes');
+                    end
+                    NL = length(TA.Tracts);
+                    TB.TractAng(end+1:end+NL) = TA.TractAng;
+                    TB.TractFA(end+1:end+NL) = TA.TractAng;
+                    TB.TractFE(end+1:end+NL) = TA.TractAng;
+                    TB.TractGEO(end+1:end+NL) = TA.TractAng;
+                    TB.TractL(end+1:end+NL) = TA.TractAng;
+                    TB.TractLambdas(end+1:end+NL) = TA.TractAng;
+                    TB.TractMD(end+1:end+NL) = TA.TractAng;
+                    TB.Tracts(end+1:end+NL) = TA.TractAng;
+                    try
+                        TB.TractsFOD(end+1:end+NL) = TA.TractAng;
+                    catch
+                    end
+                    TB.FList = 1:length(TB.Tracts);
+                end
+                idx = idx + 1;
+            end
+            save(output,'-struct','TB');
+            
+        end
+        
+        function WMATractographyClustering(varargin)
+            % Runs the WMA automatic clustering for fiber tractography
+            % see https://github.com/SlicerDMRI/whitematteranalysis for
+            % more details. PMID (29920375)
+            % Input arguments:
+            % mat_file: the reference .MAT file with the DTI/DKI fit (.mat)
+            % tract_file: the input tractography file in ExploreDTI (.mat)
+            % format
+            % output: the output folder containing the clustered
+            % tractogaphy
+            
+            global MRIToolkit;
+
+            mat_file = GiveValueForName(varargin,'mat_file');
+            if(isempty(mat_file))
+                error('Missing mandatory argument mat_file');
+            end
+            
+            tract_file = GiveValueForName(varargin,'tract_file');
+            if(isempty(tract_file))
+                error('Missing mandatory argument tract_file');
+            end
+            TractsName = tract_file(1:end-4);
+
+            WMA_Folder = GiveValueForName(varargin,'output');
+            if(isempty(WMA_Folder))
+                error('Missing mandatory argument output');
+            end
+            
+            SlicerPath = MRIToolkit.SlicerPath;
+            if(isempty(SlicerPath) || exist(SlicerPath,'dir') < 1)
+                error('Please specifiy a valid path to a 3DSlicer installation for your platform in MRIToolkitDefineLocalVars.m');
+            end
+            SlicerLocation = fullfile(SlicerPath,'Slicer');
+            if(ispc)
+                SlicerLocation = [SlicerLocation '.exe'];
+            end
+            if(exist(SlicerLocation,'file') < 1)
+                error('Please specifiy a valid path to a 3DSlicer installation for your platform in MRIToolkitDefineLocalVars.m');
+            end
+            AtlasFolder = MRIToolkit.WMAAtlasFolder;
+            if(exist(AtlasFolder,'dir') < 1)
+                error('Please specifiy a valid path to the WMA atlas, which can be downloaded from https://github.com/SlicerDMRI/whitematteranalysis/blob/master/doc/subject-specific-tractography-parcellation.md');
+            end
+            
+            if(exist(WMA_Folder,'dir') < 1)
+                mkdir(WMA_Folder);
+            end
+            
+            [mx,my,mz] = E_DTI_Convert_tracts_mat_2_vtk_lines(tract_file, strrep(tract_file,'.mat','.vtk'));
+            
+            conda_path = MRIToolkit.Miniconda3Path;
+            conda_env = MRIToolkit.Miniconda3Env;
+            if(isempty(conda_env))
+                conda_env = conda_path;
+            end
+            if(isempty(conda_path))
+                error('Please specify a valid path to a Conda python3 installation in MRIToolkitDefineLocalVars.m');
+            end
+            if(ispc)
+                conda_path = strrep(conda_path,'\','/');
+                base_cmd = ['%windir%\System32\cmd.exe /c "' conda_path '/Scripts/activate.bat ' conda_env ' && '];
+            else
+                base_cmd = 'source ~/.bashrc_conda2; conda activate';
+            end
+            
+            % cmd = [base_cmd ';wm_quality_control_tract_overlap.py ' ...
+            %     AtlasFolder '/ORG-800FC-100HCP/atlas.vtp ' ...
+            %     TractsName '.vtk ' WMA_Folder '/QC/InputTractOverlap/'];
+            % system(cmd);
+            if(exist([WMA_Folder '/TractRegistration/'],'dir') < 1)
+                if(ispc)
+                    [a,cmd_loc] = system([base_cmd ' where wm_register_to_atlas_new.py']);
+                    cmd = [base_cmd ' python ' cmd_loc ...
+                        ' -mode rigid_affine_fast ' ...
+                        TractsName '.vtk ' ...
+                        AtlasFolder '/ORG-RegAtlas-100HCP/registration_atlas.vtk ' ...
+                        WMA_Folder '/TractRegistration/'];
+                    cmd = strrep(cmd,newline,' ');
+                else
+                    cmd = [base_cmd ';wm_register_to_atlas_new.py ' ...
+                        ' -mode rigid_affine_fast ' ...
+                        TractsName '.vtk ' ...
+                        AtlasFolder '/ORG-RegAtlas-100HCP/registration_atlas.vtk ' ...
+                        WMA_Folder '/TractRegistration/'];
+                end
+                system(cmd);
+                
+            end
+            
+            if(exist([WMA_Folder '/AnatomicalTracts/'],'file') < 1)
+                
+                reg_file = dir(fullfile(WMA_Folder,'TractRegistration','*','output_tractography','*.vtk'));
+                prop_name = reg_file.name;
+                reg_file = fullfile(reg_file.folder,reg_file.name);
+                
+                if(ispc)
+                    [a,cmd_loc] = system([base_cmd ' where wm_cluster_from_atlas.py']);
+                    cmd = [base_cmd ' python ' cmd_loc ...
+                        reg_file ' '  ...
+                        AtlasFolder '/ORG-800FC-100HCP/ ' ...
+                        WMA_Folder '/FiberClustering/InitialClusters'];
+                    cmd = strrep(cmd,newline,' ');
+                else
+                    cmd = [base_cmd ';wm_cluster_from_atlas.py ' ...
+                        reg_file ' '  ...
+                        AtlasFolder '/ORG-800FC-100HCP/ ' ...
+                        WMA_Folder '/FiberClustering/InitialClusters'];
+                end
+                system(cmd);
+                
+                cluster_folder = dir(fullfile(WMA_Folder,'FiberClustering','InitialClusters','*reg'));
+                cluster_folder = fullfile(cluster_folder.folder,cluster_folder.name);
+                
+                if(ispc)
+                    [a,cmd_loc] = system([base_cmd ' where wm_cluster_remove_outliers.py']);
+                    cmd = [base_cmd ' python ' cmd_loc ...
+                        cluster_folder ' ' ...
+                        AtlasFolder '/ORG-800FC-100HCP/ ' ...
+                        WMA_Folder '/FiberClustering/OutlierRemovedClusters/'];
+                    cmd = strrep(cmd,newline,' ');
+                else
+                    cmd = [base_cmd ';wm_cluster_remove_outliers.py ' ...
+                        cluster_folder ' ' ...
+                        AtlasFolder '/ORG-800FC-100HCP/ ' ...
+                        WMA_Folder '/FiberClustering/OutlierRemovedClusters/'];
+                end
+                system(cmd);
+                
+                cluster_folder = dir(fullfile(WMA_Folder,'FiberClustering','OutlierRemovedClusters','*reg*'));
+                cluster_folder = fullfile(cluster_folder.folder,cluster_folder.name);
+                
+                if(ispc)
+                    [a,cmd_loc] = system([base_cmd ' where wm_assess_cluster_location_by_hemisphere.py']);
+                    cmd = [base_cmd ' python ' cmd_loc ...
+                        cluster_folder ' -clusterLocationFile ' ...
+                        AtlasFolder '/ORG-800FC-100HCP/cluster_hemisphere_location.txt '];
+                    cmd = strrep(cmd,newline,' ');                    
+                else
+                    cmd = [base_cmd ';wm_assess_cluster_location_by_hemisphere.py ' ...
+                        cluster_folder ' -clusterLocationFile ' ...
+                        AtlasFolder '/ORG-800FC-100HCP/cluster_hemisphere_location.txt '];
+                end
+                system(cmd);
+                
+                tfm_file = dir(fullfile(WMA_Folder,'TractRegistration','*','output_tractography','*.tfm'));
+                tfm_file = fullfile(tfm_file.folder,tfm_file.name);
+                
+                if(ispc)
+                    [a,cmd_loc] = system([base_cmd ' where wm_harden_transform.py']);
+                    cmd = [base_cmd ' python ' cmd_loc ' -i -t ' ...
+                        tfm_file ' ' cluster_folder '/ '...
+                        WMA_Folder '/FiberClustering/TransformedClusters/clustered_data/ ' ...
+                        SlicerLocation '"'];
+                    cmd = strrep(cmd,newline,' ');
+                else
+                    cmd = [base_cmd ';export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:' SlicerPath ';wm_harden_transform.py -i -t ' ...
+                        tfm_file ' ' cluster_folder '/ '...
+                        WMA_Folder '/FiberClustering/TransformedClusters/clustered_data/ ' ...
+                        SlicerLocation];
+                end
+                system(cmd);
+                
+                if(ispc)
+                    [a,cmd_loc] = system([base_cmd ' where wm_separate_clusters_by_hemisphere.py']);
+                    cmd = [base_cmd ' python ' cmd_loc ...
+                        WMA_Folder '/FiberClustering/TransformedClusters/clustered_data/ ' ...
+                        WMA_Folder '/FiberClustering/SeparatedClusters/ "'];
+                    cmd = strrep(cmd,newline,' ');                    
+                else
+                    cmd = [base_cmd ';wm_separate_clusters_by_hemisphere.py ' ...
+                        WMA_Folder '/FiberClustering/TransformedClusters/clustered_data/ ' ...
+                        WMA_Folder '/FiberClustering/SeparatedClusters/ '];
+                end
+                system(cmd);
+                
+                if(ispc)
+                    [a,cmd_loc] = system([base_cmd ' where wm_append_clusters_to_anatomical_tracts.py']);
+                    cmd = [base_cmd ' python ' cmd_loc ...
+                        WMA_Folder '/FiberClustering/SeparatedClusters/ ',...
+                        AtlasFolder '/ORG-800FC-100HCP/ ' ...
+                        WMA_Folder '/AnatomicalTracts/'];
+                    cmd = strrep(cmd,newline,' ');                    
+                else
+                    cmd = [base_cmd ';wm_append_clusters_to_anatomical_tracts.py ' ...
+                        WMA_Folder '/FiberClustering/SeparatedClusters/ ',...
+                        AtlasFolder '/ORG-800FC-100HCP/ ' ...
+                        WMA_Folder '/AnatomicalTracts/'];
+                end
+                system(cmd);
+                
+            end
+            
+            mkdir(fullfile(WMA_Folder,'AnatomicalTracts_VTK'));
+            
+            if(ispc)
+                [a,cmd_loc] = system([base_cmd ' where wm_vtp2vtk.py']);
+                cmd = [base_cmd ' python ' cmd_loc ...
+                    WMA_Folder '/AnatomicalTracts/ ' ...
+                    WMA_Folder '/AnatomicalTracts_VTK'];
+                    cmd = strrep(cmd,newline,' ');                
+            else
+                cmd = [base_cmd ';wm_vtp2vtk.py ' ...
+                    WMA_Folder '/AnatomicalTracts/ ' ...
+                    WMA_Folder '/AnatomicalTracts_VTK'];
+            end
+            system(cmd);
+            
+            vtk_files = dir(fullfile(WMA_Folder,'AnatomicalTracts_VTK','_vtk','*.vtk'));
+            output_directory = fullfile(WMA_Folder,'AnatomicalTracts_EDTI');
+            output_directory_density = fullfile(WMA_Folder,'AnatomicalTracts_EDTI_density');
+            if(exist(output_directory,'dir') < 1)
+                mkdir(output_directory);
+            end
+            if(exist(output_directory_density,'dir') < 1)
+                mkdir(output_directory_density);
+            end
+            
+            LM = load([TractsName '.mat'],'TractMask','VDims');
+            DIFF_PROP = load(mat_file,'FA','eigval','FE');
+            for vid = 1:length(vtk_files)
+                try
+                    [Points,Lines] = VTKImport_test(fullfile(vtk_files(vid).folder,vtk_files(vid).name));
+                catch err
+                    warning(['Skipping tract ' vtk_files(vid).name ' due to an unexpected error']);
+                    continue
+                end
+                Points(:,1) = Points(:,1) + mx;
+                Points(:,2) = Points(:,2) + my;
+                Points(:,3) = Points(:,3) + mz;
+                Points(:,1) = size(LM.TractMask,2) - Points(:,1);
+                Points(:,2) = size(LM.TractMask,1) - Points(:,2);
+                Points = Points(:,[2 1 3]);
+                Tracts.VDims = LM.VDims;
+                Tracts.Tracts = cell(1,length(Lines));
+                Tracts.TractAng = cell(1,length(Lines));
+                Tracts.TractFA = cell(1,length(Lines));
+                Tracts.TractFE = cell(1,length(Lines));
+                Tracts.TractGEO = cell(1,length(Lines));
+                Tracts.TractL = cell(1,length(Lines));
+                Tracts.TractLambdas = cell(1,length(Lines));
+                Tracts.TractMD = cell(1,length(Lines));
+                Tracts.TractMask = LM.TractMask;
+                Tracts.FList = (1:length(Tracts.Tracts))';
+                for tid=1:length(Tracts.Tracts)
+                    PL = Points(Lines{tid}+1,:);
+                    Tracts.Tracts(tid) = {PL};
+                    cTractFA = zeros([size(PL,1),1]);
+                    cTractFE = zeros([size(PL,1),3]);
+                    cTractGEO = zeros([size(PL,1),1]);
+                    cTractAng = zeros([size(PL,1),1]);
+                    cTractL = size(PL,1);
+                    cTractLambdas = zeros([size(PL,1),3]);
+                    cTractMD = zeros([size(PL,1),1]);
+                    for point=1:size(PL,1)
+                        P = PL(point,:)./LM.VDims;
+                        PC = floor(P)+1;
+                        cTractFA(point) = DIFF_PROP.FA(PC(1),PC(2),PC(3))/sqrt(3);
+                        cTractFE(point,:) = abs(squeeze(DIFF_PROP.FE(PC(1),PC(2),PC(3),:)));
+                        cTractLambdas(point,:) = squeeze(DIFF_PROP.eigval(PC(1),PC(2),PC(3),:));
+                        cTractMD(point) = mean(cTractLambdas(point,:));
+                    end
+                    Tracts.TractAng(tid) = {cTractAng};
+                    Tracts.TractFA(tid) = {cTractFA};
+                    Tracts.TractFE(tid) = {cTractFE};
+                    Tracts.TractGEO(tid) = {cTractGEO};
+                    Tracts.TractLambdas(tid) = {cTractLambdas};
+                    Tracts.TractMD(tid) = {cTractMD};
+                    Tracts.TractL(tid) = {cTractL};
+                end
+                save(fullfile(output_directory,[vtk_files(vid).name(1:end-4) '.mat']),...
+                    '-struct','Tracts');
+                E_DTI_DensityMaps(mat_file,fullfile(output_directory,[vtk_files(vid).name(1:end-4) '.mat']),...
+                    fullfile(output_directory_density,[vtk_files(vid).name(1:end-4) '.nii']));
+                %     Neuro.CAT12ApplyDeformation('nii_file',fullfile(output_directory_density,[vtk_files(vid).name(1:end-4) '.nii']),...
+                %         'field_file',fullfile(subj_dest_folder,'anat','T1_FP_CAT12','mri','y_T1_FP.nii'));
+            end
+        end
+        
+        function PerformDTIBased_FiberTracking(varargin)
+        % This function performs whole volume deterministic fiber
+        % tractography using the first eigenvector of the DTI fit. Possible
+        % input arguments are:
+        % mat_file: The ExpoloreDTI-like .mat file
+        % output: The output tracts (must be .mat)
+        %  SeedPointRes: The seeding resolution in mm, as [2 2 2] (default)
+        %  StepSize: the step size in mm, as 1 (default)
+        %  FAThresh: The FA thredshold to stop tracking, as 0.2000 	(default)
+        %  AngleThresh: The angle threshold to stop tracking, as 30 (default)
+        %  FiberLengthRange: The mininum - maximum allowed fiber length in mm: [30 500]
+            if(isempty(varargin))
+                my_help('MRTQuant.PerformDTIBased_FiberTracking');
+                return;
+            end
+            
+            json.CallFunction = 'MRTQuant.PerformDTIBased_FiberTracking';
+            json.Description = my_help('MRTQuant.PerformDTIBased_FiberTracking');
+                        
+            coptions = varargin;
+            file_in = GiveValueForName(coptions,'mat_file');
+            if(isempty(file_in))
+                error('Need to specify the input .mat file');
+            end
+            
+            json.ReferenceFile = file_in;
+            json.ProcessingType = 'FiberTractography';
+            
+            filename_out = GiveValueForName(coptions,'output');
+            if(isempty(filename_out))
+                error('Need to specify the output .mat file');
+            end
+            
+            option = GiveValueForName(coptions,'SeedPointRes');
+            if(isempty(option))
+                parameters.SeedPointRes = [2 2 2];
+            else
+                parameters.SeedPointRes = option;
+            end
+            
+            option = GiveValueForName(coptions,'StepSize');
+            if(isempty(option))
+                parameters.StepSize = 1;
+            else
+                parameters.StepSize = option;
+            end
+            
+            option = GiveValueForName(coptions,'FAThresh');
+            if(isempty(option))
+                parameters.FAThresh = 0.2;
+            else
+                parameters.FAThresh = option;
+            end
+            
+            option = GiveValueForName(coptions,'AngleThresh');
+            if(isempty(option))
+                parameters.AngleThresh = 30;
+            else
+                parameters.AngleThresh = option;
+            end
+            
+            option = GiveValueForName(coptions,'FiberLengthRange');
+            if(isempty(option))
+                parameters.FiberLengthRange = [30 500];
+            else
+                parameters.FiberLengthRange = option;
+            end
+            
+            json.parameters = parameters;
+            
+            EDTI_Library.WholeBrainTrackingDTI_fast(file_in, filename_out, parameters);
+            NiftiIO_basic.WriteJSONDescription('output',filename_out(1:end-4),'props',json);
+        end
+        
+        function CSD_FOD = PerformCSD(varargin)
+        % This function compute the fiber orientation distribution (FOD)
+        % using constrained spherical deconvolution (CSD) with recursive
+        % response function calibration. Input arguments:
+        % mat_file: The .mat file of the data in ExploreDTI-like format
+        % mscsd: Use multi-shell multi-tissue CSD in place of classic CSD.
+        % rc_mask_file: This is an optional argument to enforce the
+        % selection of the response function within the provided .nii mask
+        % output: The outout .nii where to save the FOD
+        % Lmax: order of the spherical harmonics. Default is 8.
+        % T1seg: pveseg file output of FSL FAST containing 3 tissue classes
+        %   (WM, GM, CSF)   
+        % save_sh: 0 or 1. Save the SH coefficients of the data (csd only)
+        % rf_dti: use a DTI based response function in place of recursive calibration.
+        %         input as "FA MDx10^3(mm2/s)" of the desired response function, e.g "0.7 1.0"
+        %         valid only in combination with csd
+            if(isempty(varargin))
+                my_help('MRTQuant.PerformCSD');
+                return;
+            end   
+                    
+            json.CallFunction = 'MRTQuant.PerformCSD';
+            json.Description = my_help('MRTQuant.PerformCSD');
+
+            coptions = varargin;
+            file_in = GiveValueForName(coptions,'mat_file');
+            if(isempty(file_in))
+                error('Need to specify the input .mat file');
+            end
+            
+            json.ReferenceFile = file_in;
+            json.ProcessingType = 'Quantification';
+            
+            rc_mask_file = GiveValueForName(coptions,'rc_mask_file');
+            if(isempty(rc_mask_file))
+                rc_mask_file = '';
+            end
+            
+            json.rc_mask_file = rc_mask_file;
+            
+            filename_out = GiveValueForName(coptions,'output');
+            if(isempty(filename_out))
+                filename_out = [file_in(1:end-4) '_CSD_FOD.nii'];
+            end
+            
+            option = GiveValueForName(coptions,'Lmax');
+            if(~isempty(option))
+                Lmax = option;
+            else
+                Lmax = 8;
+            end
+            
+            json.Lmax = Lmax;
+            
+            option = GiveValueForName(coptions,'T1seg');
+            if(~isempty(option))
+                t1_seg = option;
+            else
+                t1_seg = '';
+            end
+            
+            json.t1_seg = t1_seg;
+            
+            save_sh = GiveValueForName(coptions,'save_sh');
+            if(isempty(save_sh))
+                save_sh = 0;
+            end            
+
+            json.save_sh = save_sh;
+            
+            dti_rf = GiveValueForName(coptions,'rf_dti');
+            json.dti_rf = dti_rf;           
+            
+            mscsd = GiveValueForName(coptions,'mscsd');
+            if(isempty(mscsd) || mscsd == 0)
+                if(isempty(dti_rf))
+                    CSD_FOD = EDTI_Library.E_DTI_Get_HARDI_CSD_FOD_RC(file_in,Lmax,rc_mask_file,filename_out,save_sh);
+                else
+                    pieces = strsplit(dti_rf);
+                    sim_fa = str2double(pieces{1});
+                    sim_adc = str2double(pieces{2})*1e-3;
+                    CSD_FOD = EDTI_Library.E_DTI_Get_HARDI_CSD_FOD(file_in, 1, Lmax,sim_adc, sim_fa,filename_out,save_sh);
+                end
+            else
+                disp('Running MS-CSD (beta mode)...')
+                CSD_FOD = EDTI_Library.E_DTI_Get_HARDI_CSD_FOD_RC_MuSh(file_in,Lmax,rc_mask_file,filename_out,t1_seg);
+            end
+            json.mscsd = mscsd;
+                           
+            NiftiIO_basic.WriteJSONDescription('output',filename_out(1:end-4),'props',json);
+            if(nargout == 0)
+                CSD_FOD = [];
+            end
+            
+        end   
+
+        function PerformFODBased_FiberTracking(varargin)
+        % This function performs whole volume deterministic fiber
+        % tractography of an FOD in spherical harmonics. Possible
+        % input arguments are:
+        % mat_file: The ExpoloreDTI-like .mat file (for reference)
+        % fod_file: The ExpoloreDTI-like FOD .nii file (in SH basis)
+        % output: The output tracts (must be .mat)
+        % SeedPointRes: The seeding resolution in mm, as [2 2 2] (default)
+        % StepSize: the step size in mm, as 1 (default)
+        % FODThresh: The FOD thredshold to stop tracking, as 0.1000 	(default)
+        % AngleThresh: The angle threshold to stop tracking, as 30 (default)
+        % FiberLengthRange: The mininum - maximum allowed fiber length in mm: [30 500]
+        % SeedMask: A mask to perform the seeding. If empty, the whole
+        %   volume is used
+        % Default parameters:
+        %  SeedPointRes: [2 2 2]
+        %             StepSize: 1
+        %          AngleThresh: 30
+        %     FiberLengthRange: [30 500]
+        %     FODThresh: 0.1
+
+            if(isempty(varargin))
+                my_help('MRTQuant.PerformFODBased_FiberTracking');
+                return;
+            end  
+
+            json.CallFunction = 'MRTQuant.PerformFODBased_FiberTracking';
+            json.Description = my_help('MRTQuant.PerformFODBased_FiberTracking');
+
+            coptions = varargin;
+            file_in = GiveValueForName(coptions,'mat_file');
+            if(isempty(file_in))
+                error('Need to specify the input .mat file');
+            end
+            
+            json.ReferenceFile = file_in;
+            json.ProcessingType = 'FiberTractography';
+            
+            fod_file = GiveValueForName(coptions,'fod_file');
+            if(isempty(fod_file))
+                error('Need to specify the input FOD file/variable');
+            end
+            json.fod_file = fod_file;
+            
+            filename_out = GiveValueForName(coptions,'output');
+            if(isempty(filename_out))
+                error('Need to specify the output .mat file');
+            end
+            
+            option = GiveValueForName(coptions,'SeedPointRes');
+            if(isempty(option))
+                parameters.SeedPointRes = [2 2 2];
+            else
+                parameters.SeedPointRes = option;
+            end
+            
+            option = GiveValueForName(coptions,'StepSize');
+            if(isempty(option))
+                parameters.StepSize = 1;
+            else
+                parameters.StepSize = option;
+            end
+            
+            option = GiveValueForName(coptions,'FODThresh');
+            if(isempty(option))
+                parameters.blob_T = 0.1;
+            else
+                parameters.blob_T = option;
+            end
+            
+            option = GiveValueForName(coptions,'AngleThresh');
+            if(isempty(option))
+                parameters.AngleThresh = 30;
+            else
+                parameters.AngleThresh = option;
+            end
+            
+            option = GiveValueForName(coptions,'FiberLengthRange');
+            if(isempty(option))
+                parameters.FiberLengthRange = [30 500];
+            else
+                parameters.FiberLengthRange = option;
+            end
+            
+            option = GiveValueForName(coptions,'SeedMask');
+            if(isempty(option))
+                parameters.SeedMask = [];
+            else
+                parameters.SeedMask = option;
+            end
+            
+            parameters.randp = 0;
+            
+            json.TrackingParameters = parameters;
+            
+            EDTI_Library.WholeBrainFODTractography(file_in,fod_file,parameters,filename_out);
+            NiftiIO_basic.WriteJSONDescription('output',filename_out(1:end-4),'props',json);
+        end        
+
+        function Perform_mFOD_FiberTracking(varargin)
+        % This function performs whole volume deterministic fiber
+        % tractography of multiple FODs in spherical harmonics. Possible
+        % input arguments are:
+        % mat_file: The ExpoloreDTI-like .mat file (for reference)
+        % fod_basename: The name prefix used for the mFOD output (see the SphericalDeconvolution class) (in SH basis)
+        % output: The output tracts (must be .mat)
+        % SeedPointRes: The seeding resolution in mm, as [2 2 2] (default)
+        % StepSize: the step size in mm, as 1 (default)
+        % FODThresh: The FOD thredshold to stop tracking, as 0.1000 	(default)
+        % AngleThresh: The angle threshold to stop tracking, as 30 (default)
+        % FiberLengthRange: The mininum - maximum allowed fiber length in mm: [30 500]
+        % SeedMask: A mask to perform the seeding. If empty, the whole
+        %   volume is used
+        % InterpolationMode: how to merge the mulitple FODs. 'linear'
+        %   corresponds to mFOD-WS (each FOD weighted by its fraction and
+        %   summed), whereas 'majority' tracks the locally larger
+        %   FOD
+
+            if(isempty(varargin))
+                my_help('MRTQuant.Perform_mFOD_FiberTracking');
+                return;
+            end  
+
+            json.CallFunction = 'MRTQuant.Perform_mFOD_FiberTracking';
+            json.Description = my_help('MRTQuant.PerformFODBased_FiberTracking');
+
+            coptions = varargin;
+            file_in = GiveValueForName(coptions,'mat_file');
+            if(isempty(file_in))
+                error('Need to specify the input .mat file');
+            end
+            json.ReferenceFile = file_in;
+            json.ProcessingType = 'FiberTractography';
+            
+            fod_basename = GiveValueForName(coptions,'fod_basename');
+            if(isempty(fod_basename))
+                error('Need to specify the input FOD basename');
+            end
+            json.fod_basename = fod_basename;
+            
+            filename_out = GiveValueForName(coptions,'output');
+            if(isempty(filename_out))
+                error('Need to specify the output .mat file');
+            end
+            
+            option = GiveValueForName(coptions,'SeedPointRes');
+            if(isempty(option))
+                parameters.SeedPointRes = [2 2 2];
+            else
+                parameters.SeedPointRes = option;
+            end
+            
+            option = GiveValueForName(coptions,'StepSize');
+            if(isempty(option))
+                parameters.StepSize = 1;
+            else
+                parameters.StepSize = option;
+            end
+            
+            option = GiveValueForName(coptions,'FODThresh');
+            if(isempty(option))
+                parameters.blob_T = 0.1;
+            else
+                parameters.blob_T = option;
+            end
+            
+            option = GiveValueForName(coptions,'AngleThresh');
+            if(isempty(option))
+                parameters.AngleThresh = 30;
+            else
+                parameters.AngleThresh = option;
+            end
+            
+            option = GiveValueForName(coptions,'FiberLengthRange');
+            if(isempty(option))
+                parameters.FiberLengthRange = [30 500];
+            else
+                parameters.FiberLengthRange = option;
+            end
+            
+            option = GiveValueForName(coptions,'SeedMask');
+            if(isempty(option))
+                parameters.SeedMask = [];
+            else
+                parameters.SeedMask = option;
+            end
+            
+            option = GiveValueForName(coptions,'InterpolationMode');
+            if(isempty(option))
+                interpolation_mode = 'linear';
+            else
+                interpolation_mode = option;
+            end
+            
+            parameters.randp = 0;
+            json.TrackingParameters = parameters;
+            
+            EDTI_Library.WholeBrainTracking_mDRL_fast_exe(file_in, fod_basename, filename_out, parameters, interpolation_mode); 
+
+            NiftiIO_basic.WriteJSONDescription('output',filename_out(1:end-4),'props',json);
+        end        
         
     end
 end
@@ -1931,7 +2734,7 @@ end
 % The following functions have been included from "hardi_tools", which is
 % available as follows:
 % Original authors:
-%% Project:   High Angular Resolution Diffusion Imaging Tools
+% Project:   High Angular Resolution Diffusion Imaging Tools
 % Available at: https://www.neuroimagen.es/webs/hardi_tools/
 % Function to create a simulated signal from the multi-tensor diffusion model.
 % Rician noise can be added.
@@ -2252,7 +3055,7 @@ end
 Tract_dir = E_DTI_Get_tract_dir(Tracts);
 
 for i=1:length(Tract_dir)
-    Tract_dir{i} = abs(Tract_dir{i});    
+    Tract_dir{i} = abs(Tract_dir{i});
 end
 
 num_tracts = length(Tracts);
@@ -2275,7 +3078,7 @@ for i=1:num_tracts
     Points(CTL(i)+1:CTL(i+1),[2 1 3]) = single(Tracts{i}); % mod ADL
     Points(CTL(i)+1:CTL(i+1),1) = size(TractMask,2) - Points(CTL(i)+1:CTL(i+1),1); % mod ADL
     Points(CTL(i)+1:CTL(i+1),2) = size(TractMask,1) - Points(CTL(i)+1:CTL(i+1),2); % mod ADL
-
+    
     Colors(CTL(i)+1:CTL(i+1),[2 1 3]) = single(Tract_dir{i});
 end
 
@@ -2311,7 +3114,7 @@ try
     fprintf(fid, '%s\n','DATASET POLYDATA');
     fprintf(fid, ['POINTS ' '%d' ' float' '\n'], Total_P);
     fprintf(fid,'%f %f %f\n',Points');
-   
+    
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     fprintf(fid, '\n');
     fprintf(fid, ['LINES ' '%d %d\n'], [num_tracts num_tracts + Total_P]);
@@ -2358,37 +3161,75 @@ for i=1:length(Tracts)
     
     Tract_dir{i} = Tract_dir{i}./[NT NT NT];
     
-    
 end
 end
 
-% A simple VTK read function
+% A simple VTK read function to read VTK 4.2 and 5.1 pointsets produced by WMA
 function [points_list,lines] = VTKImport_test(file_in)
 
 fid = fopen(file_in,'rb');
-
 str = fgets(fid);
-str = fgets(fid);
-str = fgets(fid);
-str = fgets(fid);
-str = fgets(fid);
+parts = strsplit(strrep(str,newline,''),' ');
+version = str2double(parts{end});
+while(feof(fid) == false && contains(str,'POINTS') == false)
+    str = fgets(fid);
+end
 nvert = sscanf(str,'%*s %d %*s', 1);
 sp = ftell(fid);
 % read vertices
 A = single(fread(fid,nvert*3,'float','b'));
 mp = ftell(fid);
-
-str = fgets(fid);
-str = fgets(fid);
-nlines = sscanf(str,'%*s %d %d');
-lines = cell(1,1);
-for ij=1:nlines
-    K = fread(fid,1,'int','b');
-    lines(ij) = {fread(fid,K,'*int','b')};
+while(feof(fid) == false && contains(str,'LINES') == false)
+    str = fgets(fid);
 end
-% B = fread(fid,[nlines(1) 4],'*uint8','b');
-pstr = fgets(fid);
-mmp = ftell(fid);
+% read lines
+nlines = sscanf(str,'%*s %d %d');
+if(version > 5)
+    str = fgets(fid);
+    LINES_INFO = fread(fid,nlines(1),'*int64','b');
+    LINES_INFO = LINES_INFO;
+    while(feof(fid) == false && contains(str,'CONNECTIVITY') == false)
+        str = fgets(fid); % read datatype
+    end    
+    lines = cell(nlines(1)-1,1);
+    for line_id=1:length(lines)-1
+        lines(line_id) = {(LINES_INFO(line_id)):LINES_INFO(line_id+1)-1};
+    end
+    
+    % Unused for now
+    if(1 == 0)
+        CONNECTIVITY_INFO = fread(fid,nlines(2),'*int64','b');
+        while(feof(fid) == false && contains(str,'CELL_DATA') == false)
+            str = fgets(fid); % read datatype
+        end
+        ncell = sscanf(str,'%*s %d');
+        str = fgets(fid); % read FIELD
+        str = fgets(fid); % read ClusterNumber
+        nclusters = sscanf(str,'%*s %d %d %*s');
+        cluster_type = char(sscanf(str,'%*s %*d %*d %s')');
+        CLUSTER_INFO = fread(fid,nclusters(2),['*' cluster_type],'b');
+        str = fgets(fid); % read empty line
+        str = fgets(fid); % read EmbeddingColor
+        ncolors = sscanf(str,'%*s %d %d %*s');
+        COLORS_INFO = fread(fid,ncolors(1)*ncolors(2),'*uint8','b');
+        str = fgets(fid); % read empty line
+        str = fgets(fid); % read EmbeddingCoordinate
+        ncoordinates = sscanf(str,'%*s %d %d %*s');
+        COORD_INFO = fread(fid,ncoordinates(1)*ncoordinates(2),'*float','b');
+        CELL_INFO = fread(fid,ncell,'*int64','b');
+    end
+else
+    lines = cell(1,1);
+    cnt = 1;
+    while(cnt <= nlines)
+        K = fread(fid,1,'int','b');
+        if(K == 0)
+            continue
+        end
+        lines(cnt) = {fread(fid,K,'*int','b')};
+        cnt = cnt+1;
+    end
+end
 
 fclose(fid);
 
@@ -2398,92 +3239,154 @@ end
 
 % Ensure a vector is in column format
 function col = ascolumn(in_vector)
-    if(~ismatrix(in_vector))
-        warning('ascolumn works only with vectors - no nd matrices');
-        col = [];
-        return
-    end
-    if(size(in_vector,2) > size(in_vector,1))
-        col = in_vector';
-    else
-        col = in_vector;
-    end
+if(~ismatrix(in_vector))
+    warning('ascolumn works only with vectors - no nd matrices');
+    col = [];
+    return
+end
+if(size(in_vector,2) > size(in_vector,1))
+    col = in_vector';
+else
+    col = in_vector;
+end
 end
 
 % Tensor 2 Symmetric Tensor
-function Dtensor = D2Dtensor(D) 
+function Dtensor = D2Dtensor(D)
 Dtensor = [D(1) D(2)/2 D(3)/2
-               D(2)/2 D(4) D(5)/2
-               D(3)/2 D(5)/2 D(6)];
+    D(2)/2 D(4) D(5)/2
+    D(3)/2 D(5)/2 D(6)];
 end
 
 % Utility function to derive DTI metrics
 function [MD,FA,DEC,AD,RD,LAMBDAS,L1] = DW_ComputeTensorMetrics(p,tensor_indexes)
-    sizes = size(p);
-    ndims = length(sizes);
-    
-    rows = 1;
-    for j=1:ndims-1
-        rows = rows*sizes(j);
+sizes = size(p);
+ndims = length(sizes);
+
+rows = 1;
+for j=1:ndims-1
+    rows = rows*sizes(j);
+end
+
+newp = reshape(p,rows,sizes(end));
+newp = newp(:,tensor_indexes);
+
+MD = zeros(rows,1);
+FA = zeros(rows,1);
+if(nargout > 2)
+    DEC = zeros(rows,3);
+end
+
+if(nargout > 3)
+    AD = zeros(rows,1);
+    RD = zeros(rows,1);
+    LAMBDAS = zeros(rows,3);
+    L1 = zeros(rows,3);
+end
+
+for j=1:size(newp,1)
+    D = [newp(j,1) newp(j,2)/2 newp(j,3)/2
+        newp(j,2)/2 newp(j,4) newp(j,5)/2
+        newp(j,3)/2 newp(j,5)/2 newp(j,6)];
+    %         D = [newp(j,1) newp(j,2) newp(j,3)
+    %         newp(j,2) newp(j,4) newp(j,5)
+    %         newp(j,3) newp(j,5) newp(j,6)];
+    if(sum(~isfinite(D(:))) > 0 || sum(D(:)) == 0)
+        continue
     end
-    
-    newp = reshape(p,rows,sizes(end));
-    newp = newp(:,tensor_indexes);
-    
-    MD = zeros(rows,1);
-    FA = zeros(rows,1);
+    [autovett,autoval] = eig(D);
+    autoval = diag(autoval);
+    if(sum(autoval<0) == length(autoval))
+        autoval = -autoval;
+        autovett = -autovett;
+    end
+    autoval(autoval<0)=0;
+    MD(j) = mean(autoval);
+    FA(j) = sqrt(1.5*((autoval(1)-MD(j))^2+(autoval(2)-MD(j))^2+(autoval(3)-MD(j))^2)/(sum(autoval.^2)));
+    %         FA(j) = sqrt(0.5*((autoval(1)-autoval(2))^2+(autoval(2)-autoval(3))^2+(autoval(1)-autoval(3))^2)/(sum(autoval.^2)));
     if(nargout > 2)
-        DEC = zeros(rows,3);
-    end
-    
-    if(nargout > 3)
-        AD = zeros(rows,1);
-        RD = zeros(rows,1);
-        LAMBDAS = zeros(rows,3);
-        L1 = zeros(rows,3);
-    end
-    
-    for j=1:size(newp,1)
-        D = [newp(j,1) newp(j,2)/2 newp(j,3)/2
-            newp(j,2)/2 newp(j,4) newp(j,5)/2
-            newp(j,3)/2 newp(j,5)/2 newp(j,6)];
-%         D = [newp(j,1) newp(j,2) newp(j,3)
-%         newp(j,2) newp(j,4) newp(j,5)
-%         newp(j,3) newp(j,5) newp(j,6)];
-        if(sum(~isfinite(D(:))) > 0 || sum(D(:)) == 0)
-            continue
-        end
-        [autovett,autoval] = eig(D);
-        autoval = diag(autoval);
-        if(sum(autoval<0) == length(autoval))
-            autoval = -autoval;
-            autovett = -autovett;
-        end
-        autoval(autoval<0)=0;
-        MD(j) = mean(autoval);
-        FA(j) = sqrt(1.5*((autoval(1)-MD(j))^2+(autoval(2)-MD(j))^2+(autoval(3)-MD(j))^2)/(sum(autoval.^2)));
-%         FA(j) = sqrt(0.5*((autoval(1)-autoval(2))^2+(autoval(2)-autoval(3))^2+(autoval(1)-autoval(3))^2)/(sum(autoval.^2)));
-        if(nargout > 2)
-            [~,IX] = sort(autoval,'descend');
-            DEC(j,:) = autovett(:,IX(1))*FA(j);
-            if(nargout > 3)
-               AD(j) = autoval(IX(1));
-               RD(j) = 0.5*sum(autoval(IX(2:3)));
-               LAMBDAS(j,:) = autoval(IX);
-               L1(j,:) = autovett(IX(1),:);
-            end
-        end
-    end
-    
-    MD = reshape(MD,sizes(1:end-1));
-    FA = reshape(FA,sizes(1:end-1));
-    if(nargout > 2)
-        DEC = reshape(DEC,[sizes(1:end-1) 3]);
+        [~,IX] = sort(autoval,'descend');
+        DEC(j,:) = autovett(:,IX(1))*FA(j);
         if(nargout > 3)
-            AD = reshape(AD,sizes(1:end-1));
-            RD = reshape(RD,sizes(1:end-1));
-            LAMBDAS = reshape(LAMBDAS,[sizes(1:end-1) 3]);
-            L1 = reshape(L1,[sizes(1:end-1) 3]);
+            AD(j) = autoval(IX(1));
+            RD(j) = 0.5*sum(autoval(IX(2:3)));
+            LAMBDAS(j,:) = autoval(IX);
+            L1(j,:) = autovett(IX(1),:);
         end
     end
+end
+
+MD = reshape(MD,sizes(1:end-1));
+FA = reshape(FA,sizes(1:end-1));
+if(nargout > 2)
+    DEC = reshape(DEC,[sizes(1:end-1) 3]);
+    if(nargout > 3)
+        AD = reshape(AD,sizes(1:end-1));
+        RD = reshape(RD,sizes(1:end-1));
+        LAMBDAS = reshape(LAMBDAS,[sizes(1:end-1) 3]);
+        L1 = reshape(L1,[sizes(1:end-1) 3]);
+    end
+end
+end
+
+% An L2 regularized NNLS function
+function [Deconv_1,Deconv_1_clean] = DW_RegularizedDeconv(Dictionary_1,OneBigVoxelFull_1,options,lambda,x0)
+if(nargin < 3)
+    options = optimset('TolX',1e-12,'TolFun',1e-12);
+end
+
+% base_deconv = lsqnonneg(Dictionary_1,OneBigVoxelFull_1,options);
+% Amp = sum(base_deconv);
+Amp = 1;
+
+C = Amp*lambda*eye(size(Dictionary_1,2),size(Dictionary_1,2));
+C = C(1:size(Dictionary_1,2),1:size(Dictionary_1,2));
+Dictionary_1_padded = [Dictionary_1; C];
+OneBigVoxelFull_1_tmp = zeros(size(Dictionary_1_padded,1),1);
+OneBigVoxelFull_1_tmp(1:length(OneBigVoxelFull_1)) = OneBigVoxelFull_1;
+if(exist('x0','var') > 0)
+    OneBigVoxelFull_1_tmp(length(OneBigVoxelFull_1)+1:end) = x0;
+end
+
+Deconv_1 = lsqnonneg(Dictionary_1_padded,double(OneBigVoxelFull_1_tmp),options);
+
+if(nargout > 1)
+    Deconv_1_clean = zeros(size(Deconv_1));
+    idx = Deconv_1>0;
+    Deconv_1_clean(idx) = lsqnonneg(Dictionary_1(:,idx),OneBigVoxelFull_1,options);
+end
+
+end
+
+% Compute a density weighted map from a set of streamlines
+function E_DTI_DensityMaps(base_file,tract_file,out_file)
+% filt_type 0: pass once in params.mask1
+% filt_type 1: pass at least twice in params.mask1
+% filt_type 2: start in params.mask1 and end in params.mask2
+
+load(tract_file,'Tracts');
+load(base_file,'FA','VDims');
+
+[sx,sy,sz] = size(FA);
+DensityMap = zeros([sx sy sz]);
+
+try
+    
+    for tid=1:length(Tracts)
+        tract = Tracts{tid};
+        for l=1:size(tract,1)
+            point = round(tract(l,:)./VDims);
+            DensityMap(point(1),point(2),point(3)) = DensityMap(point(1),point(2),point(3)) + 1;
+        end
+    end
+    
+    DensityMap = DensityMap/max(DensityMap(:));
+    DM.img = DensityMap;
+    DM.VD = VDims;
+    EDTI.WriteNifti(DM,out_file);
+    
+catch err
+    disp(err.message);
+end
+
 end
