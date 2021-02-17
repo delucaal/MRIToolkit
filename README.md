@@ -12,6 +12,7 @@ New in this version:
 - Support for VTK poly data 4.2 and 5.1 (also needed for the clustering)
 - Added a robust option to GRL/mFOD deconvolution
 - Initial support for storing the NIFTI Q/S form (to improve interoperability with other tools, not implemented yet)
+- Integration with CAT12
  ## What is it?
 MRIToolkit is a set of [command line tools](https://github.com/delucaal/MRIToolkit/tree/master/CommandLine) and a MATLAB (R) toolbox/library to process (diffusion) magnetic resonance imaging (MRI) data. Binaries of the command line version will be provided soon!
 
@@ -33,6 +34,7 @@ The toolbox is referenced for the first time in [Guo et al.](https://arxiv.org/a
 - Spherical deconvolution using the Constrained Spherical Deconvolution [(CSD)](https://www.ncbi.nlm.nih.gov/pubmed/18583153), [Multi-shell CSD](https://www.sciencedirect.com/science/article/pii/S1053811914006442?via%3Dihub), [damped Richardson Lucy](https://www.ncbi.nlm.nih.gov/pubmed/19781650), the [Generalized Richardson Lucy](https://arxiv.org/abs/1910.05372) and [mFOD](https://www.biorxiv.org/content/10.1101/739136v1);
 - Robust deconvolution of multiple water pools (NNLS/L2NNLS/PL2NNLS) as in [De Luca et al. 2018](https://onlinelibrary.wiley.com/doi/full/10.1002/nbm.3965)
 - [NEW!] Automatic fiber clustering thanks to [WMA pipeline](https://github.com/SlicerDMRI/whitematteranalysis/tree/master/whitematteranalysis)
+- [NEW!] Run the CAT12 automatic pipeline for T1 images
 
 ## Quick installation 
 Please, see [this guide](img/MRIToolkitInstallationNotes.pdf)
