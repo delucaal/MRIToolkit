@@ -1969,12 +1969,12 @@ classdef MRTTrack < handle
         %  AngleThresh: The angle threshold to stop tracking, as 30 (default)
         %  FiberLengthRange: The mininum - maximum allowed fiber length in mm: [30 500]
             if(isempty(varargin))
-                my_help('MRTQuant.PerformDTIBased_FiberTracking');
+                my_help('MRTTrack.PerformDTIBased_FiberTracking');
                 return;
             end
             
-            json.CallFunction = 'MRTQuant.PerformDTIBased_FiberTracking';
-            json.Description = my_help('MRTQuant.PerformDTIBased_FiberTracking');
+            json.CallFunction = 'MRTTrack.PerformDTIBased_FiberTracking';
+            json.Description = my_help('MRTTrack.PerformDTIBased_FiberTracking');
                         
             coptions = varargin;
             file_in = GiveValueForName(coptions,'mat_file');
@@ -2048,12 +2048,12 @@ classdef MRTTrack < handle
         %         input as "FA MDx10^3(mm2/s)" of the desired response function, e.g "0.7 1.0"
         %         valid only in combination with csd
             if(isempty(varargin))
-                my_help('MRTQuant.PerformCSD');
+                my_help('MRTTrack.PerformCSD');
                 return;
             end   
                     
-            json.CallFunction = 'MRTQuant.PerformCSD';
-            json.Description = my_help('MRTQuant.PerformCSD');
+            json.CallFunction = 'MRTTrack.PerformCSD';
+            json.Description = my_help('MRTTrack.PerformCSD');
 
             coptions = varargin;
             file_in = GiveValueForName(coptions,'mat_file');
@@ -2149,12 +2149,12 @@ classdef MRTTrack < handle
         %     FODThresh: 0.1
 
             if(isempty(varargin))
-                my_help('MRTQuant.PerformFODBased_FiberTracking');
+                my_help('MRTTrack.PerformFODBased_FiberTracking');
                 return;
             end  
 
-            json.CallFunction = 'MRTQuant.PerformFODBased_FiberTracking';
-            json.Description = my_help('MRTQuant.PerformFODBased_FiberTracking');
+            json.CallFunction = 'MRTTrack.PerformFODBased_FiberTracking';
+            json.Description = my_help('MRTTrack.PerformFODBased_FiberTracking');
 
             coptions = varargin;
             file_in = GiveValueForName(coptions,'mat_file');
@@ -2246,12 +2246,12 @@ classdef MRTTrack < handle
         %   FOD
 
             if(isempty(varargin))
-                my_help('MRTQuant.Perform_mFOD_FiberTracking');
+                my_help('MRTTrack.Perform_mFOD_FiberTracking');
                 return;
             end  
 
-            json.CallFunction = 'MRTQuant.Perform_mFOD_FiberTracking';
-            json.Description = my_help('MRTQuant.PerformFODBased_FiberTracking');
+            json.CallFunction = 'MRTTrack.Perform_mFOD_FiberTracking';
+            json.Description = my_help('MRTTrack.PerformFODBased_FiberTracking');
 
             coptions = varargin;
             file_in = GiveValueForName(coptions,'mat_file');
@@ -3389,4 +3389,12 @@ catch err
     disp(err.message);
 end
 
+end
+
+function out = my_help(fname)
+    if(isdeployed)
+        out = fname;
+    else
+        out = help(fname);
+    end
 end
