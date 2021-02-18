@@ -259,7 +259,7 @@ classdef MRTTrack < handle
             N = sm;
             op_e2 = optimset('TolX',1e-2);
             op = optimset();
-            max_discarded_vols = round(max_outlier_rejection*st);
+            max_discarded_vols = round(obj.max_outlier_rejection*st);
             
             [~,DeconvMethodCode] = SphericalDeconvolution.isSupportedMethod(obj.deconv_method); % -1 = failure; 1 = LSQNONNEG; 2 = DW_RegularizedDeconv; 3 = dRL
             if(DeconvMethodCode == -1)
