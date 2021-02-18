@@ -308,7 +308,7 @@ classdef MRTTrack < handle
                             fODFC = ADT_deconv_RLdamp_1D_noEP(DS, weighted_LRKernel(fit_data,1:end-NC),200, obj.NN_H);
                         elseif(DeconvMethodCode == 3)
                             %                         fODFC = mat_RL(DS, weighted_LRKernel(:,1:end-NC), 200);
-                            fODF = RichardsonLucy(DS, weighted_LRKernel(:,1:end-NC), 200);
+                            fODF = RichardsonLucy(DS, weighted_LRKernel(fit_data,1:end-NC), 200);
                             %                         elseif(DeconvMethodCode == 2)
                             %                             fODFC = DW_RegularizedDeconv(weighted_LRKernel(fit_data,1:end-NC),DS,op_e2,obj.L2LSQ_reg);
                         elseif(DeconvMethodCode == 2 || DeconvMethodCode == 1)
@@ -812,7 +812,7 @@ classdef MRTTrack < handle
             init_lambdas(2:3) = mean(init_lambdas(2:3));
             
             if(fit_dki == 1)
-                init_K = mean(K(U(:) > 0 & K(:) < 4));
+                init_K = mean(K(U(:) > 0 & K(:) > 0 & K(:) < 4));
             else
                 init_K = 0;
             end
