@@ -301,7 +301,7 @@ classdef MRTTrack < handle
                     % fractions guess (with LSQNONNEG)
                     for iter=1:50 % 50 = max number of iterations but usually exits way before
                         
-                        DS = max(Stot-weighted_LRKernel(fit_data,end-NC+1:end)*piso,0); % Subtract GM and CSF contributions
+                        DS = max(Stot(fit_data) - weighted_LRKernel(fit_data,end-NC+1:end)*piso,0); % Subtract GM and CSF contributions
                         
                         if(DeconvMethodCode == 4)
                             %                         fODFC = mat_dRL(DS, weighted_LRKernel(:,1:end-NC), 200, obj.NN_L, 8);
