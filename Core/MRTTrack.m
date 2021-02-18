@@ -310,9 +310,9 @@ classdef MRTTrack < handle
                             %                         fODFC = mat_RL(DS, weighted_LRKernel(:,1:end-NC), 200);
                             fODF = RichardsonLucy(DS, weighted_LRKernel(:,1:end-NC), 200);
                             %                         elseif(DeconvMethodCode == 2)
-                            %                             fODFC = DW_RegularizedDeconv(weighted_LRKernel(:,1:end-NC),DS,op_e2,obj.L2LSQ_reg);
+                            %                             fODFC = DW_RegularizedDeconv(weighted_LRKernel(fit_data,1:end-NC),DS,op_e2,obj.L2LSQ_reg);
                         elseif(DeconvMethodCode == 2 || DeconvMethodCode == 1)
-                            fODFC = lsqnonneg(weighted_LRKernel(:,1:end-NC),DS);
+                            fODFC = lsqnonneg(weighted_LRKernel(fit_data,1:end-NC),DS);
                         end
                         % This line is quite tricky. It comes out of some trial and error
                         % but actually has the intent of eliminating 1) small contributions
