@@ -2333,13 +2333,14 @@ classdef EDTI_Library < handle
             % This is a quick-and-dirty *.nii file reader...
             
             [P,N,EXT] = fileparts(fn);
-            
+            temp_file = false;
             if strcmpi(EXT,'.gz')
                 gzipped = 1;
                 while(true)
                     temp_path = fullfile(tempdir,['mrtd_gunzip_' num2str(randi(100000))]);
                     if(exist(temp_path,'dir') < 1)
                         mkdir(temp_path)
+                        temp_file = true;
                         break
                     end
                 end
@@ -2491,7 +2492,7 @@ classdef EDTI_Library < handle
                 I = flipdim(I,1);
                 I = flipdim(I,2);
                 
-                if gzipped==1
+                if gzipped==1 || temp_file == true
                     delete(fn)
                 end
                 
