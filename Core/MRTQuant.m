@@ -522,6 +522,7 @@ classdef MRTQuant < handle
             	EDTI_Library.E_DTI_model_fit(file_in,txtfile,temp_file,Mask_par,1,1, 'ols',0,[]);
                
                [flips, perms, correct, consistent] = EDTI_Library.E_DTI_Check_for_flip_perm_grads(temp_file);
+               delete(temp_file)
                perm_list = [1 2 3;
                             2 1 3;
                             3 2 1;
