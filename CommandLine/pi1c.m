@@ -1,5 +1,5 @@
-function mrtcmd(varargin)
-    disp('mrtcmd');
+function pi1c(varargin)
+    disp('MRIToolkit - processing in one command (pi1c)');
     if(isempty(varargin) || isempty(varargin{1}) || strcmpi(varargin{1},'-help'))
         help = 'This is the command line tool of MRIToolkit!';
         help = [help newline];
@@ -7,7 +7,7 @@ function mrtcmd(varargin)
         help = [help newline 'mrtd_coordsys_check - check whether a flip/permute of the spatial dimensions is needed'];
         help = [help newline 'mrtd_coordsys_fix - flip/permute the spatial dimensions as needed'];
         help = [help newline 'mrtd_test_gradients - detect flip/permute of the gradient directions'];
-        help = [help newline 'mrtd_moco_epi - perform motion/EPI correction'];
+        help = [help newline 'mrtd_preproc - perform dMRI preprocessing'];
         help = [help newline 'mrtd_dti_dki - DTI/DKI fit'];
         help = [help newline 'mrtd_deconv_fod - Perform spherical deconvolution'];
         help = [help newline 'mrtd_track - Fiber tractography'];
@@ -15,15 +15,7 @@ function mrtcmd(varargin)
         help = [help newline];
         help = [help newline 'For help on usage, type mrtcmd command'];
         fprintf(help);
-        
-        disp('');
-        which('mrtcmd')
-        disp('');
-        disp(ctfroot)
-        
-        disp('Checking the help');
-        MRTQuant.PerformDTI_DKIFit()
-        
+                
         return
     end
     warning('off');
@@ -49,9 +41,7 @@ function mrtcmd(varargin)
         MRIToolkit.Elastix.TransformixCMD = transformix_cmd;
     end
     MRIToolkit.version = 'mrtcmd-1.1';
-    
-    disp(MRIToolkit.Elastix);
-    
+        
     if(nargin > 1)
         options = varargin(2:end);
     else
@@ -64,8 +54,8 @@ function mrtcmd(varargin)
         mrtd_coordsys_fix(options);
     elseif(strcmpi(cmd,'mrtd_test_gradients'))
         mrtd_test_gradients(options);
-    elseif(strcmpi(cmd,'mrtd_moco_epi'))
-        mrtd_moco_epi(options);
+    elseif(strcmpi(cmd,'mrtd_preproc'))
+        mrtd_preproc(options);
     elseif(strcmpi(cmd,'mrtd_dti_dki'))
         mrtd_dti_dki(options);
     elseif(strcmpi(cmd,'mrtd_deconv_fod'))

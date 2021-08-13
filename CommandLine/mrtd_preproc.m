@@ -1,5 +1,5 @@
-function mrtd_moco_epi(varargin)
-    disp('mrtd_moco_epi');
+function mrtd_preproc(varargin)
+    disp('mrtd_preproc');
     global MRIToolkit;
     coptions = varargin;
     if(iscell(varargin{1}) && length(varargin{1}) > 1)
@@ -42,7 +42,6 @@ function mrtd_moco_epi(varargin)
 %            disp('Code path');
 %            disp(which('mrtd_moco_epi'));
         else
-            disp('Not a mac');
         end
     else
         disp('Already initialized');
@@ -135,14 +134,15 @@ function mrtd_moco_epi(varargin)
     MRTQuant.b_Matrix_from_bval_bvec('bval_file',bval_file,'bvec_file',bvec_file,'output',[temp_file(1:end-shift) '.txt']);
     if(sdc == 1)
         new_file = [temp_file(1:end-shift) '_sdc.nii'];
-        disp('Signal drift correction');
+        disp('Performing signal drift correction');
+        disp('Please be sure the data is in acquisition order and contains multiple interdispersed b = 0s/mm2 volumes, or the correction will fail.');
         MRTQuant.PerformSignalDriftCorrection('nii_file',temp_file,'output',new_file);
         temp_file = new_file;
     end
     if(denoise == 1)
         new_file = [temp_file(1:end-shift) '_denoise.nii'];
         disp('MPPCA denoising');
-        MRTQuant.MPPCADenoising('nii_file',temp_file,'output',new_file);
+        MRTQuant.PerformMPPCADenoising('nii_file',temp_file,'output',new_file);
         temp_file = new_file;
     end
     if(gibbs == 1)

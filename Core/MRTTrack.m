@@ -27,6 +27,9 @@ classdef MRTTrack < handle
         max_outlier_rejection = 0.1; % 10%
         robust_kappa = 3;
         robust_deconv  = 0;% whether to use robust_deconv
+        Lmax_FOD = 16;
+        drl_iters = 200;
+        stdReconDirections;
     end
     
     methods
@@ -50,6 +53,8 @@ classdef MRTTrack < handle
             obj.NN_L = 0;
             obj.NN_H = 0;
             obj.rf_models = {};
+            gs = gen_scheme(300,4);
+            obj.stdReconDirections = gs.vert;
             
             InputPairs = ParseInputKeys(varargin);
             for ij=1:size(InputPairs,1)
@@ -186,8 +191,16 @@ classdef MRTTrack < handle
         function obj = AutomaticDRLDamping(obj)
             % Compute the automatic damping for the dRL method. Only needed if
             % the deconvolution method is dRL.
-            obj.NN_L = get_drl_nn_heuristic(obj.LRKernel,max(obj.data.bvals),0.7e-3);
-            obj.NN_H = get_drl_nn_heuristic(obj.HRKernel,max(obj.data.bvals),0.7e-3);
+            TGT_ADC = 0.7e-3;
+%             if(~isempty(obj.rf_models))
+%                for rf_id=1:length(obj.rf_models)
+%                   if(strcmp(obj.rf_models{rf_id},'ADC') > 0)
+%                       TGT_ADC = 
+%                   end
+%                end
+%             end
+            obj.NN_L = get_drl_nn_heuristic(obj.LRKernel,max(obj.data.bvals),TGT_ADC);
+            obj.NN_H = get_drl_nn_heuristic(obj.HRKernel,max(obj.data.bvals),TGT_ADC);
         end
         
         function output = PerformDeconv(obj,nof_workers,low_mem_mode)
@@ -305,10 +318,10 @@ classdef MRTTrack < handle
                         
                         if(DeconvMethodCode == 4)
                             %                         fODFC = mat_dRL(DS, weighted_LRKernel(:,1:end-NC), 200, obj.NN_L, 8);
-                            fODFC = ADT_deconv_RLdamp_1D_noEP(DS, weighted_LRKernel(fit_data,1:end-NC),200, obj.NN_H);
+                            fODFC = ADT_deconv_RLdamp_1D_noEP(DS, weighted_LRKernel(fit_data,1:end-NC), obj.drl_iters, obj.NN_H);
                         elseif(DeconvMethodCode == 3)
                             %                         fODFC = mat_RL(DS, weighted_LRKernel(:,1:end-NC), 200);
-                            fODF = RichardsonLucy(DS, weighted_LRKernel(fit_data,1:end-NC), 200);
+                            fODF = RichardsonLucy(DS, weighted_LRKernel(fit_data,1:end-NC), obj.drl_iters);
                             %                         elseif(DeconvMethodCode == 2)
                             %                             fODFC = DW_RegularizedDeconv(weighted_LRKernel(fit_data,1:end-NC),DS,op_e2,obj.L2LSQ_reg);
                         elseif(DeconvMethodCode == 2 || DeconvMethodCode == 1)
@@ -319,14 +332,14 @@ classdef MRTTrack < handle
                         % 2) flat - spread fods enforcing sparsity.
                         % Without this line the code DOESN'T work. (WM is over-estimated).
                         fODFC(fODFC < median(fODFC)) = 0;
-                        
                         % Build a dictionary to fit the complete signal (Stot)
                         Y = [obj.LRKernel(:,1:end-NC)*fODFC obj.LRKernel(:,end-NC+1:end)]; % 3 columns (WM-SIGNAL GM-SIGNAL CSF-SIGNAL)
-                        
-                        if(sum(Y(:,1)) > 0) % i.e. if the FOD is non-zero
-                            Y(:,1) = Y(:,1)/max(Y(:,1)); % Normalize WM signal
-                        end
-                        
+                        M = max(Y(:,1));
+                        if(M > 0) % i.e. if the FOD is non-zero
+                            Y(:,1) = Y(:,1)/M; % Normalize WM signal
+%                               fODFC = fODFC / sum(fODFC);
+                        end                        
+                                                
                         p = lsqnonneg(Y(fit_data,:),Stot(fit_data)./shell_weight(fit_data)); % Compute the signal fractions
                         piso = p(end-NC+1:end);
                         
@@ -349,10 +362,10 @@ classdef MRTTrack < handle
                     
                     if(DeconvMethodCode == 4)
                         %                     fODF = mat_dRL(DS, weighted_HRKernel(:,1:end-NC),200, obj.NN_H, 8);
-                        fODF = ADT_deconv_RLdamp_1D_noEP(DS, weighted_HRKernel(fit_data,1:end-NC),200, obj.NN_H);
+                        fODF = ADT_deconv_RLdamp_1D_noEP(DS, weighted_HRKernel(fit_data,1:end-NC),obj.drl_iters, obj.NN_H);
                     elseif(DeconvMethodCode == 3)
                         %                     fODF = mat_RL(DS, weighted_HRKernel(:,1:end-NC), 200);
-                        fODF = RichardsonLucy(DS, weighted_HRKernel(fit_data,1:end-NC), 200);
+                        fODF = RichardsonLucy(DS, weighted_HRKernel(fit_data,1:end-NC), obj.drl_iters);
                     elseif(DeconvMethodCode == 2)
                         fODF = DW_RegularizedDeconv(weighted_HRKernel(fit_data,1:end-NC),DS,op, obj.L2LSQ_reg);
                     elseif(DeconvMethodCode == 1)
@@ -360,22 +373,30 @@ classdef MRTTrack < handle
                     end
                     fODFC = fODF;
                     fODFC(fODFC < median(fODFC)) = 0;
+                    Y = [obj.HRKernel(:,1:end-NC)*fODFC obj.HRKernel(:,end-NC+1:end)]; % 3 columns (WM-SIGNAL GM-SIGNAL CSF-SIGNAL)
                     if(obj.n_anisotropic == 1)
-                        Y = [obj.HRKernel(:,1:end-NC)*fODFC obj.HRKernel(:,end-NC+1:end)]; % 3 columns (WM-SIGNAL GM-SIGNAL CSF-SIGNAL)
-                        if(sum(Y(:,1)) > 0) % i.e. if the FOD is non-zero
-                            Y(:,1) = Y(:,1)/max(Y(:,1)); % Normalize WM signal
+                        M = max(Y(:,1));
+                        if(M > 0) % i.e. if the FOD is non-zero
+%                             fODFC = fODFC / sum(fODFC);
+                            Y(:,1) = Y(:,1)/M; % Normalize WM signal
                         end
                     else
                         Y = [];
                         cindex = 1;
                         for kANC = 1:ANC
-                            Y = [Y weighted_HRKernel(:,cindex:cindex+obj.nDirections-1)*fODFC(cindex:cindex+obj.nDirections-1)];
-                            cindex = cindex+obj.nDirections;
                             %         if(sum(Y(:,1)) > 0) % i.e. if the FOD is non-zero
                             % changed for multi FOD
-                            if(sum(Y(:,kANC)) > 0) % i.e. if the FOD is non-zero
-                                Y(:,kANC) = Y(:,kANC)/max(Y(:,kANC)); % Normalize WM signal
+%                             tFOD = fODFC(cindex:cindex+obj.nDirections-1);
+%                             if(sum(tFOD > 0) > 0) % i.e. if the FOD is non-zero
+%                                 tFOD = tFOD / max(tFOD); % Normalize WM signal
+%                             end
+%                             fODFC(cindex:cindex+obj.nDirections-1) = tFOD;
+                            NewCol = weighted_HRKernel(:,cindex:cindex+obj.nDirections-1)*fODFC(cindex:cindex+obj.nDirections-1);
+                            if(sum(NewCol>0) > 0)
+                                NewCol = NewCol/max(NewCol);
                             end
+                            Y = [Y NewCol];
+                            cindex = cindex+obj.nDirections;
                         end
                         Y = [Y weighted_HRKernel(:,end-NC+1:end)]; % 3 columns (WM-SIGNAL GM-SIGNAL CSF-SIGNAL)
                     end
@@ -404,7 +425,7 @@ classdef MRTTrack < handle
                     Stot = Stot/NormFactor;
                     
                     fractions(x,1) = 1;
-                    FOD = ADT_deconv_RLdamp_1D_noEP(Stot, weighted_HRKernel,200, obj.NN_H);
+                    FOD = ADT_deconv_RLdamp_1D_noEP(Stot, weighted_HRKernel,obj.drl_iters, obj.NN_H);
                     WM_fod(x,:) = single(FOD);
                     RSS(x) = sum((Stot-weighted_HRKernel*FOD).^2);
                 end
@@ -418,19 +439,19 @@ classdef MRTTrack < handle
             
             output.fractions = reshape(fractions,[siz(1:3),size(fractions,2)]);
             
-            WM_fod_max = max(WM_fod,[],2);
-            WM_fod_normalized = WM_fod;
-            WM_fod_val = mean(WM_fod_max(fractions(:,1) > 0.7*max(WM_fod_max(:)))); % 20/12/2017
-            for ij=1:size(WM_fod_normalized,2)
-                WM_fod_normalized(:,ij) = WM_fod_normalized(:,ij) / WM_fod_val;% .* fractions(:,1); % 20/12/2017
-            end
+%             WM_fod_max = max(WM_fod,[],2);
+%             WM_fod_normalized = WM_fod;
+%             WM_fod_val = mean(WM_fod_max(fractions(:,1) > 0.7*max(WM_fod_max(:)))); % 20/12/2017
+%             for ij=1:size(WM_fod_normalized,2)
+%                 WM_fod_normalized(:,ij) = WM_fod_normalized(:,ij) / WM_fod_val;% .* fractions(:,1); % 20/12/2017
+%             end
             
             output.RSS = reshape(RSS,siz(1:3));
             clear RSS;
             output.FOD = reshape(WM_fod,[siz(1:3),size(WM_fod,2)]);
             clear WM_fod;
-            output.FOD_norm = reshape(WM_fod_normalized,[siz(1:3),size(WM_fod_normalized,2)]);
-            clear WM_fod_normalized;
+%             output.FOD_norm = reshape(WM_fod_normalized,[siz(1:3),size(WM_fod_normalized,2)]);
+%             clear WM_fod_normalized;
             
             obj.data.img = permute(obj.data.img,[2 1]);
             obj.data.img = reshape(obj.data.img,siz); % st(133)* ~isnan(FA)
@@ -455,45 +476,53 @@ classdef MRTTrack < handle
             % is an instance of this class, output is the structure returned
             % from PerformDeconv. file_prefix is the name without extension of
             % the desired outputs.
-            lmax = 16;
+            lmax = SpherDec.Lmax_FOD;
             super_scheme = gen_scheme(SpherDec.nDirections,lmax); % the reconstruction scheme. Change 300 to any number
             %             super_scheme.vert = super_scheme.vert(:,[2 1 3]);
             %             super_scheme.vert(:,3) = -super_scheme.vert(:,3);
             
             sh = SH(lmax,super_scheme.vert);
+            max_bv = max(round(SpherDec.data.bvals));
+            shell = abs(SpherDec.data.bvals - max_bv) <= 0.01*max_bv;
             
             if(SpherDec.n_anisotropic == 1)
                 % Single FOD case
-                fod = sh.coef(output.FOD);
-                
+                F = output.FOD;
+                S = sum(SpherDec.HRKernel(shell,1));
+                F = F * S;
+%                 for ij=1:size(F,4)
+%                     F(:,:,:,ij) = F(:,:,:,ij).*output.fractions(:,:,:,1);
+% %                     fod(:,:,:,ij) = fod(:,:,:,ij);
+%                 end
+                fod = sh.coef(F);
                 %             FOD_max = max(output.FOD,[],4);
                 %             FOD_scaled = output.FOD;
                 %             FOD_val = mean(FOD_max(output.fractions(:,:,:,1) > 0.7*max(FOD_max(:)))); % 20/12/2017
                 %             for ij=1:size(FOD_scaled,4)
                 %                 FOD_scaled(:,:,:,ij) = FOD_scaled(:,:,:,ij) / FOD_val;% .* fractions(:,:,:,1); % 20/12/2017
                 %             end
-                mult = 1;
-                if(SpherDec.NN_H ~= 0)
-                    mult = 0.1/SpherDec.NN_H;
-                end
+                
                 
                 if(isfield(SpherDec.data,'hdr'))
                     DW_SaveVolumeLikeNii(fod,SpherDec.data,[file_prefix '_CSD_FOD'],0);
                     DW_SaveVolumeLikeNii(output.fractions,SpherDec.data,[file_prefix '_fractions'],0);
-                    DW_SaveVolumeLikeNii(FOD_scaled,SpherDec.data,[file_prefix '_CSD_FOD_scaled'],0);
                 else
                     data_struct.img = fod;
                     data_struct.VD = SpherDec.data.VD;
                     MRTQuant.WriteNifti(data_struct,[file_prefix '_CSD_FOD.nii']);
                     data_struct.img = output.fractions;
                     MRTQuant.WriteNifti(data_struct,[file_prefix '_fractions.nii']);
-                    data_struct.img = sh.coef(output.FOD*mult);
-                    MRTQuant.WriteNifti(data_struct,[file_prefix '_CSD_FOD_scaled.nii']);
                 end
             else
                 % multi-FOD case
                 for fod_id=1:SpherDec.n_anisotropic
-                    fod = sh.coef(output.FOD(:,:,:,1+(fod_id-1)*SpherDec.nDirections:fod_id*SpherDec.nDirections));
+                    idx = 1+(fod_id-1)*SpherDec.nDirections:fod_id*SpherDec.nDirections;
+                    fod = sh.coef(output.FOD(:,:,:,idx));
+                    S = sum(SpherDec.HRKernel(shell,idx(1)));
+                    fod = fod*S;
+%                     for ij=1:size(fod,4)
+%                         fod(:,:,:,ij) = fod(:,:,:,ij).*output.fractions(:,:,:,fod_id);
+%                     end
                     
                     if(isfield(SpherDec.data,'hdr'))
                         DW_SaveVolumeLikeNii(fod,SpherDec.data,[file_prefix '_CSD_FOD_' num2str(fod_id)],0);
@@ -526,7 +555,7 @@ classdef MRTTrack < handle
                 
             end
         end
-        
+                
     end
     
     methods(Static)
@@ -2327,7 +2356,7 @@ classdef MRTTrack < handle
             EDTI_Library.WholeBrainTracking_mDRL_fast_exe(file_in, fod_basename, filename_out, parameters, interpolation_mode); 
 
             NiftiIO_basic.WriteJSONDescription('output',filename_out(1:end-4),'props',json);
-        end        
+        end      
         
     end
 end

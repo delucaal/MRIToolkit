@@ -3484,7 +3484,7 @@ classdef EDTI_Library < handle
         end
         
         % From ExploreDTI: Compute outliers using the residuals
-        function [outlier, chi_sq, chi_sq_iqr] = E_DTI_Get_outlier_chi_sq_var(DWI,DT,DWIB0,b,par)
+        function [outlier, chi_sq, chi_sq_iqr, residuals] = E_DTI_Get_outlier_chi_sq_var(DWI,DT,DWIB0,b,par)
             
             outlier = false([size(DWIB0) size(b,1)]);
             chi_sq = [];
@@ -3510,7 +3510,7 @@ classdef EDTI_Library < handle
             clear DWI;
             
             B0_est = DWIB0(mask(:))';
-            clear DWIB0;
+%             clear DWIB0;
             
             res = -double(b)*X;
             
@@ -3524,6 +3524,9 @@ classdef EDTI_Library < handle
             end
             
             res = res - DWI_m;
+            residuals = zeros(size(res,1),size(DWIB0,1)*size(DWIB0,2)*size(DWIB0,3));
+            residuals(:,mask) = res;
+            residuals = reshape(residuals',size(DWIB0,1),size(DWIB0,2),size(DWIB0,3),size(res,1));
             res = abs(res);
             clear DWI_m;
             
@@ -3544,7 +3547,7 @@ classdef EDTI_Library < handle
         end
         
         % From ExploreDTI: Compute outliers using the residuals (DKI version)
-        function [outlier, chi_sq, chi_sq_iqr] = E_DTI_Get_outlier_chi_sq_var_KT(DWI,DT,DWIB0,b,par,g,KT)
+        function [outlier, chi_sq, chi_sq_iqr,residuals] = E_DTI_Get_outlier_chi_sq_var_KT(DWI,DT,DWIB0,b,par,g,KT)
             
             b_kurt = [g(:,1).^4 g(:,2).^4 g(:,3).^4 ...
                 4*(g(:,1).^3).*g(:,2) 4*(g(:,1).^3).*g(:,3) ...
@@ -3571,7 +3574,7 @@ classdef EDTI_Library < handle
             X = repmat(single(0),[6 Vm]);
             
             for k=1:6
-                X(k,:) = DT{k}(mask(:));
+%                 X(k,:) = DT{k}(mask(:));
             end
             clear DT;
             
@@ -3602,6 +3605,9 @@ classdef EDTI_Library < handle
             end
             
             res = res - DWI_m;
+            residuals = zeros(size(res,1),size(DWIB0,1)*size(DWIB0,2)*size(DWIB0,3));
+            residuals(:,mask) = res;
+            residuals = reshape(residuals',size(DWIB0,1),size(DWIB0,2),size(DWIB0,3),size(res,1));
             res = abs(res);
             clear DWI_m;
             
@@ -8429,7 +8435,7 @@ classdef EDTI_Library < handle
                 FA_k = load(f_in,'FA');
                 ratio = 0.1/mean(FOD_1(FA_k.FA(:)>0.6));
                 %     disp(['Ratio is: ' num2str(ratio)]);
-                CSD_FOD_tmp = CSD_FOD_tmp*ratio;
+                CSD_FOD_tmp = single(CSD_FOD_tmp*ratio);
                 
                 EDTI_Library.E_DTI_write_nifti_file(CSD_FOD_tmp,VD,[suffix '_CSD_FOD_linterp.nii']);
                 

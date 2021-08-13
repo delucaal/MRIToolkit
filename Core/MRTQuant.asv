@@ -66,26 +66,6 @@ classdef MRTQuant < handle
             smat = [hdr.hdr.hist.srow_x(1:3);
                     hdr.hdr.hist.srow_y(1:3);
                     hdr.hdr.hist.srow_z(1:3)];
-            
-            b = hdr.hdr.hist.quatern_b;
-            c = hdr.hdr.hist.quatern_c;
-            d = hdr.hdr.hist.quatern_d;
-            a = sqrt(1.0-(b*b+c*c+d*d));
-            qmat = [a*a+b*b-c*c-d*d 2*b*c-2*a*d 2*b*d+2*a*c;
-                           2*b*c+2*a*d a*a+c*c-b*b-d*d 2*c*d-2*a*b;
-                           2*b*d-2*a*c 2*c*d+2*a*b a*a+d*d-c*c-b*b];
-            if(hdr.hdr.hist.qform_code > 0)
-                if(hdr.hdr.hist.sform_code > 0)
-                    disp('Conflicting q and s form. Continuing with the q-form' );
-                end
-                smat = qmat;
-            else
-                if(hdr.hdr.hist.sform_code == 0)
-                    disp('No q or s-form');
-                    smat = eye(3);
-                end
-            end
-                
             permute_order = [1 2 3];
             sign_order = [1 1 1];
             for ij=1:size(smat,2)
@@ -2158,8 +2138,8 @@ classdef MRTQuant < handle
             else
                 DTA = load(mat_name,'DWI','b','VDims');
                 bmat = DTA.b;
-                data.img = single(EDTI_Library.E_DTI_DWI_cell2mat(DTA.DWI));
-                data.VD = DTA.VDims;
+                data.img = EDTI_Library.E_DTI_DWI_cell2mat(DTA.DWI);
+                data.VD = DTA.
                 clear DTA;
             end
 

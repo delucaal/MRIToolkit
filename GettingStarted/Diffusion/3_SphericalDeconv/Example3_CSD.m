@@ -8,7 +8,7 @@ copyfile('bvecs','data.bvec');
 % If you want all subsequent output to be saved as compressed NIFTI
 MRTQuant.EnforceNiiGz(true);
 % b-matrix conversion
-MRTQuant.b_Matrix_from_bval_bvec('data.bval');
+MRTQuant.b_Matrix_from_bval_bvec('bval_file','data.bval');
 % The ExploreDTI file convention disregards the Q/S matrix of the NIFTI. As a result, we actually need to adjust the data matrix
 MRTQuant.FlipPermuteSpatialDimensions('nii_file','data.nii','flip',[0 1 0],'permute',[1 2 3]);
 MRTQuant.FlipPermuteSpatialDimensions('nii_file','nodif_brain_mask.nii','flip',[0 1 0],'permute',[1 2 3]);

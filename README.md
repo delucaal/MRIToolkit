@@ -4,8 +4,16 @@
  </a> 
  </p>
  
- # [MRIToolkit](https://github.com/delucaal/MRIToolkit) [update 17-02-2021] 
-New in this version:
+ # [MRIToolkit](https://github.com/delucaal/MRIToolkit) [update 13-08-2021] 
+New in this version [1.5]: 
+- Support for Q-form in MRTTrack.ConformSpatialDimensions() 
+- New FOD scaling mode for GRL/mFOD
+- Renaming of some command line functions
+- Added an option to customise the number of dRL iterations
+- New functions to estimate SNR from b=0s/mm2 images (MRTQuant)
+
+
+Update 17-02-2021:
 - Code re-organization into two main classes: MRTQuant (preprocessing/DTI/DKI) and MRTrack (Tractography related)
 - Support for automatic fiber clustering (see below for reference)
 - Early support for integration with Python (needed for the point above)

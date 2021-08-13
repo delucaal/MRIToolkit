@@ -36,4 +36,4 @@ SD.AddIsotropicRF(3e-3); % CSF
 SD.setInnerShellWeighting(1.0); % in mFOD this parameter has not been investigated
 SD.setDeconvMethod('L2LSQ');
 mFOD_Results = SD.PerformDeconv();
-MRTTrack.SaveOutputToNii(SD,mFOD_Results,'mFOD_TEST');
+SD.SaveOutputToNii(mFOD_Results,'mFOD_TEST');
