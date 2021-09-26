@@ -8,7 +8,7 @@
 The White Matter Analysis (WMA) package [Zhang et al. 2018](https://pubmed.ncbi.nlm.nih.gov/29920375/) allows to automatically reconstruct major white matter bundles from whole brain fiber tractography, as in the following example:
 
 <p align="center">
-<img src="../../../img/ExampleTractsWMA" width="600"/> 
+<img src="../../../img/ExampleTractsWMA.png" width="800" align="center"/> 
  </p>
 
 # How does it practically work?

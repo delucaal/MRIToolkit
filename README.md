@@ -36,7 +36,7 @@ The idea behind MRIToolkit is to integrate [my research output](https://www.umcu
 
 ## Explore the main functionalities:
 <a href="GettingStarted"> 
-<span style='align:center'> <img src="img/MRIToolkitBanner.png" style="width:600px;  display: block;  margin-left: auto;  margin-right: auto;"/> </span>
+<span style='align:center'> <img src="img/MRIToolkitBanner.png" style="align:center; width:800px;  display: block;  margin-left: auto;  margin-right: auto;"/> </span>
  </a> 
 
 The toolbox is referenced for the first time in [Guo et al.](https://arxiv.org/abs/1910.05372). Additionally, please cite the original works corresponding to the steps you use: 
