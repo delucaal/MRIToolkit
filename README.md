@@ -4,8 +4,11 @@
  </a> 
  </p>
  
- # [MRIToolkit](https://github.com/delucaal/MRIToolkit) [update 13-08-2021] 
+ # [MRIToolkit](https://github.com/delucaal/MRIToolkit) [update 26-09-2021] 
 New in this version [1.5]: 
+- [NEW] Checkout the [tutorial](https://github.com/delucaal/MRIToolkit/tree/master/GettingStarted/Diffusion/7_WMA) on how to install/use automated tractography clustering (WMA) algorithm with CSD/GRL/mFOD
+- Fixes to MSCSD-related functions
+- Fixes to WM automated clustering
 - Support for Q-form in MRTTrack.ConformSpatialDimensions() 
 - New FOD scaling mode for GRL/mFOD
 - Renaming of some command line functions
@@ -14,6 +17,7 @@ New in this version [1.5]:
 
 
 Update 17-02-2021:
+- Run the CAT12 automatic pipeline for T1 images
 - Code re-organization into two main classes: MRTQuant (preprocessing/DTI/DKI) and MRTrack (Tractography related)
 - Support for automatic fiber clustering (see below for reference)
 - Early support for integration with Python (needed for the point above)
@@ -24,7 +28,7 @@ Update 17-02-2021:
  ## What is it?
 MRIToolkit is a set of [command line tools](https://github.com/delucaal/MRIToolkit/tree/master/CommandLine) and a MATLAB (R) toolbox/library to process (diffusion) magnetic resonance imaging (MRI) data. Binaries of the command line version will be provided soon!
 
-The idea behind MRIToolkit is to integrate [my research output](https://www.isi.uu.nl/people/alberto-de-luca/) with existing state-of-the-art methods for (diffusion) MRI processing. 
+The idea behind MRIToolkit is to integrate [my research output](https://www.umcutrecht.nl/en/research/researchers/de-luca-alberto-a) with existing state-of-the-art methods for (diffusion) MRI processing. 
 
 ## Where do I find it?
 - The MATLAB (R) toolbox is available [here](https://github.com/delucaal/MRIToolkit) on Github!
@@ -32,7 +36,7 @@ The idea behind MRIToolkit is to integrate [my research output](https://www.isi.
 
 ## Explore the main functionalities:
 <a href="GettingStarted"> 
-<span style='align:center'> <img src="img/MRIToolkitBanner.png" style="width:300px;  display: block;  margin-left: auto;  margin-right: auto;"/> </span>
+<span style='align:center'> <img src="img/MRIToolkitBanner.png" style="width:600px;  display: block;  margin-left: auto;  margin-right: auto;"/> </span>
  </a> 
 
 The toolbox is referenced for the first time in [Guo et al.](https://arxiv.org/abs/1910.05372). Additionally, please cite the original works corresponding to the steps you use: 
@@ -42,7 +46,6 @@ The toolbox is referenced for the first time in [Guo et al.](https://arxiv.org/a
 - Spherical deconvolution using the Constrained Spherical Deconvolution [(CSD)](https://www.ncbi.nlm.nih.gov/pubmed/18583153), [Multi-shell CSD](https://www.sciencedirect.com/science/article/pii/S1053811914006442?via%3Dihub), [damped Richardson Lucy](https://www.ncbi.nlm.nih.gov/pubmed/19781650), the [Generalized Richardson Lucy](https://arxiv.org/abs/1910.05372) and [mFOD](https://www.biorxiv.org/content/10.1101/739136v1);
 - Robust deconvolution of multiple water pools (NNLS/L2NNLS/PL2NNLS) as in [De Luca et al. 2018](https://onlinelibrary.wiley.com/doi/full/10.1002/nbm.3965)
 - [NEW!] Automatic fiber clustering thanks to [WMA pipeline](https://github.com/SlicerDMRI/whitematteranalysis/tree/master/whitematteranalysis)
-- [NEW!] Run the CAT12 automatic pipeline for T1 images
 
 ## Quick installation 
 Please, see [this guide](img/MRIToolkitInstallationNotes.pdf)

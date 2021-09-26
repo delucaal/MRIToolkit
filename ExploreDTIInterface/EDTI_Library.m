@@ -5894,7 +5894,7 @@ classdef EDTI_Library < handle
             D(isnan(D))=0;
             
             % disp('saving state for debug');
-            EDTI_Library.E_DTI_write_nifti_file(D, VDims, [file_out '.nii']);
+            EDTI_Library.E_DTI_write_nifti_file(D, VDims, file_out);
             EDTI_Library.E_DTI_write_nifti_file(WM_volume, VDims, [file_out(1:end-4) '_WM_fraction.nii']);
             EDTI_Library.E_DTI_write_nifti_file(GM_volume, VDims, [file_out(1:end-4) '_GM_fraction.nii']);
             EDTI_Library.E_DTI_write_nifti_file(CS_volume, VDims, [file_out(1:end-4) '_CSF_fraction.nii']);
@@ -6019,9 +6019,9 @@ classdef EDTI_Library < handle
                     
                     % chop out a representative sample
                     
-                    [wm_vox,wm_vox_subsamp] = UniformMaskSubsamp(wm_vox,5000);
-                    gm_vox = UniformMaskSubsamp(gm_vox,5000);
-                    cs_vox = UniformMaskSubsamp(cs_vox,5000);
+                    [wm_vox,wm_vox_subsamp] = EDTI_Library.UniformMaskSubsamp(wm_vox,5000);
+                    gm_vox = EDTI_Library.UniformMaskSubsamp(gm_vox,5000);
+                    cs_vox = EDTI_Library.UniformMaskSubsamp(cs_vox,5000);
                     
                     %         wm_vox = wm_vox(:, 1:min(size(wm_vox, 2), 5000));
                     %         gm_vox = gm_vox(:, 1:min(size(gm_vox, 2), 5000));
@@ -6031,7 +6031,7 @@ classdef EDTI_Library < handle
                     %       r_sh{x, 1} = SD.response(wm_vox, grad4, bvalues(x), 0.7, lmax(x));
                     
                     
-                    [r_sh{x, 1},sf_voxels] = E_DTI_HARDI_CSD_FOD_RC_MuSh_mask(wm_vox(NrB0+1:end,:),grad4(NrB0+1:end,:),bvalues(x),lmax(x));
+                    [r_sh{x, 1},sf_voxels] = EDTI_Library.E_DTI_HARDI_CSD_FOD_RC_MuSh_mask(wm_vox(NrB0+1:end,:),grad4(NrB0+1:end,:),bvalues(x),lmax(x));
                     r_sh{x, 2} = SD.response(gm_vox, grad4, bvalues(x), 0, 0);
                     r_sh{x, 3} = SD.response(cs_vox, grad4, bvalues(x), 0, 0);
                     
@@ -6053,7 +6053,7 @@ classdef EDTI_Library < handle
             
             % then build a combined convolution kernel
             fconv = [];
-            max_kernel  = EDTI_Library.lmax2n(max(lmax)); % the largest convolution kernel size
+            max_kernel  = SH.lmax2n(max(lmax)); % the largest convolution kernel size
             for x=1:nshells
                 
                 % extract the convolution kernels
@@ -6083,7 +6083,7 @@ classdef EDTI_Library < handle
             % have an initial stab at the fODF fit
             kernel_chop = fconv(1:end, 1:max_kernel);
             f_sh_start = kernel_chop \ dwi_sh;
-            n = EDTI_Library.lmax2n(4);
+            n = SH.lmax2n(4);
             f_sh_start(n+1:end,:) = 0; % truncate the higher order components
             f_sh_start = [f_sh_start; 0.1 * ones(2, size(DWI, 2))];
             % few deconvolution parameters
@@ -6248,7 +6248,7 @@ classdef EDTI_Library < handle
             
             r_sh = zeros(SH.lmax2n(lmax),size(dwi,2)); % initialization
             
-            shcoef = EDTI_Library.E_DTI_create_initial_RF_RC(lmax,max(bval),0.15,2.1*10^(-3));
+            shcoef = EDTI_Library.E_DTI_create_initial_RF_RC(lmax,max(bvals),0.15,2.1*10^(-3));
             
             for i=1:length(shcoef(:))
                 
@@ -9098,6 +9098,6 @@ classdef EDTI_Library < handle
                 tract(flist) = tract(flist)+val;
             end
         end
-        
+
     end
 end

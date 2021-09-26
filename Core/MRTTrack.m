@@ -1478,6 +1478,9 @@ classdef MRTTrack < handle
             % input arguments:
             % vtk_file: the input tractography vtk file
             % nii_file: a reference .nii file in the same space of the tck
+            % mat_file: a reference .mat file in the same space of the tck
+            % (alternative to nii_file)
+            % offset: an [x,y,z] vector specificing a 3D translation
             % output: the output MAT file
             
             vtk_file = GiveValueForName(varargin,'vtk_file');
@@ -1489,21 +1492,37 @@ classdef MRTTrack < handle
                 error('Missing mandatory argument output');
             end
             nii_file = GiveValueForName(varargin,'nii_file');
+            mat_file = GiveValueForName(varargin,'mat_file');
             if(isempty(nii_file))
-                error('Missing mandatory argument nii_file');
+                if(isempty(mat_file))
+                    error('Missing mandatory argument nii_file or mat_file');
+                else
+                    R = load(mat_file,'VDims','FA','FE','eigval');
+                    REF.VD = R.VDims;
+                    REF.img = R.FA;
+                    REF.FA = R.FA;
+                    REF.FE = R.FE;
+                    REF.eigval = R.eigval;
+                    clear R
+                end
+            else
+                REF = MRTQuant.LoadNifti(nii_file);
             end
             
-            REF = MRTQuant.LoadNifti(nii_file);
+            offset = GiveValueForName(varargin,'offset');
+            if(isempty(offset))
+                offset = [0 0 0];
+            end
             
             try
-                [Points,Lines] = VTKImport_test(fullfile(vtk_files(vid).folder,vtk_files(vid).name));
-            catch
+                [Points,Lines] = VTKImport_test(vtk_file);
+            catch err
                 disp('Error trying to read the VTK file');
                 return
             end
-            Points(:,1) = Points(:,1) + mx;
-            Points(:,2) = Points(:,2) + my;
-            Points(:,3) = Points(:,3) + mz;
+            Points(:,1) = Points(:,1) + offset(1);
+            Points(:,2) = Points(:,2) + offset(2);
+            Points(:,3) = Points(:,3) + offset(3);
             Points(:,1) = size(REF.img,2) - Points(:,1);
             Points(:,2) = size(REF.img,1) - Points(:,2);
             Points = Points(:,[2 1 3]);
@@ -1529,13 +1548,17 @@ classdef MRTTrack < handle
                 cTractL = size(PL,1);
                 cTractLambdas = zeros([size(PL,1),3]);
                 cTractMD = zeros([size(PL,1),1]);
-                for point=1:size(PL,1)
-                    P = PL(point,:)./REF.VD;
-                    PC = floor(P)+1;
-                    %                    cTractFA(point) = DIFF_PROP.FA(PC(1),PC(2),PC(3))/sqrt(3);
-                    %                    cTractFE(point,:) = abs(squeeze(DIFF_PROP.FE(PC(1),PC(2),PC(3),:)));
-                    %                    cTractLambdas(point,:) = squeeze(DIFF_PROP.eigval(PC(1),PC(2),PC(3),:));
-                    cTractMD(point) = mean(cTractLambdas(point,:));
+                if(isfield(REF,'FA'))
+                    % These values are retrieved only if specifying
+                    % mat_file in place of nii_file
+                    for point=1:size(PL,1)
+                        P = PL(point,:)./REF.VD;
+                        PC = floor(P)+1;
+                        cTractFA(point) = REF.FA(PC(1),PC(2),PC(3))/sqrt(3);
+                        cTractFE(point,:) = abs(squeeze(REF.FE(PC(1),PC(2),PC(3),:)));
+                        cTractLambdas(point,:) = squeeze(REF.eigval(PC(1),PC(2),PC(3),:));
+                        cTractMD(point) = mean(cTractLambdas(point,:));
+                    end
                 end
                 Tracts.TractAng(tid) = {cTractAng};
                 Tracts.TractFA(tid) = {cTractFA};
@@ -1770,7 +1793,15 @@ classdef MRTTrack < handle
                 conda_path = strrep(conda_path,'\','/');
                 base_cmd = ['%windir%\System32\cmd.exe /c "' conda_path '/Scripts/activate.bat ' conda_env ' && '];
             else
-                base_cmd = 'source ~/.bashrc_conda2; conda activate';
+                % TODO: account for ZSH on MacOS
+                [~,shell] = system('echo $0');
+                if(contains(shell,'bash'))
+                    base_cmd = ['source ~/.bashrc; conda activate ' conda_env];
+                elseif(contains(shell,'zsh'))
+                    base_cmd = ['source ~/.zshrc; conda activate ' conda_env];                    
+                else
+                    error('Unsupported system shell');
+                end
             end
             
             % cmd = [base_cmd ';wm_quality_control_tract_overlap.py ' ...
@@ -1929,58 +1960,16 @@ classdef MRTTrack < handle
             DIFF_PROP = load(mat_file,'FA','eigval','FE');
             for vid = 1:length(vtk_files)
                 try
-                    [Points,Lines] = VTKImport_test(fullfile(vtk_files(vid).folder,vtk_files(vid).name));
+                    MRTTrack.ConvertVTKTractography2Mat('mat_file',mat_file,...
+                        'vtk_file',fullfile(vtk_files(vid).folder,vtk_files(vid).name),...
+                        'output',fullfile(output_directory,[vtk_files(vid).name(1:end-4) '.mat']),...
+                        'offset',[mx,my,mz]);
+                    E_DTI_DensityMaps(mat_file,fullfile(output_directory,[vtk_files(vid).name(1:end-4) '.mat']),...
+                        fullfile(output_directory_density,[vtk_files(vid).name(1:end-4) '.nii']));
                 catch err
-                    warning(['Skipping tract ' vtk_files(vid).name ' due to an unexpected error']);
+                    warning(['Error processing ' vtk_files(vid).name ', continuing']);
                     continue
                 end
-                Points(:,1) = Points(:,1) + mx;
-                Points(:,2) = Points(:,2) + my;
-                Points(:,3) = Points(:,3) + mz;
-                Points(:,1) = size(LM.TractMask,2) - Points(:,1);
-                Points(:,2) = size(LM.TractMask,1) - Points(:,2);
-                Points = Points(:,[2 1 3]);
-                Tracts.VDims = LM.VDims;
-                Tracts.Tracts = cell(1,length(Lines));
-                Tracts.TractAng = cell(1,length(Lines));
-                Tracts.TractFA = cell(1,length(Lines));
-                Tracts.TractFE = cell(1,length(Lines));
-                Tracts.TractGEO = cell(1,length(Lines));
-                Tracts.TractL = cell(1,length(Lines));
-                Tracts.TractLambdas = cell(1,length(Lines));
-                Tracts.TractMD = cell(1,length(Lines));
-                Tracts.TractMask = LM.TractMask;
-                Tracts.FList = (1:length(Tracts.Tracts))';
-                for tid=1:length(Tracts.Tracts)
-                    PL = Points(Lines{tid}+1,:);
-                    Tracts.Tracts(tid) = {PL};
-                    cTractFA = zeros([size(PL,1),1]);
-                    cTractFE = zeros([size(PL,1),3]);
-                    cTractGEO = zeros([size(PL,1),1]);
-                    cTractAng = zeros([size(PL,1),1]);
-                    cTractL = size(PL,1);
-                    cTractLambdas = zeros([size(PL,1),3]);
-                    cTractMD = zeros([size(PL,1),1]);
-                    for point=1:size(PL,1)
-                        P = PL(point,:)./LM.VDims;
-                        PC = floor(P)+1;
-                        cTractFA(point) = DIFF_PROP.FA(PC(1),PC(2),PC(3))/sqrt(3);
-                        cTractFE(point,:) = abs(squeeze(DIFF_PROP.FE(PC(1),PC(2),PC(3),:)));
-                        cTractLambdas(point,:) = squeeze(DIFF_PROP.eigval(PC(1),PC(2),PC(3),:));
-                        cTractMD(point) = mean(cTractLambdas(point,:));
-                    end
-                    Tracts.TractAng(tid) = {cTractAng};
-                    Tracts.TractFA(tid) = {cTractFA};
-                    Tracts.TractFE(tid) = {cTractFE};
-                    Tracts.TractGEO(tid) = {cTractGEO};
-                    Tracts.TractLambdas(tid) = {cTractLambdas};
-                    Tracts.TractMD(tid) = {cTractMD};
-                    Tracts.TractL(tid) = {cTractL};
-                end
-                save(fullfile(output_directory,[vtk_files(vid).name(1:end-4) '.mat']),...
-                    '-struct','Tracts');
-                E_DTI_DensityMaps(mat_file,fullfile(output_directory,[vtk_files(vid).name(1:end-4) '.mat']),...
-                    fullfile(output_directory_density,[vtk_files(vid).name(1:end-4) '.nii']));
                 %     Neuro.CAT12ApplyDeformation('nii_file',fullfile(output_directory_density,[vtk_files(vid).name(1:end-4) '.nii']),...
                 %         'field_file',fullfile(subj_dest_folder,'anat','T1_FP_CAT12','mri','y_T1_FP.nii'));
             end
@@ -3221,8 +3210,8 @@ if(version > 5)
         str = fgets(fid); % read datatype
     end    
     lines = cell(nlines(1)-1,1);
-    for line_id=1:length(lines)-1
-        lines(line_id) = {(LINES_INFO(line_id)):LINES_INFO(line_id+1)-1};
+    for line_id=1:length(lines)
+        lines(line_id) = {(1+(LINES_INFO(line_id)):LINES_INFO(line_id+1)-1)}; % UPDATED
     end
     
     % Unused for now
