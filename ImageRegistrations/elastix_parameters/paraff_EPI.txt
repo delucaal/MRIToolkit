@@ -20,6 +20,7 @@
 
 (AutomaticScalesEstimation "true")
 (AutomaticTransformInitialization "true")
+(AutomaticTransformInitializationMethod "CenterOfGravity")
 
 (HowToCombineTransforms "Compose")
 
@@ -44,6 +45,6 @@
 
 // The pixel type and format of the resulting deformed moving image
 (ResultImagePixelType "float")
-(ResultImageFormat "nii.gz")
+(ResultImageFormat "nii")
 
 (MaximumNumberOfSamplingAttempts 100)

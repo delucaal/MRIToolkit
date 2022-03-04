@@ -29,14 +29,83 @@ classdef MRTQuant < handle
             if(apply_intensity_scale == 1 && hdr.dime.scl_slope ~= 0 && ...
                     isfinite(hdr.dime.scl_slope) && isfinite(hdr.dime.scl_inter))
                 data.img = single(data.img)*hdr.dime.scl_slope+hdr.dime.scl_inter;
+                data.hdr.dime.scl_slope = 1;
+                data.hdr.dime.scl_inter = 0;
+                data.hdr.dime.datatype = 16;
+                data.hdr.dime.bitpix = 32;
             end
         end
         
-        function WriteNifti(data, file_name)
+        function WriteNifti(data, file_name, use_original_header)
         % Writes a data matrix to nifti as specified in file_name. data
         % must be a struct with fields img (the matrix) and VD (voxel
         % dimension)
-            EDTI_Library.E_DTI_write_nifti_file(data.img, data.VD, file_name);
+            global MRIToolkit;
+            if(nargin < 3)
+                use_original_header = 1;
+            end
+
+            if(use_original_header < 1 || ~isfield(data,'hdr'))
+                EDTI_Library.E_DTI_write_nifti_file(data.img, data.VD, file_name);
+            else
+                data.img = flip(data.img,1);
+                data.img = flip(data.img,2);
+                if ndims(data.img)==4
+                    data.img = permute(data.img,[2 1 3 4]);
+                elseif ndims(data.img)==3
+                    data.img = permute(data.img,[2 1 3]);
+                end         
+                data.untouch = 1;
+                data.hdr.dime.dim(2:4) = size(data.img(:,:,:,1));
+                if(ndims(data.img) == 4)
+                    data.hdr.dime.dim(5) = size(data.img,4);
+                else
+                    data.hdr.dime.dim([1 5]) = [3 1];
+                end
+                data.img = single(data.img);
+                data.hdr.dime.datatype = 16;
+                data.hdr.dime.bitpix = 32;
+
+                data.hdr.dime.pixdim(2:4) = data.VD;
+                
+                if(MRIToolkit.EnforceNiiGz > 0 && ~contains(file_name,'nii.gz'))
+                    file_name = strrep(file_name,'nii','nii.gz');
+                end
+                save_untouch_nii(data, file_name);
+            end
+        end
+        
+        function ApplyRescaleSlope(varargin)
+        % This function applies the rescale and slope to the data field, 
+        % to ensure these are used in subsequent processing steps.
+        % By default, this is not the case. Input arguments:
+        % nii_file: the input file
+        % output: the output file
+            if(isempty(varargin))
+                my_help('MRTQuant.ApplyRescaleSlope');
+                return;
+            end
+
+            coptions = varargin;
+            nii_file = GiveValueForName(coptions,'nii_file');
+            if(isempty(nii_file))
+                error('Missing mandatory parameter nii_file');
+            end
+            output = GiveValueForName(coptions,'output');
+            if(isempty(output))
+                error('Missing mandatory parameter output');
+            end
+            
+            json.CallFunction = 'MRTQuant.ApplyRescaleSlope';
+            json.Description = my_help('MRTQuant.ApplyRescaleSlope');
+                                    
+            json.ReferenceFile = nii_file;
+            json.ProcessingType = 'Preprocessing';
+            
+            data = MRTQuant.LoadNifti(nii_file,1);
+            MRTQuant.WriteNifti(data,output);
+            
+            NiftiIO_basic.WriteJSONDescription('output',output(1:end-4),'props',json);
         end
         
         function ConformSpatialDimensions(varargin)
@@ -44,7 +113,7 @@ classdef MRTQuant < handle
         % ExploreDTI. Input arguments:
         % nii_file: the input file
         % output: the output file
-            if( isempty(varargin))
+            if(isempty(varargin))
                 my_help('MRTQuant.ConformSpatialDimensions');
                 return;
             end
@@ -111,7 +180,7 @@ classdef MRTQuant < handle
             out_data.img = flip(out_data.img,1);
             out_data.img = flip(out_data.img,2);
 
-            MRTQuant.WriteNifti(out_data,data_out);
+            MRTQuant.WriteNifti(out_data,data_out,0);
 
         end
         
@@ -712,6 +781,8 @@ classdef MRTQuant < handle
         % "bvecs" (the diffusion gradients), % "mask" (a mask derived from
         % EDTI). Input arguments:
         % mat_file: the .mat file to import
+        % no_preproc: 0 (default) or 1. Disables rounding of b-values and
+        % removal of PIS (physically implausible signals)
 
             if(isempty(varargin))
                 my_help('MRTQuant.EDTI_Data_2_MRIToolkit');
@@ -723,16 +794,26 @@ classdef MRTQuant < handle
             if(isempty(file_in))
                 error('Need to specify the input .mat file');
             end
+            no_preproc = GiveValueForName(coptions,'no_preproc');
+            if(isempty(no_preproc))
+                no_preproc = 0;
+            end
             
             load(file_in,'DWI','NrB0','b','g','FA','VDims','eigval'); %,'bval','MDims','DT');
             
-            B0s = EDTI_Library.E_DTI_Clean_up_B0s_2(DWI, ~isnan(FA), NrB0); % this part cleans the B0s where DWIs intensity> B0s intensity
-            DWI(1:NrB0) = B0s;
-            clear B0s;
+            if(no_preproc == 0)
+                B0s = EDTI_Library.E_DTI_Clean_up_B0s_2(DWI, ~isnan(FA), NrB0); % this part cleans the B0s where DWIs intensity> B0s intensity
+                DWI(1:NrB0) = B0s;
+                clear B0s;
+            end
             
             DWI = EDTI_Library.E_DTI_DWI_cell2mat(DWI); % all the volumes, B0s + DWIs
             mask = ~isnan(FA);
-            bvals = round(sum(b(:,[1 4 6]),2)/100)*100;
+            if(no_preproc == 1)
+                bvals = sum(b(:,[1 4 6]),2);
+            else
+                bvals = round(sum(b(:,[1 4 6]),2)/100)*100;
+            end
             bvecs = [zeros(NrB0,3);g];
             
             mrt_data.img = single(DWI);
@@ -1131,6 +1212,68 @@ classdef MRTQuant < handle
             end
             EDTI_Library.E_DTI_write_nifti_file(data,VD,outname);
 
+            NiftiIO_basic.WriteJSONDescription('output',outname(1:end-4),'props',json);
+        end
+
+        function ConcatenateVolumes(varargin)
+        % Concatenate multiple 4D volumes along the 4-th dimension 
+        % Assumes corresponding .txt files or .bval / .bvec to be present
+        % with teh smae filename
+        % Input arguments:
+        % nii_files: a cell array containing a list of .nii files separated by comma
+        % output: the new .nii file containing a subset of the volumes.
+            if(isempty(varargin))
+                my_help('MRTQuant.ConcatenateVolumes');
+                return;
+            end
+        
+            json.CallFunction = 'MRTQuant.ConcatenateVolumes';
+            json.Description = my_help('MRTQuant.ConcatenateVolumes');
+
+            coptions = varargin;
+            file_in = GiveValueForName(coptions,'nii_files');
+            if(isempty(file_in))
+                error('Need to specify the input .nii files');
+            end  
+            
+            outname = GiveValueForName(coptions,'output');
+            if(isempty(outname))
+               error('Need to specify output name'); 
+            end
+            
+            json.ReferenceFile = file_in;
+            json.ProcessingType = 'Preprocessing';
+            
+            volumes = file_in;
+            if(length(volumes) < 2)
+                error('Please specify at least 2 files to merge');
+            end
+            
+            final_vol.img = [];
+            final_txt = [];
+            for volid=1:length(volumes)
+               data = MRTQuant.LoadNifti(volumes{volid});
+               if(contains(volumes{volid},'nii.gz'))
+                   bmat = load(strrep(volumes{volid},'nii.gz','txt'));
+               elseif(contains(volumes{volid},'nii'))
+                   bmat = load(strrep(volumes{volid},'nii','txt'));
+               end
+               if(~isempty(final_vol.img))
+                   final_vol.img = cat(4,final_vol.img,data.img);
+                   final_txt = cat(1,final_txt,bmat);
+               else
+                   final_vol.img = data.img;
+                   final_vol.VD = data.VD;
+                   final_txt = bmat;
+               end
+            end
+
+            MRTQuant.WriteNifti(final_vol,outname);
+            if(contains(outname,'nii.gz'))
+               save(strrep(outname,'nii.gz','txt'),'final_txt','-ascii'); 
+            elseif(contains(outname,'nii'))
+               save(strrep(outname,'nii','txt'),'final_txt','-ascii'); 
+            end
             NiftiIO_basic.WriteJSONDescription('output',outname(1:end-4),'props',json);
         end
         
@@ -1992,7 +2135,9 @@ classdef MRTQuant < handle
             
             mask_name = GiveValueForName(coptions,'mask_file');
             if(isempty(mask_name))
-                error('Need to specify the mask file (mask_file)');
+                if(isempty(mat_name))
+                    error('Need to specify the mask file (mask_file)');
+                end
             end
             
             output_prefix = GiveValueForName(coptions,'output');
@@ -2015,8 +2160,10 @@ classdef MRTQuant < handle
                 do_geoavg = 1;
             end
             
-            mask = MRTQuant.LoadNifti(mask_name);
-            data.mask = mask.img;
+            if(~isempty(mask_name))
+                mask = MRTQuant.LoadNifti(mask_name);
+                data.mask = mask.img;
+            end
             
             if(do_geoavg == 1)
                 data = QuickGeoAverage(data);
@@ -2382,13 +2529,13 @@ for k=2:length(data_name_parts)-1
    data_name_parts{1} = [data_name_parts{1} '.' data_name_parts{k}]; 
 end
 
-% Historically I had some issues with the b=0s/mm2 (the first volume) in my
-% data, and I always used b=1 or b=5s/mm2 as starting point. Maybe the following can
+% I noticed some issues with the b=0s/mm2 (the first volume) in my
+% data, and I always use b=1 or b=5s/mm2 as a minimum b-val point. Maybe the following can
 % be safely commented.
 
-data.img = data.img(:,:,:,2:end);
-data.bvals = data.bvals(2:end);
-data.bvecs = data.bvecs(2:end,:);
+% data.img = data.img(:,:,:,2:end);
+% data.bvals = data.bvals(2:end);
+% data.bvecs = data.bvecs(2:end,:);
 
 % Geometric averaging of the data per b-value
 

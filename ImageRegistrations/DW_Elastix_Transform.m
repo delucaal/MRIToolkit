@@ -18,8 +18,12 @@ function DW_Elastix_Transform(filein,fileout,transform_parameters)
 %         transformix_cmd = ['LD_LIBRARY_PATH=' elastix_path ' ' elastix_path 'transformix_Mac_64'];
         transformix_cmd = [elastix_path 'transformix_64.exe'];
     end
-    mkdir('temp_transformix');    
-    header = load_untouch_header_only([filein '.nii']);
+    mkdir('temp_transformix');  
+    if(contains(filein,'.nii') < 1)
+        header = load_untouch_header_only([filein '.nii']);
+    else
+        header = load_untouch_header_only(filein);
+    end
     if(header.dime.dim(1) == 3)
         disp('3D file');
         sentence = [transformix_cmd ' -in ' filein ' -out temp_transformix/ -tp ' transform_parameters];

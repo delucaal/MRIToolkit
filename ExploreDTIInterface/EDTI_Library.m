@@ -2587,20 +2587,20 @@ classdef EDTI_Library < handle
             hdr.srow_x  		= zeros(1, 4, 'single');
             hdr.srow_y 			= zeros(1, 4, 'single');
             hdr.srow_z 			= zeros(1, 4, 'single');
-            
+
             Temp = -(VDims.*[size(I,1) size(I,2) size(I,3)])/2;
-            
+
             hdr.srow_x(1) = VDims(1);
             hdr.srow_x(4) = Temp(1);
             hdr.srow_y(2) = VDims(2);
             hdr.srow_y(4) = Temp(2);
             hdr.srow_z(3) = VDims(3);
             hdr.srow_z(4) = Temp(3);
-            
+
             hdr.intent_name		= zeros(1, 16, 'uint8');
             hdr.magic = 'n+1     ';
             hdr.magic(4:end) = 0;
-            
+
             dat = whos('I');
             switch (dat.class)
                 case 'logical'
@@ -3593,7 +3593,7 @@ classdef EDTI_Library < handle
             clear DWI;
             
             B0_est = DWIB0(mask(:))';
-            clear DWIB0;
+%             clear DWIB0;
             
             res = -single(b)*X + (b_kurt*Y).*repmat((X(1,:)+X(4,:)+X(6,:)).^2,[size(b_kurt,1) 1]);
             clear X Y;
@@ -5338,6 +5338,41 @@ classdef EDTI_Library < handle
             end
             shcoef=shcoef/shcoef(1);
         end
+
+        % Original: creates an RF given a single fiber signal
+        function shcoef = E_DTI_create_initial_RF_RC_from_signal(lmax,s2)
+
+            file=load('icosahedron5.mat');
+            g=file.Expression1;
+                        
+            sh = SH(lmax,g);
+            shcoef = sh.coef(s2);
+            j = 0;
+            for l_ = 0:2:lmax
+                for m = -l_:l_
+                    j = j + 1;
+                    if m ~= 0
+                        shcoef(j,:) = 0;
+                    end
+                end
+            end
+            shcoef=shcoef/shcoef(1);
+        end
+        
+
+        % Adapted: simulate a single with the DTI model + isotropic
+        % kurtosis
+        function s2 = SimulateSignalDTIIsotropicK(bvals,g,eigenvalues,MK,angles)
+            
+            b=repmat(bvals,[1 6]).*[g(:,1).^2 2*g(:,1).*g(:,2) 2*g(:,1).*g(:,3) g(:,2).^2 2*g(:,2).*g(:,3) g(:,3).^2];
+            lambda1 = eigenvalues(1);
+            lambda2 = eigenvalues(2);
+            lambda3 = eigenvalues(3);
+            MD = mean(eigenvalues);
+            
+            Drot=(EDTI_Library.Rezgamma(angles(1))*EDTI_Library.Reybeta(angles(2)))*([lambda3 0 0;0 lambda2 0;0 0 lambda1])*((EDTI_Library.Rezgamma(angles(1))*EDTI_Library.Reybeta(angles(2)))');
+            s2=exp(-b*[Drot(1,1) Drot(1,2) Drot(1,3) Drot(2,2) Drot(2,3) Drot(3,3)]'+1/6*bvals.*bvals*MD*MD*MK);
+        end        
         
         % From ExploreDTI: Helper of E_DTI_create_initial_RF_RC
         function [lambda1,lambda2,lambda3]=Calculate_lambdas(FA,trD,fractionlambda)
@@ -5626,7 +5661,9 @@ classdef EDTI_Library < handle
                 % total RF
                 I{i}.nvox=size(r_sh,2); %amount of voxels
                 r_shtot = mean(r_sh,2);
+                r_shtot_sd = std(r_sh,0,2);
                 I{i}.r_shtot=r_shtot;
+                I{i}.r_shtot_sd = r_shtot_sd;
                 
                 % create CSD object
                 csd = CSD(r_shtot,lmax); clear r_shtot
@@ -5707,14 +5744,16 @@ classdef EDTI_Library < handle
             % nvox=[];
             % ratiovals=[];
             r_shtot=[];
+            r_shtot_sd = [];
             for i=1:size(I,2)
                 %     nvox=[nvox,I{i}.nvox];
                 %     ratiovals=[ratiovals,mean([I{i}.vals(2,~isnan(I{i}.vals(2,:)))/I{i}.vals(1,~isnan(I{i}.vals(2,:))),zeros(1,length(I{i}.vals(2,isnan(I{i}.vals(2,:)))))])];
                 r_shtot=[r_shtot,I{i}.r_shtot];
+                r_shtot_sd=[r_shtot_sd,I{i}.r_shtot_sd];
             end
             
             % Save the Response function per iteration (ADL)
-            save([fin(1:end-4) '_r_sh.mat'],'r_shtot','-v7.3');
+            save([fin(1:end-4) '_r_sh.mat'],'r_shtot','r_shtot_sd','-v7.3');
             
             load(fin,'DWI','VDims','NrB0','b','g','FA','bval','MDims')
             bvals=round(sum(b(:,[1 4 6]),2)/100)*100;
@@ -8421,7 +8460,7 @@ classdef EDTI_Library < handle
                 fr_col = reshape(fractions(:,:,:,1:sf),sx*sy*sz,sf);
                 for ij=1:sf
                     the_norm = 1;%prctile(CSD_FOD(fr_col(:,ij)>0.7,1,1),95)/prctile(CSD_FOD(fr_col(:,1)>0.7,1,ij),95);
-                    the_norm = max(nanmean(CSD_FOD(IX==1,:,1)))/max(nanmean(CSD_FOD(IX==ij,:,ij)));
+%                     the_norm = max(nanmean(CSD_FOD(IX==1,:,1)))/max(nanmean(CSD_FOD(IX==ij,:,ij)));
                     for ik=1:size(fr_col,1)
                         if(fr_col(ik,ij) == 0 || CSD_FOD(ik,1,ij) == 0 || ~isfinite(CSD_FOD(ik,1,ij)))
                             continue
@@ -8433,7 +8472,7 @@ classdef EDTI_Library < handle
                 
                 FOD_1 = CSD_FOD_tmp(:,:,:,1);
                 FA_k = load(f_in,'FA');
-                ratio = 0.1/mean(FOD_1(FA_k.FA(:)>0.6));
+                ratio = 1;%0.1/mean(FOD_1(FA_k.FA(:)>0.6));
                 %     disp(['Ratio is: ' num2str(ratio)]);
                 CSD_FOD_tmp = single(CSD_FOD_tmp*ratio);
                 
@@ -8458,11 +8497,11 @@ classdef EDTI_Library < handle
                 
                 FOD_1 = CSD_FOD_tmp(:,:,:,1);
                 FA_k = load(f_in,'FA');
-                ratio = 0.1/mean(FOD_1(FA_k.FA(:)>0.6));
+                ratio = 1;%0.1/mean(FOD_1(FA_k.FA(:)>0.6));
                 %     disp(['Ratio is: ' num2str(ratio)]);
                 CSD_FOD_tmp = CSD_FOD_tmp*ratio;
                 
-                EDTI_Library.E_DTI_write_nifti_file(CSD_FOD_tmp,VD,[f_in suffix '_CSD_FOD_majority.nii']);
+                EDTI_Library.E_DTI_write_nifti_file(CSD_FOD_tmp,VD,[suffix '_CSD_FOD_majority.nii']);
                 
             else
                 disp('Unsupported');
