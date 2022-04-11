@@ -145,9 +145,9 @@ classdef MRTQuant < handle
                            2*b*d-2*a*c 2*c*d+2*a*b a*a+d*d-c*c-b*b];
             if(hdr.hdr.hist.qform_code > 0)
                 if(hdr.hdr.hist.sform_code > 0)
-                    disp('Conflicting q and s form. Continuing with the q-form' );
+                    disp('Conflicting q and s form. Continuing with the s-form' );
+                    qmat = smat;
                 end
-                smat = qmat;
             else
                 if(hdr.hdr.hist.sform_code == 0)
                     disp('No q or s-form');
@@ -1559,7 +1559,7 @@ classdef MRTQuant < handle
                 normalize = 1;
             end
             load(mat_file,'DWI','DWIB0','DT','b','VDims','KT');
-            DWI = single(E_DTI_DWI_cell2mat(DWI));
+            DWI = single(EDTI_Library.E_DTI_DWI_cell2mat(DWI));
             if(normalize == 1)
                 for iz=1:size(DWI,4)
                     sl = DWI(:,:,:,iz)./(DWIB0+eps);

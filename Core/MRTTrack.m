@@ -1156,6 +1156,181 @@ classdef MRTTrack < handle
                 points2keep = false(size(tract,1),1);
                 for l=1:size(tract,1)
                     point = round(tract(l,:)./VDims);
+                    % Introducing a 1 voxel tolerance
+                    px = max(1,point(1)-1):min(point(1)+1,size(intersect_mask,1));
+                    py = max(1,point(2)-1):min(point(2)+1,size(intersect_mask,2));
+                    pz = max(1,point(3)-1):min(point(3)+1,size(intersect_mask,3));
+                    neighbourhood = intersect_mask(px,py,pz);
+                    if(any(neighbourhood(:) > 0))
+                        % This is a good point
+                        points2keep(l) = true;
+                    end
+                end
+                
+                if(sum(points2keep) > 0)
+                    LabeledVector = LabelVector(points2keep);
+                    for ij=2:max(LabeledVector)
+                        points2keep_l = LabeledVector == ij;
+                        if(sum(points2keep_l > 0) < 2)
+                            continue
+                        end
+                        if(~strcmp(mask_mode,'gm_only'))
+                            TP = tract(points2keep_l,:);
+                            TL = 0;
+                            for tpid=2:size(TP,1)
+                                TL = TL + norm(TP(tpid,:)-TP(tpid-1,:));
+                            end
+                            if(TL < Parameters.Length_range(1))
+                                continue
+                            end
+                        end
+
+                        new_tracts{end+1} = TP;
+                        new_tracts_L{end+1} = size(new_tracts{end},1);
+                        new_tracts_FA{end+1} = TractFA{tid}(points2keep_l);
+                        new_tracts_MD{end+1} = TractMD{tid}(points2keep_l);
+                        new_tracts_GEO{end+1} = TractGEO{tid}(points2keep_l,:);
+                        new_tracts_FE{end+1} = TractFE{tid}(points2keep_l,:);
+                        new_tracts_Lambdas{end+1} = TractLambdas{tid}(points2keep_l,:);
+                        new_tracts_FOD{end+1} = TractsFOD{tid}(points2keep_l);
+                        new_tracts_Angle{end+1} = TractAng{tid}(points2keep_l);
+                        extra_tracts = extra_tracts+1;
+
+                    end
+                    points2keep(LabeledVector > 1) = false;
+                end
+
+                if(sum(points2keep) < 2)
+                    points2keep = false(size(points2keep));
+                end
+                tract = tract(points2keep,:);
+                Tracts{tid} = tract;
+                TractL{tid} = size(tract,1);
+                TractFA{tid} = TractFA{tid}(points2keep);
+                TractMD{tid} = TractMD{tid}(points2keep);
+                TractGEO{tid} = TractGEO{tid}(points2keep,:);
+                TractFE{tid} = TractFE{tid}(points2keep,:);
+                TractLambdas{tid} = TractLambdas{tid}(points2keep,:);
+                TractsFOD{tid} = TractsFOD{tid}(points2keep);
+                TractAng{tid} = TractAng{tid}(points2keep);
+
+            end
+
+            good_tracts = true(size(Tracts));
+            for tract_id=1:length(Tracts)
+                if(TractL{tract_id} == 0)
+                    good_tracts(tract_id) = false;
+                end
+            end
+
+            Tracts = Tracts(good_tracts);
+            TractsFOD = TractsFOD(good_tracts);
+            TractL = TractL(good_tracts);
+            TractFA = TractFA(good_tracts);
+            TractFE = TractFE(good_tracts);
+            TractAng = TractAng(good_tracts);
+            TractGEO = TractGEO(good_tracts);
+            TractLambdas = TractLambdas(good_tracts);
+            TractMD = TractMD(good_tracts);
+
+
+            Tracts(end+1:end+extra_tracts) = new_tracts;
+            TractL(end+1:end+extra_tracts) = new_tracts_L;
+            TractFA(end+1:end+extra_tracts) = new_tracts_FA;
+            TractMD(end+1:end+extra_tracts) = new_tracts_MD;
+            TractFE(end+1:end+extra_tracts) = new_tracts_FE;
+            TractGEO(end+1:end+extra_tracts) = new_tracts_GEO;
+            TractLambdas(end+1:end+extra_tracts) = new_tracts_Lambdas;
+            TractAng(end+1:end+extra_tracts) = new_tracts_Angle;
+            TractsFOD(end+1:end+extra_tracts) = new_tracts_FOD;
+            FList = (1:length(Tracts))';
+
+            % clear new_tracts new_tracts_L new_tracts_FA new_tracts_MD new_tracts_FE new_tracts_GEO
+            % clear new_tracts_Lambdas new_tracts_Angle new_tracts_FOD points2keep tracts
+
+            %             disp(['Gated ' num2str(sum(good_tracts == true)) ' out of ' num2str(length(good_tracts)) ' ' ...
+            %                 sprintf('%.2f',100*single(sum(good_tracts == true))/single(length(good_tracts))) '%']);
+
+            save(out_file,'Tracts','TractsFOD','TractL','TractFA','TractFE','TractFE',...
+                'TractAng','TractGEO','TractLambdas','TractMD','FList','TractMask','VDims','-v7.3');
+        end
+
+        function TerminateTractsWithFractionExperimental(varargin)
+            % This function filters a .MAT fiber tractography result using the
+            % fractions estimated from the GRL method, to stop fiber
+            % tractography at the GM-WM interface, or GM-CSF. This code assumes GRL
+            % has been run with 3 classes (WM, GM, CSF). Input arguments
+            % are:
+            % mat_file: the reference ExploreDTI-like .MAT file
+            % tract_file: the tractography file in ExploreDTI-like .MAT format
+            % out_file: the desired output (.MAT)
+            % fraction_file: 'The tissue class fractions (.nii)'
+            % mask_mode: one between 'wm' (WM-GM interface) 'gm' (GM-CSF
+            % interface) 'gm_only' (only the GM part of a tract)
+
+            if( isempty(varargin))
+                help('SphericalDeconvolution.TerminateTractsWithFraction');
+                return;
+            end
+
+            coptions = varargin;
+            mat_file = GiveValueForName(coptions,'mat_file');
+            if(isempty(mat_file))
+                error('Need to specify the reference .MAT file');
+            end
+            tract_file = GiveValueForName(coptions,'tract_file');
+            if(isempty(tract_file))
+                error('Need to specify the tracts .MAT file');
+            end
+            out_file = GiveValueForName(coptions,'out_file');
+            if(isempty(out_file))
+                error('Need to specify the output .MAT file');
+            end
+            fraction_file = GiveValueForName(coptions,'fraction_file');
+            if(isempty(fraction_file))
+                error('Need to specify the fractions .nii file');
+            end
+            mask_mode = GiveValueForName(coptions,'mask_mode');
+            if(isempty(mask_mode))
+                error('Need to specify the mask_mode');
+            end
+
+            load(tract_file);
+            load(mat_file,'FA','VDims');
+
+            [sx,sy,sz] = size(FA);
+
+            intersect_mask = MRTQuant.LoadNifti(fraction_file);
+            intersect_mask = intersect_mask.img;
+            csf = intersect_mask(:,:,:,3);
+            gm = intersect_mask(:,:,:,2);
+            [~,intersect_mask] = max(intersect_mask,[],4);
+            if(strcmp(mask_mode,'wm'))
+                intersect_mask = intersect_mask == 1 & ~isnan(FA);
+            elseif(strcmp(mask_mode,'gm'))
+                intersect_mask = csf <= 0.7 & intersect_mask > 0 & ~isnan(FA);
+            elseif(strcmp(mask_mode,'gm_only'))
+                intersect_mask = intersect_mask == 2 & ~isnan(FA);
+            end
+
+            new_tracts = {};
+            new_tracts_L = {};
+            new_tracts_FA = {};
+            new_tracts_MD = {};
+            new_tracts_FE = {};
+            new_tracts_GEO = {};
+            new_tracts_Lambdas = {};
+            new_tracts_Angle = {};
+            new_tracts_FOD = {};
+
+            extra_tracts = 0;
+
+            for tid=1:length(Tracts)
+                tract = Tracts{tid};
+
+                points2keep = false(size(tract,1),1);
+                for l=1:size(tract,1)
+                    point = round(tract(l,:)./VDims);
                     if(intersect_mask(point(1),point(2),point(3)))
                         % This is a good point
                         points2keep(l) = true;
@@ -1249,7 +1424,7 @@ classdef MRTTrack < handle
             save(out_file,'Tracts','TractsFOD','TractL','TractFA','TractFE','TractFE',...
                 'TractAng','TractGEO','TractLambdas','TractMD','FList','TractMask','VDims','-v7.3');
         end
-
+        
         function [init_lambdas,init_K, init_offset] = Eigenval_IsoK_WM_FromData(data,mask,fit_dki,fit_offset)
             % Estimate the tensor eigenvalues and isotropic kurtosis from the data, in a mask where FA >= 0.7
             data.img = single(data.img);
@@ -1764,7 +1939,7 @@ classdef MRTTrack < handle
             if(parallel == 1)
                 [peak_dir,peak_amp] = SHPrecomp.all_peaks_parallel(fod,peak_threshold,max_peaks,max_cores,lmax,300);
             else
-                [peak_dir,peak_amp] = SHPrecomp.all_peaks(fod,peak_threshold,max_peaks,max_cores,lmax,300);
+                [peak_dir,peak_amp] = SHPrecomp.all_peaks(fod,peak_threshold,max_peaks);
             end
 
             if(nargout > 2)
@@ -2249,15 +2424,15 @@ classdef MRTTrack < handle
                     end
                     NL = length(TA.Tracts);
                     TB.TractAng(end+1:end+NL) = TA.TractAng;
-                    TB.TractFA(end+1:end+NL) = TA.TractAng;
-                    TB.TractFE(end+1:end+NL) = TA.TractAng;
-                    TB.TractGEO(end+1:end+NL) = TA.TractAng;
-                    TB.TractL(end+1:end+NL) = TA.TractAng;
-                    TB.TractLambdas(end+1:end+NL) = TA.TractAng;
-                    TB.TractMD(end+1:end+NL) = TA.TractAng;
-                    TB.Tracts(end+1:end+NL) = TA.TractAng;
+                    TB.TractFA(end+1:end+NL) = TA.TractFA;
+                    TB.TractFE(end+1:end+NL) = TA.TractFE;
+                    TB.TractGEO(end+1:end+NL) = TA.TractGEO;
+                    TB.TractL(end+1:end+NL) = TA.TractL;
+                    TB.TractLambdas(end+1:end+NL) = TA.TractLambdas;
+                    TB.TractMD(end+1:end+NL) = TA.TractMD;
+                    TB.Tracts(end+1:end+NL) = TA.Tracts;
                     try
-                        TB.TractsFOD(end+1:end+NL) = TA.TractAng;
+                        TB.TractsFOD(end+1:end+NL) = TA.TractsFOD;
                     catch
                     end
                     TB.FList = 1:length(TB.Tracts);
@@ -2827,10 +3002,12 @@ classdef MRTTrack < handle
             NiftiIO_basic.WriteJSONDescription('output',filename_out(1:end-4),'props',json);
         end
 
-        function Perform_mFOD_FiberTracking(varargin)
+        function Perform_mFOD_FiberTracking_MergingFields(varargin)
             % This function performs whole volume deterministic fiber
-            % tractography of multiple FODs in spherical harmonics. Possible
-            % input arguments are:
+            % tractography of multiple FODs in spherical harmonics. It is
+            % a first implementation based on the idea of merging two FOD
+            % fields. 
+            % Possible input arguments are:
             % mat_file: The ExpoloreDTI-like .mat file (for reference)
             % fod_basename: The name prefix used for the mFOD output (see the SphericalDeconvolution class) (in SH basis)
             % output: The output tracts (must be .mat)
@@ -2930,6 +3107,107 @@ classdef MRTTrack < handle
             NiftiIO_basic.WriteJSONDescription('output',filename_out(1:end-4),'props',json);
         end
 
+        function Perform_mFOD_FiberTracking(varargin)
+            % This function performs whole volume deterministic fiber
+            % tractography of 2 FODs in spherical harmonics. The two fields
+            % are treated independently and fiber tractography can
+            % repeatedly "jump" between them
+            % Possible input arguments are:
+            % mat_file: The ExpoloreDTI-like .mat file (for reference)
+            % fod1: The name of the first FOD calculated from mFOD (see the SphericalDeconvolution class) (in SH basis)
+            % fod2: The name of the second FOD calculated from mFOD (see the SphericalDeconvolution class) (in SH basis)
+            % output: The output tracts (must be .mat)
+            % SeedPointRes: The seeding resolution in mm, as [2 2 2] (default)
+            % StepSize: the step size in mm, as 1 (default)
+            % FODThresh: The FOD thredshold to stop tracking (first FOD), as 0.1000 	(default)
+            % AngleThresh: The angle threshold to stop tracking (first FOD), as 30 (default)
+            % FiberLengthRange: The mininum - maximum allowed fiber length in mm: [30 500]
+            % SeedMask: A mask to perform the seeding. If empty, the whole
+            %   volume is used
+
+            if(isempty(varargin))
+                my_help('MRTTrack.Perform_mFOD_FiberTracking');
+                return;
+            end
+
+            json.CallFunction = 'MRTTrack.Perform_mFOD_FiberTracking';
+            json.Description = my_help('MRTTrack.PerformFODBased_FiberTracking');
+
+            coptions = varargin;
+            file_in = GiveValueForName(coptions,'mat_file');
+            if(isempty(file_in))
+                error('Need to specify the input .mat file');
+            end
+            json.ReferenceFile = file_in;
+            json.ProcessingType = 'FiberTractography';
+
+            fod1 = GiveValueForName(coptions,'fod1');
+            if(isempty(fod1))
+                error('Need to specify the input FOD1');
+            end
+            json.fod1 = fod1;
+
+            fod2 = GiveValueForName(coptions,'fod2');
+            if(isempty(fod2))
+                error('Need to specify the input FOD2');
+            end
+            json.fod2 = fod2;
+
+            filename_out = GiveValueForName(coptions,'output');
+            if(isempty(filename_out))
+                error('Need to specify the output .mat file');
+            end
+
+            option = GiveValueForName(coptions,'SeedPointRes');
+            if(isempty(option))
+                parameters.SeedPointRes = [2 2 2];
+            else
+                parameters.SeedPointRes = option;
+            end
+
+            option = GiveValueForName(coptions,'StepSize');
+            if(isempty(option))
+                parameters.StepSize = 1;
+            else
+                parameters.StepSize = option;
+            end
+
+            option = GiveValueForName(coptions,'FODThresh');
+            if(isempty(option))
+                parameters.blob_T = 0.1;
+            else
+                parameters.blob_T = option;
+            end
+
+            option = GiveValueForName(coptions,'AngleThresh');
+            if(isempty(option))
+                parameters.AngleThresh = 30;
+            else
+                parameters.AngleThresh = option;
+            end
+
+            option = GiveValueForName(coptions,'FiberLengthRange');
+            if(isempty(option))
+                parameters.FiberLengthRange = [30 500];
+            else
+                parameters.FiberLengthRange = option;
+            end
+
+            option = GiveValueForName(coptions,'SeedMask');
+            if(isempty(option))
+                parameters.SeedMask = [];
+            else
+                parameters.SeedMask = option;
+            end
+
+            parameters.randp = 0;
+            json.TrackingParameters = parameters;
+
+            MRT_Library.WholeBrain_mFOD_Tractography(file_in, fod1, fod2, parameters, filename_out);
+
+            NiftiIO_basic.WriteJSONDescription('output',filename_out(1:end-4),'props',json);
+        end
+        
         function S = SimulateCrossingFibersSignalWithDKI(varargin)
             % This function generates a synthetic signal using a simplified
             % DKI model (DTI + MK only) of K crossing fibers

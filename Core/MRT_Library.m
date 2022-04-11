@@ -1011,6 +1011,7 @@ classdef MRT_Library < handle
             
         end
         
+        % An own version of constrained (non-negative) least squares 
         function dec = ConstrainedDeconvolution(X,S,lambda)
             iters = 30;
             cost = NaN(iters,1);
@@ -1039,6 +1040,124 @@ classdef MRT_Library < handle
             dec(dec<eps) = 0;
         end
         
+        % Perform fiber tractography of 2 SH-based FODs (mFOD)
+        function WholeBrain_mFOD_Tractography(reference_mat,fod_1,fod_2,p,f_out)
+            tic
+            
+            f_in = reference_mat;
+            
+            load(f_in,'VDims')
+            
+            if(ischar(fod_1))
+                CSD_FOD = EDTI_Library.E_DTI_read_nifti_file(fod_1);
+            else
+                CSD_FOD = fod_1;
+                clear fod_1;
+            end
+
+            if(ischar(fod_2))
+                CSD_FOD2 = EDTI_Library.E_DTI_read_nifti_file(fod_2);
+            else
+                CSD_FOD2 = fod_2;
+                clear fod_2;
+            end
+            
+            SR = p.SeedPointRes;
+            mask_s = ~isnan(CSD_FOD(:,:,:,1)) | ~isnan(CSD_FOD(:,:,:,2));
+            
+            disp('Calculating seed points...')
+            if(isfield(p,'SeedMask') && ~isempty(p.SeedMask))
+                if(ischar(p.SeedMask))
+                    seed_mask = EDTI_Library.E_DTI_read_nifti_file(p.SeedMask);
+                    p.SeedMask = seed_mask;
+                end
+                seedPoint = EDTI_Library.E_DTI_Get_Seeds_WBT(p.SeedMask > 0, SR, VDims, p);
+            else
+                seedPoint = EDTI_Library.E_DTI_Get_Seeds_WBT(mask_s, SR, VDims, p);
+            end
+            
+            if isempty(seedPoint)
+                disp('No seed points found - processing stopped.')
+            else
+                disp('Seed point calculation done.')
+            end
+            
+            disp('Calculating trajectories...')
+            
+            stepSize = p.StepSize;
+            threshold = p.blob_T;
+            maxAngle = p.AngleThresh;
+            lengthRange = [p.FiberLengthRange(1) p.FiberLengthRange(2)];
+            v2w = diag(VDims); v2w(4,4) = 1;
+            
+            t = MultiFieldSHTracker(v2w);
+
+            t.setData(CSD_FOD,CSD_FOD2);
+            t.setParameters(stepSize, threshold, maxAngle, lengthRange); t.setProgressbar(false);
+            [Tracts, TractsFOD] = t.track(seedPoint);
+            
+            num_tracts = size(Tracts,2);
+            TractL = cell(1,num_tracts);
+            for i = 1:num_tracts
+                TractL{i} = single(size(Tracts{i},1));
+            end
+            
+            TL = cell2mat(TractL(:))*stepSize;
+            IND = and(TL>=lengthRange(1),TL<=lengthRange(2));
+            Tracts = Tracts(IND);
+            TractsFOD = TractsFOD(IND);
+            
+            num_tracts = size(Tracts,2);
+            TractL = cell(1,num_tracts);
+            for i = 1:num_tracts
+                TractL{i} = single(size(Tracts{i},1));
+            end
+            
+            disp('Trajectory calculations done.')
+            
+            disp('Processing diffusion info along the tracts...');
+            
+            load(f_in,'DT','MDims');
+            
+            [TractFA, TractFE, TractAng, TractGEO, TractLambdas, TractMD] =...
+                EDTI_Library.E_DTI_diff_measures_vectorized(Tracts, VDims, DT);
+            
+            % TractL = cellfun(@length, Tracts, 'UniformOutput', 0);
+            
+            FList = (1:length(Tracts))';
+            
+            TractMask = repmat(0,MDims);
+            
+            for i = 1:length(FList)
+                IND = unique(sub2ind(MDims,...
+                    round(double(Tracts{i}(:,1))./VDims(1)),...
+                    round(double(Tracts{i}(:,2))./VDims(2)),...
+                    round(double(Tracts{i}(:,3))./VDims(3))));
+                TractMask(IND) = TractMask(IND) + 1;
+            end
+            
+            disp('Processing diffusion info along the tracts done.');
+            
+            Parameters.Step_size = stepSize;
+            Parameters.FOD_threshold = threshold;
+            Parameters.Angle_threshold = maxAngle;
+            Parameters.Length_range = lengthRange;
+            Parameters.Seed_resolution = SR;
+            
+            
+            disp('Saving trajectories...')
+            save(f_out,'FList','Tracts','TractL','TractFE',...
+                'TractFA','TractAng','TractGEO','TractMD',...
+                'TractLambdas','TractMask','VDims','TractsFOD','Parameters');
+            disp('Saving trajectories done.')
+            
+            ti = toc;
+            
+            m=ti/60;
+            disp(['Tracking (CSD - FOD interpolation) computation time was ' num2str(m) ' min.'])
+            
+        end
+
         function out = my_help(fname)
             if(isdeployed)
                 out = fname;
