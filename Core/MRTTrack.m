@@ -33,6 +33,7 @@ classdef MRTTrack < handle
         Lmax_FOD = 8;
         drl_iters = 200;
         stdReconDirections;
+        normalize_fods_wfrac = false;
     end
 
     methods
@@ -58,6 +59,7 @@ classdef MRTTrack < handle
             obj.rf_models = {};
             gs = gen_scheme(300,4);
             obj.stdReconDirections = gs.vert;
+            obj.normalize_fods_wfrac = false;
 
             if(length(varargin) > 0 && iscell(varargin{1}) > 0)
                 varargin = varargin{1};
@@ -469,7 +471,11 @@ classdef MRTTrack < handle
                         l_RSS(x) = sum((Stot_w-YHR*p).^2);
 
                         l_fractions(x,:) = p;
-                        l_WM_fod(x,:) = single(fODF);
+                        if(obj_copy.normalize_fods_wfrac == true && p(1) > 0.01)
+                            l_WM_fod(x,:) = single(fODF)/p(1);
+                        else
+                            l_WM_fod(x,:) = single(fODF);
+                        end
                     end
                     WM_fod(mask_vector(indices),:) = l_WM_fod;
                     fractions(mask_vector(indices),:) = l_fractions;
@@ -1817,7 +1823,7 @@ classdef MRTTrack < handle
 
             if(isempty(bvals) && isempty(bmat))
                 if(isempty(nvert))
-                    nvert = 300;
+                    nvert = 302;
                 end
                 bvals = 3000*ones(nvert,1);
                 Q = gen_scheme(nvert,4);
@@ -2998,7 +3004,8 @@ classdef MRTTrack < handle
 
             json.TrackingParameters = parameters;
 
-            EDTI_Library.WholeBrainFODTractography(file_in,fod_file,parameters,filename_out);
+%             EDTI_Library.WholeBrainFODTractography(file_in,fod_file,parameters,filename_out);
+            MRT_Library.WholeBrainFODTractography_par(file_in,fod_file,parameters,filename_out);
             NiftiIO_basic.WriteJSONDescription('output',filename_out(1:end-4),'props',json);
         end
 
@@ -3282,6 +3289,51 @@ classdef MRTTrack < handle
             tracts.FList = 1:length(indices);
             save(output,'-struct','tracts');
         end
+
+        function PerformGRL(varargin)
+
+            coptions = varargin;
+            mat_file = GiveValueForName(coptions,'mat_file');
+            if(isempty(mat_file))
+                error('Need to specify the input .mat file');
+            end
+
+            output = GiveValueForName(coptions,'output');
+            if(isempty(output))
+                error('Need to specify the output prefix');
+            end
+            
+            normalize_fod = GiveValueForName(coptions,'normalize_fod');
+            if(isempty(normalize_fod))
+                normalize_fod = false;
+            end
+
+            
+            data = MRTQuant.EDTI_Data_2_MRIToolkit('mat_file',mat_file);
+            
+            GRL = MRTTrack('data',data);
+            GRL.normalize_fods_wfrac = normalize_fod;
+            if(sum(unique(round(data.bvals) > 500)) > 1)
+                fit_dki = 1;
+            else
+                fit_dki = 0;
+            end
+            [eigvals,K] = MRTTrack.Eigenval_IsoK_WM_FromData(data,data.mask,fit_dki);
+            GRL.nDirections = 300;
+            GRL.drl_iters = 600;
+            GRL.AddAnisotropicRF_DKI(eigvals,K);
+            GRL.AddIsotropicRF(0.7e-3);
+            GRL.AddIsotropicRF(3e-3);
+            GRL.setDeconvMethod('dRL');
+            GRL.setInnerShellWeighting(.2);
+            GRL.AutomaticDRLDamping();
+            GRL.setL2REG(0.1);
+            deconv = GRL.PerformDeconv();
+            GRL.SaveOutputToNii(deconv,output);
+            save([output '.mat'],'deconv');
+
+        end
+
     end
 end
 

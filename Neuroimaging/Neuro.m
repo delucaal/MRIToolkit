@@ -178,6 +178,7 @@ disp(['ExecuteCat12_T1_FLAIR T1:' t1_file ' FLAIR:' flair_file]);
 if(isempty(which('spm')))
     addpath(genpath(spm_path));
 end
+cat12('expert')
 
 if(nargin < 2 || showreport > 0)
     showreport = 2;

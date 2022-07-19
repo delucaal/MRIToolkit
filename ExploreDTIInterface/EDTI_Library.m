@@ -566,7 +566,8 @@ classdef EDTI_Library < handle
             par_EPI.Grid_Spacing = par.EPI.Grid_Spacing([2 1 3]);
             par_EPI.Par_FN = fn_par_trafo_rigid;
             par_EPI.Deriv_Scales = par.EPI.Deriv_Scales([2 1 3]);
-            
+            par_EPI.failsafe = par.R2D.failsafe;
+
             if(isfield(for_trafo.par,'use_NC') && for_trafo.par.use_NC == 1)
                 suc = EDTI_Library.E_DTI_Par_Trafo_DTI_rigid_NC(par_EPI);
             else
@@ -1063,7 +1064,11 @@ classdef EDTI_Library < handle
             c = c+1;L{c} = '(Metric "AdvancedNormalizedCorrelation")';
             c = c+1;L{c} = '(AutomaticScalesEstimation "true")';
             c = c+1;L{c} = '(AutomaticTransformInitialization "true")';
-            c = c+1;L{c} = '(AutomaticTransformInitializationMethod "CenterOfGravity")'; % NEW
+            if(isfield(par,'failsafe') && par.failsafe == 1)
+                par.Num_Resol = 1;
+            else
+                c = c+1;L{c} = '(AutomaticTransformInitializationMethod "CenterOfGravity")'; % NEW
+            end
             c = c+1;L{c} = '(HowToCombineTransforms "Compose")';
             c = c+1;L{c} = '(ErodeMask "false")';
             scales = [-1 -1 -1 ones(1,6)*3.0e+038 -1 -1 -1];
@@ -1153,7 +1158,11 @@ classdef EDTI_Library < handle
             c = c+1;L{c} = '(Metric "AdvancedMattesMutualInformation")';
             c = c+1;L{c} = '(AutomaticScalesEstimation "true")';
             c = c+1;L{c} = '(AutomaticTransformInitialization "true")';
-            c = c+1;L{c} = '(AutomaticTransformInitializationMethod "CenterOfGravity")'; % NEW
+            if(isfield(par,'failsafe') && par.failsafe == 1)
+                par.Num_Resol = 1;
+            else
+                c = c+1;L{c} = '(AutomaticTransformInitializationMethod "CenterOfGravity")'; % NEW
+            end
             c = c+1;L{c} = '(HowToCombineTransforms "Compose")';
             c = c+1;L{c} = '(ErodeMask "false")';
             scales = [-1 -1 -1 ones(1,6)*3.0e+038 -1 -1 -1];
@@ -5969,7 +5978,8 @@ classdef EDTI_Library < handle
             
             % by f.guo
             bvals = sum(b(:,[1 4 6]),2);
-            bvals = round(bvals/100) *100;
+            bvals = round(bvals/10) *10;
+%             bvals = round(bvals/100) *100;
             
             % determine the number of unique shells and order by increasing b-value
             bvalues = unique(bvals);
@@ -6037,11 +6047,11 @@ classdef EDTI_Library < handle
                 
                 % slightly different proceduces based on whether this is the b0 shell
                 % or the shells with b>0
-                if x==1
+                if x==1 || lmax(x) == 0
                     % where the b0 is involved, just fit an isotropic response
-                    r_sh{x, 1} = EDTI_Library.E_DTI_MS_b0_response_MuSh(wm_vox, NrB0);
-                    r_sh{x, 2} = EDTI_Library.E_DTI_MS_b0_response_MuSh(gm_vox, NrB0);
-                    r_sh{x, 3} = EDTI_Library.E_DTI_MS_b0_response_MuSh(cs_vox, NrB0);
+                    r_sh{x, 1} = EDTI_Library.E_DTI_MS_b0_response_MuSh(wm_vox, size(wm_vox,1));
+                    r_sh{x, 2} = EDTI_Library.E_DTI_MS_b0_response_MuSh(gm_vox, size(wm_vox,1));
+                    r_sh{x, 3} = EDTI_Library.E_DTI_MS_b0_response_MuSh(cs_vox, size(wm_vox,1));
                     
                 else
                     % otherwise, need to do some g-matrix reorientation

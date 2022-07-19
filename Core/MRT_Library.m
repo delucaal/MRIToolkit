@@ -602,7 +602,7 @@ classdef MRT_Library < handle
             mu = max(0, 1 - 4*std(Signal) );
             nuV = nu^V;
             last_odf = fODF;
-            my_eps = 1e-4*max(Signal);
+            my_eps = 1e-4*max(fODF);%max(Signal);
             for i = 1:Niter
                 % --- approach: Flavio Dell’Acqua
                 Dem = KernelT*(Kernel*fODF);
@@ -1113,6 +1113,162 @@ classdef MRT_Library < handle
                 TractL{i} = single(size(Tracts{i},1));
             end
             
+            disp('Trajectory calculations done.')
+            
+            disp('Processing diffusion info along the tracts...');
+            
+            load(f_in,'DT','MDims');
+            
+            [TractFA, TractFE, TractAng, TractGEO, TractLambdas, TractMD] =...
+                EDTI_Library.E_DTI_diff_measures_vectorized(Tracts, VDims, DT);
+            
+            % TractL = cellfun(@length, Tracts, 'UniformOutput', 0);
+            
+            FList = (1:length(Tracts))';
+            
+            TractMask = repmat(0,MDims);
+            
+            for i = 1:length(FList)
+                IND = unique(sub2ind(MDims,...
+                    round(double(Tracts{i}(:,1))./VDims(1)),...
+                    round(double(Tracts{i}(:,2))./VDims(2)),...
+                    round(double(Tracts{i}(:,3))./VDims(3))));
+                TractMask(IND) = TractMask(IND) + 1;
+            end
+            
+            disp('Processing diffusion info along the tracts done.');
+            
+            Parameters.Step_size = stepSize;
+            Parameters.FOD_threshold = threshold;
+            Parameters.Angle_threshold = maxAngle;
+            Parameters.Length_range = lengthRange;
+            Parameters.Seed_resolution = SR;
+            
+            
+            disp('Saving trajectories...')
+            save(f_out,'FList','Tracts','TractL','TractFE',...
+                'TractFA','TractAng','TractGEO','TractMD',...
+                'TractLambdas','TractMask','VDims','TractsFOD','Parameters');
+            disp('Saving trajectories done.')
+            
+            ti = toc;
+            
+            m=ti/60;
+            disp(['Tracking (CSD - FOD interpolation) computation time was ' num2str(m) ' min.'])
+            
+        end
+
+        % Originally from ExploreDTI: Perform fiber tractography of any FOD in SH - Adapted
+        % and parallelized. Supports multiple trackers
+        function WholeBrainFODTractography_par(reference_mat,CSD_FOD_or_file,p,f_out)
+            global MRIToolkit
+            
+            tic
+            
+            f_in = reference_mat;
+            
+            load(f_in,'VDims')
+            
+            if(ischar(CSD_FOD_or_file))
+                CSD_FOD = EDTI_Library.E_DTI_read_nifti_file(CSD_FOD_or_file);
+            else
+                CSD_FOD = CSD_FOD_or_file;
+                clear CSD_FOD_or_file;
+            end
+            
+            SR = p.SeedPointRes;
+            mask_s = ~isnan(CSD_FOD(:,:,:,1));
+            
+            disp('Calculating seed points...')
+            if(isfield(p,'SeedMask') && ~isempty(p.SeedMask))
+                if(ischar(p.SeedMask))
+                    seed_mask = EDTI_Library.E_DTI_read_nifti_file(p.SeedMask);
+                    p.SeedMask = seed_mask;
+                end
+                seedPoint = EDTI_Library.E_DTI_Get_Seeds_WBT(p.SeedMask > 0, SR, VDims, p);
+            else
+                seedPoint = EDTI_Library.E_DTI_Get_Seeds_WBT(mask_s, SR, VDims, p);
+            end
+            
+            if isempty(seedPoint)
+                disp('No seed points found - processing stopped.')
+            else
+                disp('Seed point calculation done.')
+            end
+            
+            disp('Calculating trajectories...')
+            
+            stepSize = p.StepSize;
+            threshold = p.blob_T;
+            maxAngle = p.AngleThresh;
+            lengthRange = [p.FiberLengthRange(1) p.FiberLengthRange(2)];
+            v2w = diag(VDims); v2w(4,4) = 1;
+            
+            pool = gcp;
+            if(isempty(pool))
+                % Could not create parallel pool, resorting to original
+                % implementation
+                EDTI_Library.WholeBrainFODTractography_par(reference_mat,CSD_FOD_or_file,p,f_out);
+                return
+            else
+                % Divide seeds accordingly
+                Step = ceil(size(seedPoint,2)/pool.NumWorkers);
+                seedPointsSplit = cell(pool.NumWorkers,1);
+                for ij=1:pool.NumWorkers
+                    seedPointsSplit(ij) = {seedPoint(:,(ij-1)*Step+1:min(ij*Step,size(seedPoint,2)))};
+                end
+
+                Tracts = cell(pool.NumWorkers,1);
+                TractsFOD = cell(pool.NumWorkers,1);
+                parfor block = 1:pool.NumWorkers
+                    t = [];
+                    if(isfield(MRIToolkit,'fibertracker') < 1 || isfield(MRIToolkit.fibertracker,'type') < 1 ...
+                            || isempty(MRIToolkit.fibertracker.type))
+                        t = SHTracker(v2w);
+                    else
+                        disp('Not yet supported')
+                        continue
+%                         eval(['t = ' MRIToolkit.fibertracker.type '(v2w);']);
+%                         if(isfield(MRIToolkit.fibertracker,'parameters'))
+%                             fields = fieldnames(MRIToolkit.fibertracker.parameters);
+%                             for field_id=1:length(fields)
+%                                 eval(['t.' fields{field_id} '= MRIToolkit.fibertracker.parameters.' fields{field_id} ';']);
+%                             end
+%                         end
+                    end
+                    t.setData(CSD_FOD);
+                    t.setParameters(stepSize, threshold, maxAngle, lengthRange); t.setProgressbar(false);
+                    [LTracts, LTractsFOD] = t.track(seedPointsSplit{block});
+                    Tracts(block) = {LTracts};
+                    TractsFOD(block) = {LTractsFOD};
+                end
+
+                for ix=2:length(Tracts)
+                    Tracts(1) = {cat(2,Tracts{1},Tracts{ix})};
+                    TractsFOD(1) = {cat(2,TractsFOD{1},TractsFOD{ix})};
+                end
+
+                Tracts = Tracts{1};
+                TractsFOD = TractsFOD{1};
+
+                num_tracts = size(Tracts,2);
+                TractL = cell(1,num_tracts);
+                for i = 1:num_tracts
+                    TractL{i} = single(size(Tracts{i},1));
+                end
+                
+                TL = cell2mat(TractL(:))*stepSize;
+                IND = and(TL>=lengthRange(1),TL<=lengthRange(2));
+                Tracts = Tracts(IND);
+                TractsFOD = TractsFOD(IND);
+                
+                num_tracts = size(Tracts,2);
+                TractL = cell(1,num_tracts);
+                for i = 1:num_tracts
+                    TractL{i} = single(size(Tracts{i},1));
+                end
+            end
+
             disp('Trajectory calculations done.')
             
             disp('Processing diffusion info along the tracts...');
