@@ -11,7 +11,7 @@ function mrtd_preproc(varargin)
         help = 'This tools perform common preprocessing (denoising, drift correction, Gibbs ringing correction) + motion correction / Eddy currents correction / EPI distorion correction (optional) of diffusion MRI data';
         help = [help newline 'The gradient b-matrix is automatically reoriented.'];
         help = [help newline];
-        help = [help newline 'usage: mrtd_moco_epi -nii file.nii -bval file.bval -bvec file.bvec -out corrected_file (other_options)'];
+        help = [help newline 'usage: mrtd_preproc -nii file.nii -bval file.bval -bvec file.bvec -out corrected_file (other_options)'];
         help = [help newline];
         help = [help newline '-grad_perm: how to permute the diffusion gradients 1=[x y z] 2=[y x z] 3=[z y x]' ....
                    ' 4=[x z y] =[y z x] 6=[z x y]'];

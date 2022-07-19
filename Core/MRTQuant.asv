@@ -1,3 +1,5 @@
+
+
 %%%$ Included in MRIToolkit (https://github.com/delucaal/MRIToolkit) %%%
 %%% Alberto De Luca - alberto@isi.uu.nl $%%%
 %%% Distributed under the terms of LGPLv3  %%%
@@ -911,8 +913,9 @@ classdef MRTQuant < handle
         %       both with similar and with different contrasts.
         % fit_mode: force a new fit_mode, ols, wls, nls, rekindle
         % output: output folder
-        % failsafe: default false. Disables some registration options that can fail 
-        % in specific scenarios (reduced FOV, low number of voxels)
+        % failsafe: default false. Whether to disable the center of
+        % mass initialization of the first rigid transformation. Can fail when using tight FODs. If the
+        % registration fails, try disabling this parameter
         
             global MRIToolkit;         
 
@@ -983,7 +986,7 @@ classdef MRTQuant < handle
             par.R2D.type = 0;
             par.R2D.FN = '';
             par.R2D.contrast = 1;
-            par.R2D.failsafe = 0;
+            par.R2D.disable_cog = 0;
             par.Num_iter = 1000;
             par.Num_samp = 2000;
             par.Hist_bin = 64;
@@ -1019,9 +1022,9 @@ classdef MRTQuant < handle
                 par.DOF = 3;
             end
 
-            option_value = GiveValueForName(coptions,'failsafe');
+            option_value = GiveValueForName(coptions,'disable_cog');
             if(~isempty(option_value))
-                par.R2D.failsafe = option_value;
+                par.R2D.disable_cog = option_value;
             end
 
             option_value = GiveValueForName(coptions,'epi_tgt');
