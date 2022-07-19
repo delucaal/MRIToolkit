@@ -60,7 +60,7 @@ classdef MRTTrack < handle
             gs = gen_scheme(300,4);
             obj.stdReconDirections = gs.vert;
             obj.normalize_fods_wfrac = false;
-            
+
             if(length(varargin) > 0 && iscell(varargin{1}) > 0)
                 varargin = varargin{1};
             end
@@ -3004,7 +3004,7 @@ classdef MRTTrack < handle
             
             json.TrackingParameters = parameters;
             
-            %             EDTI_Library.WholeBrainFODTractography(file_in,fod_file,parameters,filename_out);
+%             EDTI_Library.WholeBrainFODTractography(file_in,fod_file,parameters,filename_out);
             MRT_Library.WholeBrainFODTractography_par(file_in,fod_file,parameters,filename_out);
             NiftiIO_basic.WriteJSONDescription('output',filename_out(1:end-4),'props',json);
         end
@@ -3289,15 +3289,15 @@ classdef MRTTrack < handle
             tracts.FList = 1:length(indices);
             save(output,'-struct','tracts');
         end
-        
-        function PerformGRL(varargin)
-            
+
+          function PerformGRL(varargin)
+
             coptions = varargin;
             mat_file = GiveValueForName(coptions,'mat_file');
             if(isempty(mat_file))
                 error('Need to specify the input .mat file');
             end
-            
+
             output = GiveValueForName(coptions,'output');
             if(isempty(output))
                 error('Need to specify the output prefix');
@@ -3307,8 +3307,7 @@ classdef MRTTrack < handle
             if(isempty(normalize_fod))
                 normalize_fod = false;
             end
-            
-            
+
             data = MRTQuant.EDTI_Data_2_MRIToolkit('mat_file',mat_file);
             
             GRL = MRTTrack('data',data);
@@ -3331,9 +3330,9 @@ classdef MRTTrack < handle
             deconv = GRL.PerformDeconv();
             GRL.SaveOutputToNii(deconv,output);
             save([output '.mat'],'deconv');
-            
+
         end
-        
+
     end
 end
 
