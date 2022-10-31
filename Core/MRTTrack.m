@@ -222,10 +222,12 @@ classdef MRTTrack < handle
             obj.rf_models(end+1) = {'NODDI'};
         end
         
-        function obj = AutomaticDRLDamping(obj)
+        function obj = AutomaticDRLDamping(obj,TGT_ADC)
             % Compute the automatic damping for the dRL method. Only needed if
             % the deconvolution method is dRL.
-            TGT_ADC = 0.7e-3;
+            if(nargin < 2)
+                TGT_ADC = 0.7e-3;
+            end
             %             if(~isempty(obj.rf_models))
             %                for rf_id=1:length(obj.rf_models)
             %                   if(strcmp(obj.rf_models{rf_id},'ADC') > 0)
@@ -342,7 +344,7 @@ classdef MRTTrack < handle
                     l_RSS = zeros([Nindices 1],'single');
                     
                     parfor (x=1:Nindices,nof_workers)
-                        %                     for x=1:N
+%                                             for x=1:N
                         YLR = [ULRKernel(:,1) ULRKernelIso];
                         YHR = [UHRKernel(:,1) UHRKernelIso];
                         %                     fODFC = [];
@@ -2400,10 +2402,6 @@ classdef MRTTrack < handle
         end
         
         function ConcatenateMATTractographies(varargin)
-            % filt_type 0: pass once in params.mask1
-            % filt_type 1: pass at least twice in params.mask1
-            % filt_type 2: start in params.mask1 and end in params.mask2
-            % filt_type 3: discard if passing in params.mask1
             coptions = varargin;
             mat_file1 = GiveValueForName(coptions,'mat_file1');
             if(isempty(mat_file1))
@@ -2415,13 +2413,13 @@ classdef MRTTrack < handle
             end
             TB = load(mat_file1);
             idx = 2;
-            while true
+            while idx < length(coptions)
                 mat_file1 = GiveValueForName(coptions,['mat_file' num2str(idx)]);
                 if(isempty(mat_file1))
                     if(idx == 2)
                         error('Need to specify at least 2 tractography mat files .mat file');
                     else
-                        break
+%                         continue
                     end
                 else
                     TA = load(mat_file1);
@@ -3008,6 +3006,132 @@ classdef MRTTrack < handle
             MRT_Library.WholeBrainFODTractography_par(file_in,fod_file,parameters,filename_out);
             NiftiIO_basic.WriteJSONDescription('output',filename_out(1:end-4),'props',json);
         end
+
+        function PerformFODBased_ProbFiberTracking(varargin)
+            % This function performs whole volume hybrid (det-prob) fiber
+            % tractography of an FOD in spherical harmonics. Possible
+            % input arguments are:
+            % mat_file: The ExpoloreDTI-like .mat file (for reference)
+            % fod_file: The ExpoloreDTI-like FOD .nii file (in SH basis)
+            % output: The output tracts (must be .mat)
+            % SeedPointRes: The seeding resolution in mm, as [2 2 2] (default)
+            % StepSize: the step size in mm, as 1 (default)
+            % FODThresh: The FOD thredshold to stop tracking, as 0.1000 	(default)
+            % AngleThresh: The angle threshold to stop tracking, as 30 (default)
+            % FiberLengthRange: The mininum - maximum allowed fiber length in mm: [30 500]
+            % SeedMask: A mask to perform the seeding. If empty, the whole
+            %   volume is used
+            % Default parameters:
+            %  SeedPointRes: [2 2 2]
+            %             StepSize: 1
+            %          AngleThresh: 30
+            %     FiberLengthRange: [30 500]
+            %     FODThresh: 0.1
+            
+            if(isempty(varargin))
+                my_help('MRTTrack.PerformFODBased_ProbFiberTracking');
+                return;
+            end
+            
+            json.CallFunction = 'MRTTrack.PerformFODBased_ProbFiberTracking';
+            json.Description = my_help('MRTTrack.PerformFODBased_ProbFiberTracking');
+            
+            coptions = varargin;
+            file_in = GiveValueForName(coptions,'mat_file');
+            if(isempty(file_in))
+                error('Need to specify the input .mat file');
+            end
+            
+            json.ReferenceFile = file_in;
+            json.ProcessingType = 'FiberTractography';
+            
+            fod_file = GiveValueForName(coptions,'fod_file');
+            if(isempty(fod_file))
+                error('Need to specify the input FOD file/variable');
+            end
+            json.fod_file = fod_file;
+            
+            filename_out = GiveValueForName(coptions,'output');
+            if(isempty(filename_out))
+                error('Need to specify the output .mat file');
+            end
+            
+            option = GiveValueForName(coptions,'SeedPointRes');
+            if(isempty(option))
+                parameters.SeedPointRes = [2 2 2];
+            else
+                parameters.SeedPointRes = option;
+            end
+            
+            option = GiveValueForName(coptions,'StepSize');
+            if(isempty(option))
+                parameters.StepSize = 1;
+            else
+                parameters.StepSize = option;
+            end
+            
+            option = GiveValueForName(coptions,'FODThresh');
+            if(isempty(option))
+                parameters.blob_T = 0.1;
+            elseif(isnumeric(option))
+                parameters.blob_T = option;
+            elseif(ischar(option) && strcmpi(option,'auto'))
+                % to be adjusted
+                Npoints = 5000;
+                
+                fod = MRTQuant.LoadNifti(fod_file);
+                [sx,sy,sz,st] = size(fod.img);
+                
+                Lmax = SH.n2lmax(st);
+                SHPrecomp.init(Lmax,300);
+                fodV = reshape(fod.img,sx*sy*sz,st);
+                % gp = find(csf>0);
+                gp = find(fod.img(:,:,:,1) > 0);
+                P2R = gp(randperm(length(gp)));
+                P2R = P2R(1:Npoints);
+                
+                fodV = fodV(P2R,:)';
+                
+                [peaks,vals] = SHPrecomp.all_peaks(fodV,0.0001,5);
+                
+                gvals = cellfun(@length,vals);
+                vals = vals(gvals>0);
+                vals = cellfun(@(x)x(1),vals);
+                
+                FODThresh = mean(vals)*0.2;
+                disp(['FOD thresh is ' num2str(FODThresh)]);
+                parameters.blob_T = FODThresh;
+            end
+            
+            option = GiveValueForName(coptions,'AngleThresh');
+            if(isempty(option))
+                parameters.AngleThresh = 30;
+            else
+                parameters.AngleThresh = option;
+            end
+            
+            option = GiveValueForName(coptions,'FiberLengthRange');
+            if(isempty(option))
+                parameters.FiberLengthRange = [30 500];
+            else
+                parameters.FiberLengthRange = option;
+            end
+            
+            option = GiveValueForName(coptions,'SeedMask');
+            if(isempty(option))
+                parameters.SeedMask = [];
+            else
+                parameters.SeedMask = option;
+            end
+            
+            parameters.randp = 0;
+            
+            json.TrackingParameters = parameters;
+            
+%             EDTI_Library.WholeBrainFODTractography(file_in,fod_file,parameters,filename_out);
+            MRT_Library.WholeBrainFODProbTractography_par(file_in,fod_file,parameters,filename_out);
+            NiftiIO_basic.WriteJSONDescription('output',filename_out(1:end-4),'props',json);
+        end        
         
         function Perform_mFOD_FiberTracking_MergingFields(varargin)
             % This function performs whole volume deterministic fiber
@@ -3312,7 +3436,7 @@ classdef MRTTrack < handle
             
             GRL = MRTTrack('data',data);
             GRL.normalize_fods_wfrac = normalize_fod;
-            if(sum(unique(round(data.bvals) > 500)) > 1)
+            if(sum(unique(round(data.bvals)) > 500) > 1)
                 fit_dki = 1;
             else
                 fit_dki = 0;

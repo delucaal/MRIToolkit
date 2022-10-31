@@ -55,8 +55,8 @@ classdef MRT_Library < handle
         end
         
         % Private function assembling the DTI/DKI kernels
-        function [bmat,LRKernel,HRKernel] = mDRLMT_MakeDKIKernel_multicomp(data,nreconstruction_vertices,lambdas,K,isoDs,shell_data)
-            
+        function [bmat,LRKernel,HRKernel] = mDRLMT_MakeDKIKernel_multicomp(data,nreconstruction_vertices,lambdas,K,offset,isoDs,shell_data)
+
             shells = single(unique(int16(round(data.bvals)/1)*1)); % automatic detection of number of shells.
             % This shell splitting works only for b-value spaced more than 100. To be fixed for other datasets.
             ndirections = zeros(length(shells),1);
@@ -78,7 +78,8 @@ classdef MRT_Library < handle
             super_scheme = MRT_Library.gen_scheme(nreconstruction_vertices,4); % the reconstruction scheme. Change 300 to any number
             HRKernel = zeros(sum(ndirections),nreconstruction_vertices+length(isoDs));
             [phi, theta] = cart2sph(super_scheme.vert(:,1),super_scheme.vert(:,2),super_scheme.vert(:,3)); % polar decomposition
-            lr_scheme = MRT_Library.gen_scheme(min(length(data.bvals),90),4);
+            % lr_scheme = gen_scheme(min(length(data.bvals),90),4);
+            lr_scheme = MRT_Library.gen_scheme(min(length(data.bvals),45),4);
             [phi_LR, theta_LR] = cart2sph(lr_scheme.vert(:,1),lr_scheme.vert(:,2),lr_scheme.vert(:,3));
             LRKernel = zeros(sum(ndirections),size(lr_scheme.vert,1)+length(isoDs));
             
@@ -96,9 +97,9 @@ classdef MRT_Library < handle
                     % Here the deconvolution dictionary is actually built
                     Kernel{ij} = zeros(ndirections(ij),length(phi));
                     for i=1:length(phi)
-                        anglesFi = [phi(i), theta(i)]*(180/pi); % in degrees
+                        anglesFi = [phi(i), theta(i)];%*(180/pi); % in degrees
                         Kernel{ij}(:,i) = MRT_Library.create_signal_multi_tensor_dki(anglesFi, 1, lambdas, ...
-                            bmat{ij}(:,4), bmat{ij}(:,1:3), 1, 0, 0, K);
+                            bmat{ij}(:,4), bmat{ij}(:,1:3), 1, 0, 0, K,offset);
                     end
                     for l=1:length(isoDs)
                         Kernel{ij}(:,end+1) = MRT_Library.create_signal_multi_tensor([0 0], 1, [isoDs(l) isoDs(l) isoDs(l)], ...
@@ -109,7 +110,7 @@ classdef MRT_Library < handle
                     for i=1:length(phi_LR)
                         anglesFi = [phi_LR(i), theta_LR(i)]*(180/pi); % in degrees
                         Kernel_LR{ij}(:,i) = MRT_Library.create_signal_multi_tensor_dki(anglesFi, 1, lambdas, ...
-                            bmat{ij}(:,4), bmat{ij}(:,1:3), 1, 0, 0, K);
+                            bmat{ij}(:,4), bmat{ij}(:,1:3), 1, 0, 0, K,offset);
                     end
                     for l=1:length(isoDs)
                         Kernel_LR{ij}(:,end+1) = MRT_Library.create_signal_multi_tensor([0 0], 1, [isoDs(l) isoDs(l) isoDs(l)], ...
@@ -142,7 +143,7 @@ classdef MRT_Library < handle
                 for i=1:length(phi)
                     anglesFi = [phi(i), theta(i)]*(180/pi); % in degrees
                     HRKernel(:,i) = MRT_Library.create_signal_multi_tensor_dki(anglesFi, 1, lambdas, ...
-                        bmat{1}(:,4), bmat{1}(:,1:3), 1, 0, 0, K);
+                        bmat{1}(:,4), bmat{1}(:,1:3), 1, 0, 0, K,offset);
                 end
                 for l=1:length(isoDs)
                     HRKernel(:,length(phi)+l) = MRT_Library.create_signal_multi_tensor([0 0], 1, [isoDs(l) isoDs(l) isoDs(l)], ...
@@ -152,7 +153,7 @@ classdef MRT_Library < handle
                 for i=1:length(phi_LR)
                     anglesFi = [phi_LR(i), theta_LR(i)]*(180/pi); % in degrees
                     LRKernel(:,i) = MRT_Library.create_signal_multi_tensor_dki(anglesFi, 1, lambdas, ...
-                        bmat{1}(:,4), bmat{1}(:,1:3), 1, 0, 0, K);
+                        bmat{1}(:,4), bmat{1}(:,1:3), 1, 0, 0, K,offset);
                 end
                 for l=1:length(isoDs)
                     LRKernel(:,length(phi_LR)+l) = MRT_Library.create_signal_multi_tensor([0 0], 1, [isoDs(l) isoDs(l) isoDs(l)], ...
@@ -384,15 +385,25 @@ classdef MRT_Library < handle
         end
         
         % Extension to DKI - A. De Luca
-        function [S, D] = create_signal_multi_tensor_dki (ang, f, Eigenvalues, b, grad, S0, SNR, add_noise, K)
+        function [S, D] = create_signal_multi_tensor_dki (ang, f, Eigenvalues, b, grad, S0, SNR, add_noise, K, offset)
             % -Normalizing the gradient vector and then transforming the b-value.
             % -This part is only for non-unitary gradient vectors
             % Transform_b_value_and_grad = repmat(sqrt(diag(grad*grad')+eps), [1 3]);
             % grad = grad./Transform_b_value_and_grad;
             % b = b.*(Transform_b_value_and_grad(:,1)).^2;
-            
+            % grad = grad(:,[2 1 3]);
+            % S = 0;
+            % Nfibers = length(f);
+            % for i = 1:Nfibers
+            %     S = S + f(i)*EDTI_Library.SimulateSignalDTIIsotropicK(b,grad,Eigenvalues,K,flip([pi/2 0]+ang(i,:)));
+            % end
+            % D = 0;
+            % return
             A = diag(Eigenvalues);
-            
+            if(exist('offset','var') < 1)
+                offset = 0;
+            end
+
             S = 0;
             Nfibers = length(f);
             f = f/sum(f);
@@ -402,7 +413,7 @@ classdef MRT_Library < handle
                 theta(i) = ang(i, 2);
                 R = MRT_Library.RotMatrix(phi(i),theta(i));
                 D = R*A*R';
-                S = S + f(i)*exp(-b.*diag(grad*D*grad')+b2D2K);
+                S = S + f(i)*(exp(-b.*diag(grad*D*grad')+b2D2K)+offset);
             end
             S = S0*S;
             
@@ -1312,6 +1323,186 @@ classdef MRT_Library < handle
             m=ti/60;
             disp(['Tracking (CSD - FOD interpolation) computation time was ' num2str(m) ' min.'])
             
+        end
+        % Originally from ExploreDTI: Perform fiber tractography of any FOD in SH - Adapted
+        % and parallelized. Supports multiple trackers
+        function WholeBrainFODProbTractography_par(reference_mat,CSD_FOD_or_file,p,f_out)
+            global MRIToolkit
+            
+            tic
+            
+            f_in = reference_mat;
+            
+            load(f_in,'VDims')
+            
+            if(ischar(CSD_FOD_or_file))
+                CSD_FOD = EDTI_Library.E_DTI_read_nifti_file(CSD_FOD_or_file);
+            else
+                CSD_FOD = CSD_FOD_or_file;
+                clear CSD_FOD_or_file;
+            end
+            
+            SR = p.SeedPointRes;
+            mask_s = ~isnan(CSD_FOD(:,:,:,1));
+            
+            disp('Calculating seed points...')
+            if(isfield(p,'SeedMask') && ~isempty(p.SeedMask))
+                if(ischar(p.SeedMask))
+                    seed_mask = EDTI_Library.E_DTI_read_nifti_file(p.SeedMask);
+                    p.SeedMask = seed_mask;
+                end
+                seedPoint = EDTI_Library.E_DTI_Get_Seeds_WBT(p.SeedMask > 0, SR, VDims, p);
+            else
+                seedPoint = EDTI_Library.E_DTI_Get_Seeds_WBT(mask_s, SR, VDims, p);
+            end
+            
+            if isempty(seedPoint)
+                disp('No seed points found - processing stopped.')
+            else
+                disp('Seed point calculation done.')
+            end
+            
+            disp('Calculating trajectories...')
+            
+            stepSize = p.StepSize;
+            threshold = p.blob_T;
+            maxAngle = p.AngleThresh;
+            lengthRange = [p.FiberLengthRange(1) p.FiberLengthRange(2)];
+            v2w = diag(VDims); v2w(4,4) = 1;
+            
+            pool = gcp;
+            if(isempty(pool))
+                % Could not create parallel pool, resorting to original
+                % implementation
+                EDTI_Library.WholeBrainFODTractography_par(reference_mat,CSD_FOD_or_file,p,f_out);
+                return
+            else
+                % Divide seeds accordingly
+                Step = ceil(size(seedPoint,2)/pool.NumWorkers);
+                seedPointsSplit = cell(pool.NumWorkers,1);
+                for ij=1:pool.NumWorkers
+                    seedPointsSplit(ij) = {seedPoint(:,(ij-1)*Step+1:min(ij*Step,size(seedPoint,2)))};
+                end
+
+                Tracts = cell(pool.NumWorkers,1);
+                TractsFOD = cell(pool.NumWorkers,1);
+                parfor block = 1:pool.NumWorkers
+                    t = [];
+                    if(isfield(MRIToolkit,'fibertracker') < 1 || isfield(MRIToolkit.fibertracker,'type') < 1 ...
+                            || isempty(MRIToolkit.fibertracker.type))
+                        t = DistProbSHTracker(v2w);
+                    else
+                        disp('Not yet supported')
+                        continue
+%                         eval(['t = ' MRIToolkit.fibertracker.type '(v2w);']);
+%                         if(isfield(MRIToolkit.fibertracker,'parameters'))
+%                             fields = fieldnames(MRIToolkit.fibertracker.parameters);
+%                             for field_id=1:length(fields)
+%                                 eval(['t.' fields{field_id} '= MRIToolkit.fibertracker.parameters.' fields{field_id} ';']);
+%                             end
+%                         end
+                    end
+                    t.setData(CSD_FOD);
+                    t.setParameters(stepSize, threshold, maxAngle, lengthRange); t.setProgressbar(false);
+                    t.setNumberOfIterations(100);
+                    t.setParametersSD(stepSize/10,maxAngle/5);
+                    [LTracts, LTractsFOD] = t.track(seedPointsSplit{block});
+                    Tracts(block) = {LTracts};
+                    TractsFOD(block) = {LTractsFOD};
+                end
+
+                for ix=2:length(Tracts)
+                    Tracts(1) = {cat(2,Tracts{1},Tracts{ix})};
+                    TractsFOD(1) = {cat(2,TractsFOD{1},TractsFOD{ix})};
+                end
+
+                Tracts = Tracts{1};
+                TractsFOD = TractsFOD{1};
+
+                num_tracts = size(Tracts,2);
+                TractL = cell(1,num_tracts);
+                for i = 1:num_tracts
+                    TractL{i} = single(size(Tracts{i},1));
+                end
+                
+                TL = cell2mat(TractL(:))*stepSize;
+                IND = and(TL>=lengthRange(1),TL<=lengthRange(2));
+                Tracts = Tracts(IND);
+                TractsFOD = TractsFOD(IND);
+                
+                num_tracts = size(Tracts,2);
+                TractL = cell(1,num_tracts);
+                for i = 1:num_tracts
+                    TractL{i} = single(size(Tracts{i},1));
+                end
+            end
+
+            disp('Trajectory calculations done.')
+            
+            disp('Processing diffusion info along the tracts...');
+            
+            load(f_in,'DT','MDims');
+            
+            [TractFA, TractFE, TractAng, TractGEO, TractLambdas, TractMD] =...
+                EDTI_Library.E_DTI_diff_measures_vectorized(Tracts, VDims, DT);
+            
+            % TractL = cellfun(@length, Tracts, 'UniformOutput', 0);
+            
+            FList = (1:length(Tracts))';
+            
+            TractMask = repmat(0,MDims);
+            
+            for i = 1:length(FList)
+                IND = unique(sub2ind(MDims,...
+                    round(double(Tracts{i}(:,1))./VDims(1)),...
+                    round(double(Tracts{i}(:,2))./VDims(2)),...
+                    round(double(Tracts{i}(:,3))./VDims(3))));
+                TractMask(IND) = TractMask(IND) + 1;
+            end
+            
+            disp('Processing diffusion info along the tracts done.');
+            
+            Parameters.Step_size = stepSize;
+            Parameters.FOD_threshold = threshold;
+            Parameters.Angle_threshold = maxAngle;
+            Parameters.Length_range = lengthRange;
+            Parameters.Seed_resolution = SR;
+            
+            
+            disp('Saving trajectories...')
+            save(f_out,'FList','Tracts','TractL','TractFE',...
+                'TractFA','TractAng','TractGEO','TractMD',...
+                'TractLambdas','TractMask','VDims','TractsFOD','Parameters');
+            disp('Saving trajectories done.')
+            
+            ti = toc;
+            
+            m=ti/60;
+            disp(['Tracking (CSD - FOD interpolation) computation time was ' num2str(m) ' min.'])
+            
+        end        
+
+        function cropped_data = CropDataWithBoundingBox(Vol,extrapad)
+           if(nargin < 2)
+               extrapad = 0;
+           end
+            
+           ref = Vol(:,:,:,1);
+           thr = 0.01*prctile(ref(:),99);
+           p1 = sum(sum(ref,2),3);
+           p2 = squeeze(sum(sum(ref,1),3));
+           p3 = squeeze(sum(sum(ref,1),2));
+           
+           mx = find(p1 > thr);
+           my = find(p2 > thr);
+           mz = find(p3 > thr);
+           
+           rx = max(1,mx(1)-extrapad):min(size(Vol,1),mx(end)+extrapad);
+           ry = max(1,my(1)-extrapad):min(size(Vol,2),my(end)+extrapad);
+           rz = max(1,mz(1)-extrapad):min(size(Vol,3),mz(end)+extrapad);
+           
+           cropped_data = Vol(rx,ry,rz,:);
+           
         end
 
         function out = my_help(fname)

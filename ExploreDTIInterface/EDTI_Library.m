@@ -2024,7 +2024,7 @@ classdef EDTI_Library < handle
             padSize = (sz-1)/2;
             smooth = gaussian3(sz,arg,vox);
             
-            D=convn(padreplicate(data,padSize),smooth, 'valid');
+            D=convn(EDTI_Library.padreplicate(data,padSize),smooth, 'valid');
             D(maskn)=nan;
         end
         
@@ -4581,12 +4581,12 @@ classdef EDTI_Library < handle
             
             smooth = gaussian3(sz,arg,vox);
             
-            ret=convn(padreplicate(data,padSize),smooth, 'valid');
+            ret=convn(EDTI_Library.padreplicate(data,padSize),smooth, 'valid');
             ret(maskn)=nan;
         end
         
         % From ExploreDTI: DTI/DKI fit - creates the .mat file - Adapted
-        function E_DTI_model_fit(f_DWI,f_BM,fnam,Mask_par,perm,flip,fit_mode, dki_fit, dki_constraints)
+        function E_DTI_model_fit(f_DWI,f_BM,fnam,Mask_par,perm,flip,fit_mode, dki_fit, dki_constraints, rekindle_kappa)
             global MRIToolkit;
             
             [DWI,VDims] = EDTI_Library.E_DTI_read_nifti_file(f_DWI);
@@ -4637,7 +4637,11 @@ classdef EDTI_Library < handle
             par.ROBUST_option = 1;
             par.RE.rel_convergence = 1e-3;
             par.RE.max_iter = 20;
-            par.RE.kappa = 6;
+            if(exist('rekindle_kappa','var') > 0)
+                par.RE.kappa = rekindle_kappa;
+            else
+                par.RE.kappa = 6;
+            end
             par.DKI_constraints.do_it = 1;
             if(exist('dki_constraints','var') > 0)
                 par.DKI_constraints.constr1 = dki_constraints;
@@ -8166,7 +8170,7 @@ classdef EDTI_Library < handle
                     if isfield(info,'MK')
                         data_v{i} = info.MK;
                     else
-                        data_v{i} = EDTI_Library.E_DTI_Mean_Kurtosis(KT,DT);
+                        data_v{i} = EDTI_Library.E_DTI_Mean_Kurtosis_c(KT,DT);
                     end
                     fns{i} = LE{46};
                     
@@ -8183,7 +8187,7 @@ classdef EDTI_Library < handle
                     if isfield(info,'K_para')
                         data_v{i} = info.K_para;
                     else
-                        data_v{i} = EDTI_Library.E_DTI_Axial_Kurtosis(KT,DT);
+                        data_v{i} = EDTI_Library.E_DTI_Axial_Kurtosis_c(KT,DT);
                     end
                     fns{i} = LE{47};
                     
@@ -8200,7 +8204,7 @@ classdef EDTI_Library < handle
                     if isfield(info,'K_perp')
                         data_v{i} = info.K_perp;
                     else
-                        data_v{i} = EDTI_Library.E_DTI_Radial_Kurtosis(KT,DT);
+                        data_v{i} = EDTI_Library.E_DTI_Radial_Kurtosis_c(KT,DT);
                     end
                     fns{i} = LE{48};
                     
@@ -8217,7 +8221,7 @@ classdef EDTI_Library < handle
                     if isfield(info,'K_an')
                         data_v{i} = info.K_an;
                     else
-                        data_v{i} = EDTI_Library.E_DTI_Kurtosis_Anisotropy(KT,DT);
+                        data_v{i} = EDTI_Library.E_DTI_Kurtosis_Anisotropy_c(KT,DT);
                     end
                     fns{i} = LE{49};
                     

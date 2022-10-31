@@ -27,10 +27,10 @@ classdef Neuro < handle
                 output = fullfile(fp,[fn '_CAT12']);
             end
             
-            if(contains(output,pwd) == false)
+%             if(contains(output,pwd) == false)
                 mkdir(output);
                 copyfile(nii_file,fullfile(output,[fn ext]));
-            end
+%             end
             force_wmh = GiveValueForName(coptions,'force_wmh');
             if(isempty(force_wmh))
                 force_wmh = 0;

@@ -166,13 +166,9 @@ function mrtd_preproc(varargin)
         mrt_data = MRTQuant.EDTI_Data_2_MRIToolkit('mat_file',[temp_mat_file(1:end-4) '_MD_C_native.mat']);
     end
     
-%     [fp,fn,~] = fileparts(output_file);
-%     output_file = fullfile(fp,fn);
-    delimiter = strfind(output_file,'.nii');
-    if(isempty(delimiter))
-        delimiter = length(output_file);
-    end
-    output_file = output_file(1:delimiter);
+    [fp,fn,~] = fileparts(output_file);
+    output_file = fullfile(fp,fn);
+    delimiter = strfind()
 
     MRTQuant.WriteNifti(mrt_data,[output_file '.nii']);
     

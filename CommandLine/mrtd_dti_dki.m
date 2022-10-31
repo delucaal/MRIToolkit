@@ -1,7 +1,7 @@
 function mrtd_dti_dki(varargin)
 disp('mrtd_dti_dki');
 coptions = varargin;
-if(length(varargin{1}) > 1)
+if(isdeployed && length(varargin{1}) > 1)
     coptions = varargin{1};
 end
 %     disp(varargin)
@@ -87,7 +87,8 @@ while(true)
     end
 end
 
-MRTQuant.ConformSpatialDimensions('nii_file',nii_file,'output',temp_file);
+MRTQuant.ApplyRescaleSlope('nii_file',nii_file,'output',temp_file);
+MRTQuant.ConformSpatialDimensions('nii_file',temp_file,'output',temp_file);
 
 MRTQuant.PerformDTI_DKIFit('nii_file',temp_file,'txt_file',[dest_basename '.txt'],...
     'grad_perm',grad_perm,'grad_flip',grad_flip,'dki',dki,...
