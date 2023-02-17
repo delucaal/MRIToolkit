@@ -20,6 +20,7 @@
 
 (AutomaticScalesEstimation "true")
 (AutomaticTransformInitialization "true")
+(AutomaticTransformInitializationMethod "CenterOfGravity")
 
 (HowToCombineTransforms "Compose")
 

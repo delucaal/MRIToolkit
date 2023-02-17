@@ -29,7 +29,8 @@ function MRIToolkitInit(SelectedToolboxes)
     global MRIToolkit;
             
     MRIToolkit.version = read_git_version();
-    
+    MRIToolkit.EnforceNiiGz = false;
+
     try
        MRIToolkitDefineLocalVars(); 
     catch

@@ -40,7 +40,7 @@ classdef SHPrecomp
         
         function [peaks, vals] = all_peaks(sh, min_val, max_nr, ncores, lmax, ndirs)
             if(nargin > 3)
-                [peaks,vals] = SHPrecomp.all_peaks_parallel(varargin);
+                [peaks,vals] = SHPrecomp.all_peaks_parallel(sh, min_val, max_nr, ncores, lmax, ndirs);
                 return
             end
             

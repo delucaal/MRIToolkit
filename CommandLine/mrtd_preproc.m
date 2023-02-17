@@ -2,7 +2,7 @@ function mrtd_preproc(varargin)
     disp('mrtd_preproc');
     global MRIToolkit;
     coptions = varargin;
-    if(iscell(varargin{1}) && length(varargin{1}) > 1)
+    if(nargin > 0 && iscell(varargin{1}) && length(varargin{1}) > 1)
         coptions = varargin{1};
     end
     %     disp(varargin)
@@ -11,13 +11,13 @@ function mrtd_preproc(varargin)
         help = 'This tools perform common preprocessing (denoising, drift correction, Gibbs ringing correction) + motion correction / Eddy currents correction / EPI distorion correction (optional) of diffusion MRI data';
         help = [help newline 'The gradient b-matrix is automatically reoriented.'];
         help = [help newline];
-        help = [help newline 'usage: mrtd_moco_epi -nii file.nii -bval file.bval -bvec file.bvec -out corrected_file (other_options)'];
+        help = [help newline 'usage: mrtd_preproc -nii file.nii -bval file.bval -bvec file.bvec -out corrected_file (other_options)'];
         help = [help newline];
         help = [help newline '-grad_perm: how to permute the diffusion gradients 1=[x y z] 2=[y x z] 3=[z y x]' ....
                    ' 4=[x z y] =[y z x] 6=[z x y]'];
         help = [help newline '-grad_flip: how to flip the sign of the diffusion gradients 1=[x y z] 2=[-x y z] 3=[x -y z] 4=[x y -z]'];
         help = [help newline '-epi: .nii file to perform EPI correction (T1 or T2 image)'];
-        help = [help newline '-epi_constraint: allow deformation on specific axis. Input between quotas "1 1 1"'];
+        help = [help newline '-epi_constraint: allow deformation on specific axis. Input as a three digit number: 101'];
         help = [help newline '-epi_reg_mode: image to use for registration to structural. One between "fa" (default), "b0", "dwis"'];
         help = [help newline '-epi_normcorr: 0 or 1. Use normalized correlation in place of mutual information to drive the registration.'];        
         help = [help newline '-denoise: 0 or 1. Perform MP-PCA denoising'];        
@@ -84,7 +84,7 @@ function mrtd_preproc(varargin)
         epi_constraint = [1 1 1];
     else
         pieces = strsplit(epi_constraint,' ');
-        epi_constraint = [str2double(pieces{1}) str2double(pieces{2}) str2double(pieces{3})];
+        epi_constraint = [str2double(pieces{1}(1)) str2double(pieces{1}(2)) str2double(pieces{1}(3))];
     end      
     epi_reg_mode = GiveValueForName(coptions,'-epi_reg_mode');
     if(isempty(epi_reg_mode))
@@ -130,7 +130,8 @@ function mrtd_preproc(varargin)
 
     disp(['Temp file is ' temp_file]);
 %     system(['cp ' file_in ' '  temp_file]);
-    MRTQuant.ConformSpatialDimensions('nii_file',file_in,'output',temp_file);
+    MRTQuant.ApplyRescaleSlope('nii_file',file_in,'output',temp_file);
+    MRTQuant.ConformSpatialDimensions('nii_file',temp_file,'output',temp_file);
     MRTQuant.b_Matrix_from_bval_bvec('bval_file',bval_file,'bvec_file',bvec_file,'output',[temp_file(1:end-shift) '.txt']);
     if(sdc == 1)
         new_file = [temp_file(1:end-shift) '_sdc.nii'];
@@ -140,9 +141,9 @@ function mrtd_preproc(varargin)
         temp_file = new_file;
     end
     if(denoise == 1)
-        new_file = [temp_file(1:end-shift) '_denoise.nii'];
+        new_file = [temp_file(1:end-shift) '_denoised.nii'];
         disp('MPPCA denoising');
-        MRTQuant.PerformMPPCADenoising('nii_file',temp_file,'output',new_file);
+        MRTQuant.PerformMPPCADenoising('nii_file',temp_file,'output',temp_file(1:end-shift));
         temp_file = new_file;
     end
     if(gibbs == 1)
@@ -165,8 +166,14 @@ function mrtd_preproc(varargin)
         mrt_data = MRTQuant.EDTI_Data_2_MRIToolkit('mat_file',[temp_mat_file(1:end-4) '_MD_C_native.mat']);
     end
     
-    [fp,fn,~] = fileparts(output_file);
-    output_file = fullfile(fp,fn);
+%     [fp,fn,~] = fileparts(output_file);
+%     output_file = fullfile(fp,fn);
+    delimiter = strfind(output_file,'.nii');
+    if(isempty(delimiter))
+        delimiter = length(output_file);
+    end
+    output_file = output_file(1:delimiter);
+
     MRTQuant.WriteNifti(mrt_data,[output_file '.nii']);
     
     fout = fopen([output_file '.bval'],'wt');
@@ -217,7 +224,7 @@ function mrtd_preproc(varargin)
       end 
     end
     
-    close all;
+    close(h);
     
 end
 
