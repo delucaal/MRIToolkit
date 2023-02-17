@@ -502,6 +502,9 @@ classdef MRTQuant < handle
 
             data.img = EDTI_Library.E_DTI_resample_nii_file(data.img, tgt_res, data.VD);
             data.VD = tgt_res;
+            if(isfield(data,'hdr'))
+                data = rmfield(data,'hdr');
+            end
 
             MRTQuant.WriteNifti(data,file_out);
 
@@ -1390,9 +1393,12 @@ classdef MRTQuant < handle
                 end
                 MRTQuant.ConformSpatialDimensions('nii_file',topup_nii,'output',fullfile(temp_direc,'data_rev.nii'));
 
+                b0s =  find(b0s==1,1);% Just using the first b0
+                rev_b0s = find(rev_b0s==1,1);% Just using the first b0
+
                 data_rev = MRTQuant.LoadNifti(fullfile(temp_direc,'data_rev.nii'));
                 data.img = data.img(:,:,:,b0s);
-                data_rev.img = data_rev.img(:,:,:,rev_b0s);
+                data_rev.img = data_rev.img(:,:,:,rev_b0s); 
                 data.img = cat(4,data.img,data_rev.img);
                 MRTQuant.WriteNifti(data,fullfile(temp_direc,'data_topup.nii'));
 
@@ -1696,6 +1702,8 @@ classdef MRTQuant < handle
             % of the .nii file and with the same name
             % Input arguments:
             % nii_file: the .nii file of the original data
+            % mat_file: the .mat file to load the data from (alternative to
+            % nii_file)
             % indices: an array containing the b-values to select, e.g. [1 3 7 15 ...]
             % output: the new .nii file containing a subset of the volumes.
             if(isempty(varargin))
@@ -1708,8 +1716,13 @@ classdef MRTQuant < handle
 
             coptions = varargin;
             file_in = GiveValueForName(coptions,'nii_file');
+            using_nii = 1;
             if(isempty(file_in))
-                error('Need to specify the input .nii file');
+                file_in = GiveValueForName(coptions,'mat_file');
+                if(isempty(file_in))
+                    error('Need to specify the input .nii or .mat file');
+                end
+                using_nii = 0;
             end
 
             json.ReferenceFile = file_in;
@@ -1727,23 +1740,34 @@ classdef MRTQuant < handle
             end
 
             use_txt = 0;
-            if(exist([file_in(1:end-4) '.bval'],'file'))
-                bval = load([file_in(1:end-4) '.bval']);
-                bvec = load([file_in(1:end-4) '.bvec']);
-            else
-                use_txt = 1;
-                bmat = load([file_in(1:end-4) '.txt']);
-                [bval,~] = MRTQuant.bval_bvec_from_b_Matrix(bmat);
+            if(using_nii == 1)
+                if(exist([file_in(1:end-4) '.bval'],'file'))
+                    bval = load([file_in(1:end-4) '.bval']);
+                    bvec = load([file_in(1:end-4) '.bvec']);
+                else
+                    use_txt = 1;
+                    bmat = load([file_in(1:end-4) '.txt']);
+                    [bval,bvec] = MRTQuant.bval_bvec_from_b_Matrix(bmat);
+                end
             end
             IX = indices_list;
-            [data,VD] = EDTI_Library.E_DTI_read_nifti_file(file_in);
+            if(using_nii == 1)
+                [data,VD] = EDTI_Library.E_DTI_read_nifti_file(file_in);
+            else
+                opt = load(file_in,'DWI','VDims','b');
+                VD = opt.VDims;
+                data = EDTI_Library.E_DTI_DWI_cell2mat(opt.DWI);
+                bmat = opt.b;
+                [bval,bvec] = MRTQuant.bval_bvec_from_b_Matrix(bmat);
+                clear opt
+            end
             data = data(:,:,:,IX);
             bval = bval(IX);
+            bvec = bvec(:,IX);
             if(use_txt == 1)
                 bmat = bmat(IX,:);
                 save([outname(1:end-4) '.txt'],'bmat','-ascii');
             else
-                bvec = bvec(:,IX);
                 save([outname(1:end-4) '.bvec'],'bvec','-ascii');
                 save([outname(1:end-4) '.bval'],'bval','-ascii');
             end
@@ -2912,8 +2936,14 @@ classdef MRTQuant < handle
             end
 
             mask_name = GiveValueForName(coptions,'mask_file');
-            if(isempty(mask_name))
+            if(isempty(mask_name) && isempty(mat_name))
                 error('Need to specify the mask file (mask_file)');
+            elseif(~isempty(mask_name))
+                mask = MRTQuant.LoadNifti(mask_name);
+                data.mask = mask.img;
+            elseif(~isempty(mat_name))
+                mask = load(mat_name,'FA');
+                data.mask = single(~isnan(mask.FA));
             end
 
             output_prefix = GiveValueForName(coptions,'output');
@@ -2935,9 +2965,6 @@ classdef MRTQuant < handle
             if(isempty(do_geoavg))
                 do_geoavg = 1;
             end
-
-            mask = MRTQuant.LoadNifti(mask_name);
-            data.mask = mask.img;
 
             if(do_geoavg == 1)
                 data = QuickGeoAverage(data);
@@ -3001,6 +3028,7 @@ classdef MRTQuant < handle
 
             SNR.VD = data.VD;
             SNR.img = mean(data.img(:,:,:,b0s),4)./(std(data.img(:,:,:,b0s),0,4)+eps);
+            SNR.img(SNR.img>1e3) = 0;
 
             MRTQuant.WriteNifti(SNR,out_file);
 
@@ -3065,6 +3093,24 @@ classdef MRTQuant < handle
                 MRTQuant.WriteNifti(out,out_file);
             end
 
+        end
+
+        % Cleanup residual content of all temporary folders MRIToolkit
+        % could have generated (Do not execute while other instances of
+        % MRIToolkit are running!!!)
+        function CleanupTemporaryFolders()
+            tf = tempdir;
+            identifiers = {'mrtd_','MRT_','FSL_'};
+            for id=1:length(identifiers)
+                dr = dir(fullfile(tf,[identifiers{id} '*']));
+                for drid=1:length(dr)
+                    try
+                        rmdir(fullfile(dr(drid).folder,dr(drid).name),'s');
+                    catch
+                        disp('Some directories could not be deleted. Please retry in a later moment.');
+                    end
+                end
+            end
         end
 
     end

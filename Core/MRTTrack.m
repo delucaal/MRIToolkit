@@ -3427,6 +3427,12 @@ classdef MRTTrack < handle
                 error('Need to specify the output prefix');
             end
             
+            eigvals = GiveValueForName(coptions,'eigvals');
+            K = GiveValueForName(coptions,'K');
+            if(isempty(K))
+                K = 0;
+            end
+
             normalize_fod = GiveValueForName(coptions,'normalize_fod');
             if(isempty(normalize_fod))
                 normalize_fod = false;
@@ -3441,7 +3447,12 @@ classdef MRTTrack < handle
             else
                 fit_dki = 0;
             end
-            [eigvals,K] = MRTTrack.Eigenval_IsoK_WM_FromData(data,data.mask,fit_dki);
+            if(isempty(eigvals))
+                disp('Fitting eigvals / K from the data')
+                [eigvals,K] = MRTTrack.Eigenval_IsoK_WM_FromData(data,data.mask,fit_dki);
+            else
+                disp('Using provided eigvals / K')
+            end
             GRL.nDirections = 300;
             GRL.drl_iters = 600;
             GRL.AddAnisotropicRF_DKI(eigvals,K);
@@ -3453,7 +3464,8 @@ classdef MRTTrack < handle
             GRL.setL2REG(0.1);
             deconv = GRL.PerformDeconv();
             GRL.SaveOutputToNii(deconv,output);
-            save([output '.mat'],'deconv');
+            models_description = GRL.rf_models;
+            save([output '.mat'],'deconv','models_description');
 
         end
 

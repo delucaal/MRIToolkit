@@ -988,6 +988,19 @@ classdef MRT_Library < handle
             end
             
         end
+
+        % Remove known extensions from a filename to only retain its prefix
+        function [prefix,extension] = FilenameNoExtension(filename)
+            known_extensions = {'.nii','.gz','.vtk','.trk'};
+            extension = [];
+            prefix = filename;
+            for ext=1:length(known_extensions)
+                if(contains(filename,known_extensions{ext}))
+                    extensions = cat(2,extensions,known_extensions{ext});
+                    prefix = strrep(prefix,known_extensions{ext},'');
+                end
+            end
+        end
         
         % Compute a density weighted map from a set of streamlines
         function E_DTI_DensityMaps(base_file,tract_file,out_file)
@@ -1159,7 +1172,7 @@ classdef MRT_Library < handle
             disp('Saving trajectories...')
             save(f_out,'FList','Tracts','TractL','TractFE',...
                 'TractFA','TractAng','TractGEO','TractMD',...
-                'TractLambdas','TractMask','VDims','TractsFOD','Parameters');
+                'TractLambdas','TractMask','VDims','TractsFOD','Parameters','-v7.3');
             disp('Saving trajectories done.')
             
             ti = toc;
@@ -1315,7 +1328,7 @@ classdef MRT_Library < handle
             disp('Saving trajectories...')
             save(f_out,'FList','Tracts','TractL','TractFE',...
                 'TractFA','TractAng','TractGEO','TractMD',...
-                'TractLambdas','TractMask','VDims','TractsFOD','Parameters');
+                'TractLambdas','TractMask','VDims','TractsFOD','Parameters','-v7.3');
             disp('Saving trajectories done.')
             
             ti = toc;
@@ -1324,6 +1337,7 @@ classdef MRT_Library < handle
             disp(['Tracking (CSD - FOD interpolation) computation time was ' num2str(m) ' min.'])
             
         end
+        
         % Originally from ExploreDTI: Perform fiber tractography of any FOD in SH - Adapted
         % and parallelized. Supports multiple trackers
         function WholeBrainFODProbTractography_par(reference_mat,CSD_FOD_or_file,p,f_out)
@@ -1364,6 +1378,7 @@ classdef MRT_Library < handle
             
             disp('Calculating trajectories...')
             
+            iterations = 10;
             stepSize = p.StepSize;
             threshold = p.blob_T;
             maxAngle = p.AngleThresh;
@@ -1384,104 +1399,117 @@ classdef MRT_Library < handle
                     seedPointsSplit(ij) = {seedPoint(:,(ij-1)*Step+1:min(ij*Step,size(seedPoint,2)))};
                 end
 
-                Tracts = cell(pool.NumWorkers,1);
-                TractsFOD = cell(pool.NumWorkers,1);
-                parfor block = 1:pool.NumWorkers
-                    t = [];
-                    if(isfield(MRIToolkit,'fibertracker') < 1 || isfield(MRIToolkit.fibertracker,'type') < 1 ...
-                            || isempty(MRIToolkit.fibertracker.type))
-                        t = DistProbSHTracker(v2w);
-                    else
-                        disp('Not yet supported')
-                        continue
-%                         eval(['t = ' MRIToolkit.fibertracker.type '(v2w);']);
-%                         if(isfield(MRIToolkit.fibertracker,'parameters'))
-%                             fields = fieldnames(MRIToolkit.fibertracker.parameters);
-%                             for field_id=1:length(fields)
-%                                 eval(['t.' fields{field_id} '= MRIToolkit.fibertracker.parameters.' fields{field_id} ';']);
-%                             end
-%                         end
+                mat_files_to_join = {};
+                for iters=1:iterations
+                    disp(['Iteration ' num2str(iters)]);
+                    Tracts = cell(pool.NumWorkers,1);
+                    TractsFOD = cell(pool.NumWorkers,1);
+                    parfor block = 1:pool.NumWorkers
+                        t = [];
+                        if(isfield(MRIToolkit,'fibertracker') < 1 || isfield(MRIToolkit.fibertracker,'type') < 1 ...
+                                || isempty(MRIToolkit.fibertracker.type))
+                            t = DistProbSHTracker(v2w);
+    %                         t = MultiPeakTracker(v2w);
+                        else
+                            disp('Not yet supported')
+                            continue
+    %                         eval(['t = ' MRIToolkit.fibertracker.type '(v2w);']);
+    %                         if(isfield(MRIToolkit.fibertracker,'parameters'))
+    %                             fields = fieldnames(MRIToolkit.fibertracker.parameters);
+    %                             for field_id=1:length(fields)
+    %                                 eval(['t.' fields{field_id} '= MRIToolkit.fibertracker.parameters.' fields{field_id} ';']);
+    %                             end
+    %                         end
+                        end
+                        t.setData(CSD_FOD);
+                        t.setParameters(stepSize, threshold, maxAngle, lengthRange); t.setProgressbar(false);
+                        t.setNumberOfIterations(1);
+    %                     t.setParametersSD(stepSize/10,maxAngle/5);
+                        t.setParametersSD(stepSize/5,maxAngle/10);
+                        [LTracts, LTractsFOD] = t.track(seedPointsSplit{block});
+                        Tracts(block) = {LTracts};
+                        TractsFOD(block) = {LTractsFOD};
                     end
-                    t.setData(CSD_FOD);
-                    t.setParameters(stepSize, threshold, maxAngle, lengthRange); t.setProgressbar(false);
-                    t.setNumberOfIterations(100);
-                    t.setParametersSD(stepSize/10,maxAngle/5);
-                    [LTracts, LTractsFOD] = t.track(seedPointsSplit{block});
-                    Tracts(block) = {LTracts};
-                    TractsFOD(block) = {LTractsFOD};
+    
+                    for ix=2:length(Tracts)
+                        Tracts(1) = {cat(2,Tracts{1},Tracts{ix})};
+                        TractsFOD(1) = {cat(2,TractsFOD{1},TractsFOD{ix})};
+                    end
+    
+                    Tracts = Tracts{1};
+                    TractsFOD = TractsFOD{1};
+    
+                    num_tracts = size(Tracts,2);
+                    TractL = cell(1,num_tracts);
+                    for i = 1:num_tracts
+                        TractL{i} = single(size(Tracts{i},1));
+                    end
+                    
+                    TL = cell2mat(TractL(:))*stepSize;
+                    IND = and(TL>=lengthRange(1),TL<=lengthRange(2));
+                    Tracts = Tracts(IND);
+                    TractsFOD = TractsFOD(IND);
+                    
+                    num_tracts = size(Tracts,2);
+                    TractL = cell(1,num_tracts);
+                    for i = 1:num_tracts
+                        TractL{i} = single(size(Tracts{i},1));
+                    end
+    
+                    disp('Trajectory calculations done.')
+                    
+                    disp('Processing diffusion info along the tracts...');
+                    
+                    load(f_in,'DT','MDims');
+                    
+                    [TractFA, TractFE, TractAng, TractGEO, TractLambdas, TractMD] =...
+                        EDTI_Library.E_DTI_diff_measures_vectorized(Tracts, VDims, DT);
+                    
+                    % TractL = cellfun(@length, Tracts, 'UniformOutput', 0);
+                    
+                    FList = (1:length(Tracts))';
+                    
+                    TractMask = repmat(0,MDims);
+                    
+                    for i = 1:length(FList)
+                        IND = unique(sub2ind(MDims,...
+                            round(double(Tracts{i}(:,1))./VDims(1)),...
+                            round(double(Tracts{i}(:,2))./VDims(2)),...
+                            round(double(Tracts{i}(:,3))./VDims(3))));
+                        TractMask(IND) = TractMask(IND) + 1;
+                    end
+                    
+                    disp('Processing diffusion info along the tracts done.');
+                    
+                    Parameters.Step_size = stepSize;
+                    Parameters.FOD_threshold = threshold;
+                    Parameters.Angle_threshold = maxAngle;
+                    Parameters.Length_range = lengthRange;
+                    Parameters.Seed_resolution = SR;
+                    
+                    
+                    disp('Saving trajectories...')
+                    mat_files_to_join = cat(2,mat_files_to_join,['mat_file' num2str(iters)]);
+                    mat_files_to_join = cat(2,mat_files_to_join,strrep(f_out,'.mat',sprintf('_block%03d.mat',iters)));
+                    save(strrep(f_out,'.mat',sprintf('_block%03d.mat',iters)),'FList','Tracts','TractL','TractFE',...
+                        'TractFA','TractAng','TractGEO','TractMD',...
+                        'TractLambdas','TractMask','VDims','TractsFOD','Parameters','-v7.3');
+                    disp('Saving trajectories done.')
+                    disp('End iteration');
                 end
-
-                for ix=2:length(Tracts)
-                    Tracts(1) = {cat(2,Tracts{1},Tracts{ix})};
-                    TractsFOD(1) = {cat(2,TractsFOD{1},TractsFOD{ix})};
-                end
-
-                Tracts = Tracts{1};
-                TractsFOD = TractsFOD{1};
-
-                num_tracts = size(Tracts,2);
-                TractL = cell(1,num_tracts);
-                for i = 1:num_tracts
-                    TractL{i} = single(size(Tracts{i},1));
-                end
+                ti = toc;
                 
-                TL = cell2mat(TractL(:))*stepSize;
-                IND = and(TL>=lengthRange(1),TL<=lengthRange(2));
-                Tracts = Tracts(IND);
-                TractsFOD = TractsFOD(IND);
-                
-                num_tracts = size(Tracts,2);
-                TractL = cell(1,num_tracts);
-                for i = 1:num_tracts
-                    TractL{i} = single(size(Tracts{i},1));
-                end
+                m=ti/60;
+                disp(['Tracking (CSD - FOD interpolation) computation time was ' num2str(m) ' min.'])
+            
+                disp('Now joining all tracts in a single file')
+                mat_files_to_join = cat(2,mat_files_to_join,'output');
+                mat_files_to_join = cat(2,mat_files_to_join,f_out);
+                MRTTrack.ConcatenateMATTractographies(mat_files_to_join{:})
             end
-
-            disp('Trajectory calculations done.')
-            
-            disp('Processing diffusion info along the tracts...');
-            
-            load(f_in,'DT','MDims');
-            
-            [TractFA, TractFE, TractAng, TractGEO, TractLambdas, TractMD] =...
-                EDTI_Library.E_DTI_diff_measures_vectorized(Tracts, VDims, DT);
-            
-            % TractL = cellfun(@length, Tracts, 'UniformOutput', 0);
-            
-            FList = (1:length(Tracts))';
-            
-            TractMask = repmat(0,MDims);
-            
-            for i = 1:length(FList)
-                IND = unique(sub2ind(MDims,...
-                    round(double(Tracts{i}(:,1))./VDims(1)),...
-                    round(double(Tracts{i}(:,2))./VDims(2)),...
-                    round(double(Tracts{i}(:,3))./VDims(3))));
-                TractMask(IND) = TractMask(IND) + 1;
-            end
-            
-            disp('Processing diffusion info along the tracts done.');
-            
-            Parameters.Step_size = stepSize;
-            Parameters.FOD_threshold = threshold;
-            Parameters.Angle_threshold = maxAngle;
-            Parameters.Length_range = lengthRange;
-            Parameters.Seed_resolution = SR;
-            
-            
-            disp('Saving trajectories...')
-            save(f_out,'FList','Tracts','TractL','TractFE',...
-                'TractFA','TractAng','TractGEO','TractMD',...
-                'TractLambdas','TractMask','VDims','TractsFOD','Parameters');
-            disp('Saving trajectories done.')
-            
-            ti = toc;
-            
-            m=ti/60;
-            disp(['Tracking (CSD - FOD interpolation) computation time was ' num2str(m) ' min.'])
-            
         end        
 
+        % Crop data given a specific bounding box
         function cropped_data = CropDataWithBoundingBox(Vol,extrapad)
            if(nargin < 2)
                extrapad = 0;
@@ -1505,7 +1533,380 @@ classdef MRT_Library < handle
            
         end
 
-        function out = my_help(fname)
+        % Adapted from ExploreDTI: helper function for Motion/Eddy/EPI correction
+        % Performs the b-matrix rotation. Generalized to multiple rotations
+        function [b, g, R] = Reorient_grad_and_b_matrix_rigid_rotation(b,g,Rot)
+            R = eye(3);
+            for x=1:length(Rot)
+                M = zeros(4,3);
+                M(1,:) = [Rot{x}{1} Rot{x}{2} Rot{x}{3}]*(180/pi);
+                M(3,:) = 1;
+                World_Trafo = EDTI_Library.E_DTI_Convert_aff_par_2_aff_transf_matrix(M);
+                R = World_Trafo(1:3,1:3)*R;
+            end
+
+            b_old = b;
+            g_old = g;
+            
+            for i=1:size(b,1)
+                
+                B = [b_old(i,1) b_old(i,2)/2 b_old(i,3)/2;...
+                    b_old(i,2)/2 b_old(i,4) b_old(i,5)/2;...
+                    b_old(i,3)/2 b_old(i,5)/2 b_old(i,6)];
+                B_rot = R*B*(R');
+                
+                b(i,:) = [B_rot(1,1) 2*B_rot(1,2) 2*B_rot(1,3)...
+                    B_rot(2,2) 2*B_rot(2,3) B_rot(3,3)];
+                
+            end
+            
+            
+            for i=1:size(g,1)
+                
+                g(i,:) = g_old(i,:)*R';
+                
+            end
+        end
+
+
+        % From ExploreDTI: helper function for Motion/Eddy/EPI correction
+        % This actually performs the EPI correction
+        function data = TransformDataWithElastixParams(mat_file,out_name,ref_file,trafo_final_params)
+            f_in = mat_file;
+            
+            [FOLD,FFO] = fileparts(f_in);
+            
+            par.temp_folder = fullfile(tempdir,['MRT_' num2str(randi(150)) '_' num2str(randi(150)) '_' num2str(randi(150))]);
+            if(strcmp(par.temp_folder(end),'/'))
+                par.temp_folder = par.temp_folder(1:end-1);
+            end
+            [FOL_FI,F] = fileparts(f_in);
+            dir_temp = [par.temp_folder filesep 'Temp_' F];
+            mkdir(dir_temp)
+
+            par.dir_temp = dir_temp;
+%             par.R2D.FN = ref_file;
+            par.R2D.type = 1;
+%             [suc, FN_nii] = EDTI_Library.E_DTI_SMECEPI_check_data_stuff(f_in,par);
+            for_trafo = par;
+
+%             if suc==0
+%                 return;
+%             end
+            
+%             fn_fixed = [for_trafo.dir_temp filesep 'Trafo_fixed.nii'];
+%             fn_fixed_mask = [for_trafo.dir_temp filesep 'Trafo_fixed_mask.nii'];
+%             [Fixed,VDims] = EDTI_Library.E_DTI_read_nifti_file(FN_nii);
+%             VDims_E = VDims;
+%             Fixed = single(Fixed);
+%             Fixed = 10000*(Fixed/max(Fixed(:)));
+%             EDTI_Library.E_DTI_write_nifti_file(Fixed,VDims,fn_fixed);
+            
+%             mask = single(Fixed>0);
+%             EDTI_Library.E_DTI_write_nifti_file(mask,VDims,fn_fixed_mask);
+            
+            fn_moving = [for_trafo.dir_temp filesep 'Trafo_moving.nii'];
+            
+            LoadF = mat_file;
+            
+            [~,linked_files] = MRT_Library.ElastixParametersTree(trafo_final_params,1);
+
+            Trafo_rig_result = {};
+            for tpid=1:length(linked_files)
+                params = MRT_Library.ReadElastixParameters(linked_files{tpid});
+                ttype = MRT_Library.GetElastixParameter(params,'Transform');
+                if(contains(ttype,'AffineDTITransform'))
+                    Trafo_rig_result(end+1) = linked_files(tpid);
+                end
+            end
+            
+            Rig = cell(length(Trafo_rig_result));
+            for ix=1:length(Rig)
+                Q = textread(Trafo_rig_result{ix},'%s');
+                Rig{ix}{1} = str2num(Q{7});
+                Rig{ix}{2} = str2num(Q{6});
+                Rig{ix}{3} = str2num(Q{8});
+            end
+
+            hdr = [];
+            load(LoadF,'b','bval','info','g','NrB0','DWI','VDims','hdr','par','Mask_par')
+        
+%             if(~isempty(hdr))
+%                 out.hdr = hdr;
+%             end
+            out=[];
+            for ix=1:length(DWI)
+                out.VD = VDims;
+                out.img = DWI{ix};
+                f2s = [dir_temp filesep 'Vol_' sprintf('%05d.nii',ix)];
+                f2s_t = [dir_temp filesep 'Vol_' sprintf('%05d_trafo.nii',ix)];
+                f2s_tp = [dir_temp filesep 'Vol_' sprintf('%05d_trafo_FP.nii',ix)]; 
+                MRTQuant.WriteNifti(out,f2s);
+                DW_Elastix_Transform(f2s,f2s_t,trafo_final_params);
+                MRTQuant.ConformSpatialDimensions('nii_file',f2s_t,'output',f2s_tp)
+                I = MRTQuant.LoadNifti(f2s_tp);
+                VDims_E = I.VD;
+                DWI(ix) = {I.img};
+            end
+
+            [b, g] = MRT_Library.Reorient_grad_and_b_matrix_rigid_rotation(b,g,Rig);
+            
+            if isnan(bval)
+                diff_model=2;
+            else
+                diff_model=1;
+            end
+            
+            [dummy, g] =  EDTI_Library.E_DTI_Get_Gradients_and_Bvalue(b, NrB0, diff_model);
+            
+            for i=1:length(DWI)
+                if isempty(DWI{i})
+                    disp('Errors encountered...')
+                    EDTI_Library.E_DTI_remove_temp_f(for_trafo.dir_temp);
+                    suc = 0;
+                    return;
+                end
+            end
+            
+            for i=1:length(DWI)
+                DWI{i} = single(DWI{i});
+                DWI{i}(DWI{i}==-1000)=nan;
+            end
+            
+            
+            dummy = false(size(DWI{1}));
+            for i=1:length(DWI)
+                dummy = or(dummy,isnan(DWI{i}));
+                DWI{i}(isnan(DWI{i}))=0;
+                DWI{i}(DWI{i}<0)=0;
+            end
+
+            par.cust_mask.NS = '';
+            par.cust_mask.TS = '';
+            par.mask_P = Mask_par;
+            par.mask_P.NS.mfs = 5;
+            par.mask_P.NS.NDWI = 0.7;
+            par.mask_P.NS.DWI = 0.7;
+            par.mask_P.TS.mfs = 5;
+            par.mask_P.TS.NDWI = 0.7;
+            par.mask_P.TS.DWI = 0.7;
+
+            if isempty(par.cust_mask.TS)
+                mask = EDTI_Library.E_DTI_Create_Mask_From_DWI_enhanced(DWI,NrB0,par.mask_P.TS.NDWI,par.mask_P.TS.DWI,par.mask_P.TS.mfs);
+            else
+                fn_cm = [FOLD filesep FFO par.cust_mask.TS];
+                [mask, VDims, suc] = EDTI_Library.E_DTI_read_nifti_file(fn_cm);
+                if suc==0
+                    EDTI_Library.E_DTI_remove_temp_f(for_trafo.dir_temp);
+                    return;
+                end
+                mask = mask>0;
+            end
+            
+            mask(dummy)=0;
+            
+            par_temp = par;
+            %par_temp.TE = par.TE.TS;
+            
+            if diff_model==1
+                [DT, DWIB0, outlier, chi_sq, chi_sq_iqr] = EDTI_Library.E_DTI_Get_DT_from_DWI_b_mask(DWI,b,mask,par_temp,NrB0);
+            elseif diff_model==2
+                [DT, DWIB0, KT, outlier, chi_sq, chi_sq_iqr] = EDTI_Library.E_DTI_Get_DT_KT_from_DWI_b_mask_with_constraints(DWI,b,mask,g,par_temp,NrB0,VDims);
+            end
+            
+            [FEFA, FA, FE, SE, eigval] = EDTI_Library.E_DTI_eigensystem_analytic(DT);
+            
+            g = g(NrB0+1:end,:);
+            
+            if ~isreal(FA)
+                FA = real(FA);
+            end
+            if ~isreal(FEFA)
+                FEFA = real(FEFA);
+            end
+            if ~isreal(FE)
+                FE = real(FE);
+            end
+            if ~isreal(SE)
+                SE = real(SE);
+            end
+            if ~isreal(eigval)
+                eigval = real(eigval);
+            end
+            MDims = size(mask);
+            VDims = VDims_E;
+            
+            f_out = out_name;
+            par.Rig = Rig;
+            
+            max_DWI = 0;
+            for i=1:length(DWI)
+                max_DWI = max(max_DWI,max(DWI{i}(:)));
+            end
+            
+            if max_DWI<=intmax('int16')
+                for i=1:length(DWI)
+                    DWI{i} = round(DWI{i});
+                    DWI{i} = int16(DWI{i});
+                end
+            elseif max_DWI<=intmax('uint16')
+                for i=1:length(DWI)
+                    DWI{i} = round(DWI{i});
+                    DWI{i}(DWI{i}<0)=0;
+                    DWI{i} = uint16(DWI{i});
+                end
+            end
+            
+            
+            try
+                save(f_out,'DWI','VDims','b','bval','g','info','FEFA','NrB0','MDims',...
+                    'FA','FE','SE','eigval','DT','outlier','DWIB0','chi_sq','chi_sq_iqr','par','hdr','Mask_par')
+            catch me
+                EDTI_Library.E_DTI_remove_temp_f(for_trafo.dir_temp);
+                disp(me.message)
+                return;
+            end
+            
+            if diff_model==2
+                save(f_out,'KT','-append')
+            end
+            
+            EDTI_Library.E_DTI_remove_temp_f(for_trafo.dir_temp);
+            if(nargout > 0)
+                data = MRTQuant.EDTI_Data_2_MRIToolkit('mat_file',f_out,'do_preproc',0);
+            end
+        end
+
+        % Concatenate multiple transformations of Elastix
+        % Transformation_files should be in order: from first (initial step)
+        % to last (final space)
+        function start_index = ConcatenateElastixParams(transformation_files,output_folder,series_index,start_index)
+            if(nargin < 3)
+                start_index = 1;
+                series_index = 1;
+            end
+            if(start_index == 1 && series_index == 1)
+                % Create the output directory at the very beginning
+                mkdir(output_folder);
+            end
+            if(iscell(transformation_files))
+                % Recursively calls itself
+                max_depth = zeros(length(transformation_files),1);
+                for idx=1:length(transformation_files)
+                    disp(['Recursion depth ' num2str(start_index) ' on ' transformation_files{idx}])
+                    max_depth(idx) = MRT_Library.ConcatenateElastixParams(transformation_files{idx},output_folder,...
+                        idx,1);
+                end
+                if(series_index == 1 && start_index == 1)
+                    % Execute only once as the data has been copied
+                    for idx=1:length(transformation_files)
+                        for lev=1:max_depth(idx)
+                            f2r = fullfile(output_folder,['Elastix_' num2str(idx) '_' num2str(lev) '.txt']);
+                            pars = MRT_Library.ReadElastixParameters(f2r);
+                            if(lev < max_depth(idx))
+                                pars = MRT_Library.SetElastixParameter(pars,'InitialTransformParametersFileName',...
+                                    fullfile(pwd,output_folder,['Elastix_' num2str(idx) '_' num2str(lev+1) '.txt']));
+                                MRT_Library.WriteElastixParameters(f2r,pars);
+                            else
+                                if(idx < length(transformation_files))
+                                    pars = MRT_Library.SetElastixParameter(pars,'InitialTransformParametersFileName',...
+                                        fullfile(pwd,output_folder,['Elastix_' num2str(idx+1) '_' num2str('1') '.txt']));
+                                    MRT_Library.WriteElastixParameters(f2r,pars);
+                                end
+                            end
+                        end
+                    end
+                end
+            else
+                % Atomic operation
+                [start_index,linked_files] = MRT_Library.ElastixParametersTree(transformation_files,start_index);
+                for idx=1:length(linked_files)
+                    copyfile(linked_files{idx},...
+                        fullfile(output_folder,['Elastix_' num2str(series_index) '_' num2str(idx) '.txt']));
+                end
+            end
+            if(start_index == 1 && series_index == 1)
+                % At the end, make sure to propagate the right frame of
+                % reference
+                [~,linked_files] = MRT_Library.ElastixParametersTree(fullfile(output_folder,'Elastix_1_1.txt'),start_index);
+                options2copy = {'Size','Index','Spacing','Origin','Direction'};
+                first_par_file = linked_files{1};
+                last_par_file = linked_files{end};
+                first_par = MRT_Library.ReadElastixParameters(first_par_file);
+                last_par = MRT_Library.ReadElastixParameters(last_par_file);
+                for opt=1:length(options2copy)
+                    val2copy = MRT_Library.GetElastixParameter(last_par,options2copy{opt});
+                    first_par = MRT_Library.SetElastixParameter(first_par,options2copy{opt},val2copy);
+                end
+                MRT_Library.WriteElastixParameters(first_par_file,first_par);
+            end
+            
+        end
+
+        % helpers for Elastix transformation files
+        function [start_index,linked_files] = ElastixParametersTree(transformation_files,start_index)
+            lp = MRT_Library.ReadElastixParameters(transformation_files);
+            linked_files = {transformation_files};
+            linked_file = MRT_Library.GetElastixParameter(lp,'InitialTransformParametersFileName');
+            linked_file = strrep(linked_file,'"','');
+            linked_file = strrep(linked_file,' ','');
+            if(strcmpi(linked_file,'NoInitialTransform') == false && exist(linked_file,'file') < 1)
+                % Try copying the filepath of the previous file
+                [fp,~] = fileparts(transformation_files);
+                linked_file = fullfile(fp,linked_file);
+                if(exist(linked_file,'file') < 1)
+                    disp('Cannot locate at least one of the linked files');
+                end
+            end
+            disp(['Recursion depth ' num2str(start_index) ' on ' linked_file])
+
+%             linked_files(end+1) = {linked_file};
+            if(strcmpi(linked_file,'NoInitialTransform') == false)
+                % There is a linked parameter to copy
+                [start_index,linked_file] = MRT_Library.ElastixParametersTree(linked_file,start_index+1);
+                for id=1:length(linked_file)
+                    linked_files(end+1) = linked_file(id);
+                end
+            else
+                % This is the last one
+            end
+        end
+        function WriteElastixParameters(fout,pars)
+            f = fopen(fout,'wt');
+            for ix=1:length(pars)
+                fprintf(f,'%s%s',pars{ix},newline);
+            end
+            fclose(f);
+        end
+        function params = ReadElastixParameters(fin)
+            params = {};
+            f = fopen(fin,'rt');
+            while(feof(f) == false)
+                params(end+1) = {fgetl(f)};
+            end
+            fclose(f);
+        end
+        function [parval,ix] = GetElastixParameter(params,parameter_name)
+            parval = NaN;
+            for ix=1:length(params)
+                if(contains(params{ix},parameter_name))
+                    sp = strfind(params{ix},' ');
+                    ep = strfind(params{ix},')');
+                    parval = params{ix}(sp:ep-1);
+                    return
+                end
+            end
+        end
+        function params = SetElastixParameter(params,parameter_name,newvalue)
+            [~,ix] = MRT_Library.GetElastixParameter(params,parameter_name);
+            sp = strfind(params{ix},' ');
+            ep = strfind(params{ix},')');
+            nv = params{ix};
+            nv = [nv(1:sp-1) ' ' newvalue nv(ep:end)];
+            params(ix) = {nv};
+        end            
+
+    function out = my_help(fname)
             if(isdeployed)
                 out = fname;
             else
@@ -1516,3 +1917,4 @@ classdef MRT_Library < handle
     end
     
 end
+

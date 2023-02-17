@@ -10,7 +10,11 @@ function DW_Elastix_Transform(filein,fileout,transform_parameters)
         elastix_path = MRIToolkit.Elastix.Location;
         transformix_cmd = MRIToolkit.Elastix.TransformixCMD;
         if(~ispc)
-            transformix_cmd = ['LD_LIBRARY_PATH=' elastix_path ' ' transformix_cmd];
+            if(~ismac)
+                transformix_cmd = ['LD_LIBRARY_PATH=' elastix_path ' ' transformix_cmd];
+            else
+                transformix_cmd = ['DYLD_LIBRARY_PATH=' elastix_path ' ' transformix_cmd];
+            end
         end
     else
 %         elastix_path = '/Users/alb/Desktop/M_Code_ExploreDTI_v4.8.6/Source/MD_cor_E/macOSX64/';
