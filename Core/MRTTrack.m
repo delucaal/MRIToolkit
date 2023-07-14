@@ -1970,6 +1970,99 @@ classdef MRTTrack < handle
             
         end
         
+        function [deltaAFD,deltaNuFO,AngleDev] = CompareFODPeaksAndMetrics(varargin)
+            % Determine the difference in AFD, NuFO, AngleDeviation between 2 MAT files containing FOD peaks. 
+            % Angle deviation is determined as the angle between each peak
+            % of FOD1 and the closest peak of FOD2.
+            % input arguments:
+            % mat1: the input FOD or file reference
+            % mat2: the SH order (default 8)
+            % peak_threshold: minimum amplitude of a "genuine" peak
+            % (default 0.1)
+            % max_peaks: maximum number of peaks to consider(default 3)
+            % output: optional, name of the .mat file to save to
+
+            mat1 = GiveValueForName(varargin,'mat1');
+            if(isempty(mat1))
+                error('Missing mandatory argument mat1');
+            end
+
+            mat2 = GiveValueForName(varargin,'mat2');
+            if(isempty(mat2))
+                error('Missing mandatory argument mat2');
+            end
+            
+            output = GiveValueForName(varargin,'output');
+
+            peak_threshold = GiveValueForName(varargin,'peak_threshold');
+            if(isempty(peak_threshold))
+                peak_threshold = 0.1;
+            end
+            
+            max_peaks = GiveValueForName(varargin,'max_peaks');
+            if(isempty(max_peaks))
+                max_peaks = 3;
+            end
+
+            pk1 = load(mat1);
+            pk2 = load(mat2);
+
+            deltaAFD = pk1.AFD - pk2.AFD;
+            deltaNuFO = pk1.NuFO - pk2.NuFO;
+
+            [sx,sy,sz,st] = size(pk1.AFD);
+            AngleDev = nan([sx*sy*sz max_peaks]);
+            for vox=1:length(pk1.peak_amp(:))
+                peak_amp_1 = pk1.peak_amp{vox};
+        	    peak_amp_2 = pk2.peak_amp{vox};
+                % Evaluate if there is at least 1 valid peak
+                peak_1_thr = peak_amp_1 >= peak_threshold; 
+                peak_2_thr = peak_amp_2 >= peak_threshold;
+                Npeak_1_thr = sum(peak_1_thr);
+                Npeak_2_thr = sum(peak_2_thr);
+                if(Npeak_1_thr == 0 || Npeak_2_thr == 0)
+                    continue
+                end
+                % Only look at the first peak when NuFO is different
+                if(Npeak_1_thr ~= Npeak_2_thr)
+                    only_peak_1 = true;
+                else
+                    only_peak_1 = false;
+                end
+
+                % Loop over the number of desired/found peaks of FOD1
+                % FOD1 is implicitly the reference (for peak grouping)
+                for p1_id = 1:min(Npeak_1_thr,max_peaks)
+                    dir1 = pk1.peak_dir{vox}(:,p1_id);
+                    
+                    angles = Inf*ones(max_peaks,1); % Store the angle between peaks 
+                    % Loop over the number of desired/found peaks of FOD2
+                    for p2_id = 1:min(Npeak_2_thr,max_peaks)
+                        dir2 = pk2.peak_dir{vox}(:,p2_id);
+                        angle = acosd(dot(dir1,dir2));
+                        if(angle > 90)
+                            angle = 180-angle;
+                        end
+                        angles(p2_id) = angle;
+                    end
+                    mv = min(angles);
+                    AngleDev(vox,p1_id) = mv;
+                    if(only_peak_1)
+                        break
+                    end
+                end
+            end
+            
+            AngleDev = reshape(AngleDev,sx,sy,sz,max_peaks);
+            if(~isempty(output))
+                out_mat.AngleDev = AngleDev;
+                out_mat.deltaAFD = deltaAFD;
+                out_mat.deltaNuFO = deltaNuFO;
+                save(output,'-struct','out_mat');
+            end
+
+        end
+
         function ConvertMatTractography2TCK(varargin)
             % Converts ExploreDTI tractography 2 the TCK format
             % input arguments:
@@ -2086,9 +2179,10 @@ classdef MRTTrack < handle
             % input arguments:
             % trk_file: the input tractography trk file
             % nii_file: a reference .nii file in the same space of the tck
+            % mat_file: the reference EDTI .mat file, if available
             % output: the output MAT file
             trk_file = GiveValueForName(varargin,'trk_file');
-            if(isempty(vtk_file))
+            if(isempty(trk_file))
                 error('Missing mandatory argument trk_file');
             end
             output = GiveValueForName(varargin,'output');
@@ -2099,19 +2193,30 @@ classdef MRTTrack < handle
             if(isempty(nii_file))
                 error('Missing mandatory argument nii_file');
             end
+            mat_file = GiveValueForName(varargin,'mat_file');
+            if(isempty(mat_file))
+                warning('Missing argument mat_file. Diffusion properties of tracts will not be computed');
+            end
             
             [header,tracks] = trk_read(trk_file);
-            SEG = MRTQuant.LoadNifti(nii_file);
+            REF = MRTQuant.LoadNifti(nii_file);
+            if(isempty(mat_file))
+                DIFF_PROP.FA = zeros(header.dim([2 1 3]));
+                DIFF_PROP.FE = zeros([header.dim([2 1 3]) 3]);
+                DIFF_PROP.eigval = zeros([header.dim([2 1 3]) 3]);
+            else
+                DIFF_PROP = load(mat_file,'FA','FE','eigval');
+            end
             
             Tracts.VDims = REF.VD;
-            Tracts.Tracts = cell(1,length(Lines));
-            Tracts.TractAng = cell(1,length(Lines));
-            Tracts.TractFA = cell(1,length(Lines));
-            Tracts.TractFE = cell(1,length(Lines));
-            Tracts.TractGEO = cell(1,length(Lines));
-            Tracts.TractL = cell(1,length(Lines));
-            Tracts.TractLambdas = cell(1,length(Lines));
-            Tracts.TractMD = cell(1,length(Lines));
+            Tracts.Tracts = cell(1,length(tracks));
+            Tracts.TractAng = cell(1,length(tracks));
+            Tracts.TractFA = cell(1,length(tracks));
+            Tracts.TractFE = cell(1,length(tracks));
+            Tracts.TractGEO = cell(1,length(tracks));
+            Tracts.TractL = cell(1,length(tracks));
+            Tracts.TractLambdas = cell(1,length(tracks));
+            Tracts.TractMD = cell(1,length(tracks));
             Tracts.TractMask = ones(size(REF.img));
             Tracts.TractMask = permute(Tracts.TractMask,[2 1 3]);
             Tracts.FList = (1:length(Tracts.Tracts))';
@@ -2119,8 +2224,10 @@ classdef MRTTrack < handle
                 tracks(tid).matrix = tracks(tid).matrix(:,[2 1 3]);
                 % These lines are needed for .trk saved from TrackVis, but not for .trk converted
                 % from E_DTI - CHECK THE DENSITY MAPS EVERY TIME!!!
-                tracks(tid).matrix(:,1) = size(SEG.img,1)-tracks(tid).matrix(:,1);
-                tracks(tid).matrix(:,2) = size(SEG.img,2)-tracks(tid).matrix(:,2);
+                tracks(tid).matrix(:,1) = size(REF.img,1)*REF.VD(1)-tracks(tid).matrix(:,1);
+                tracks(tid).matrix(:,2) = size(REF.img,2)*REF.VD(2)-tracks(tid).matrix(:,2);
+%                 tracks(tid).matrix(:,3) = size(REF.img,3)-tracks(tid).matrix(:,3);
+%                 tracks(tid).matrix = inv(header.vox_to_ras)*
                 PL = tracks(tid).matrix;
                 Tracts.Tracts(tid) = {PL};
                 cTractFA = zeros([size(PL,1),1]);
@@ -2133,9 +2240,9 @@ classdef MRTTrack < handle
                 for point=1:size(PL,1)
                     P = PL(point,:)./REF.VD;
                     PC = floor(P)+1;
-                    %                    cTractFA(point) = DIFF_PROP.FA(PC(1),PC(2),PC(3))/sqrt(3);
-                    %                    cTractFE(point,:) = abs(squeeze(DIFF_PROP.FE(PC(1),PC(2),PC(3),:)));
-                    %                    cTractLambdas(point,:) = squeeze(DIFF_PROP.eigval(PC(1),PC(2),PC(3),:));
+                    cTractFA(point) = DIFF_PROP.FA(PC(1),PC(2),PC(3))/sqrt(3);
+                    cTractFE(point,:) = abs(squeeze(DIFF_PROP.FE(PC(1),PC(2),PC(3),:)));
+                    cTractLambdas(point,:) = squeeze(DIFF_PROP.eigval(PC(1),PC(2),PC(3),:));
                     cTractMD(point) = mean(cTractLambdas(point,:));
                 end
                 Tracts.TractAng(tid) = {cTractAng};

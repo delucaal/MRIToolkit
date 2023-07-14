@@ -1250,8 +1250,14 @@ classdef MRT_Library < handle
                             || isempty(MRIToolkit.fibertracker.type))
                         t = SHTracker(v2w);
                     else
-                        disp('Not yet supported')
-                        continue
+%                         disp('Not yet supported')
+%                         continue
+                          disp('You are using a very experimental fiber tracker!');
+                          t = DistProbSHTracker(v2w);
+                          t.setNumberOfIterations(10);
+                          t.setParametersSD(0.3,10);
+                          t.weight_mode = 0;
+
 %                         eval(['t = ' MRIToolkit.fibertracker.type '(v2w);']);
 %                         if(isfield(MRIToolkit.fibertracker,'parameters'))
 %                             fields = fieldnames(MRIToolkit.fibertracker.parameters);
