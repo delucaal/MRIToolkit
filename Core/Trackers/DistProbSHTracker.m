@@ -12,7 +12,7 @@ classdef DistProbSHTracker < SHTracker
     
     properties (Access = public)
         number_of_iterations=1
-        sample_fod_peaks=0
+        sample_fod_peaks=1
         weight_mode=1
         stepSize_sd;
         maxAngle_sd;
@@ -36,8 +36,8 @@ classdef DistProbSHTracker < SHTracker
                 this.number_of_iterations = nof_iters;
             end
             disp('Using class DistProbSHTracker for tracking (peak-based probabilistic tractography)');
-            rng('default')
-            rng(123456)
+%             rng('default')
+%             rng(123456)
         end
         
         function this = setNumberOfIterations(this,iters)
@@ -182,7 +182,86 @@ classdef DistProbSHTracker < SHTracker
                 this.fun = this.op.process(this.fun);
             end
         end
-        
+
+        function [tract, tractVal] = trackOneDir(this, point, dir)
+            tract = cell(1,size(point,2));
+            tractVal = cell(1,size(point,2));
+            flist = 1:size(point,2);
+            
+%             for it = 1:(this.lengthRange(2)/this.stepSize)
+            totalLength = 0;
+            it = 1;
+            while(totalLength < this.lengthRange(2))
+                if this.pb; progressbar(size(point,2),int2str(size(point,2))); end;
+                % advance streamline
+                try
+
+                    point = point + this.stepSize .* dir;
+                    totalLength = totalLength + this.stepSize;
+                catch
+%                     disp('Size point:')
+%                     disp(num2str(size(point)))
+%                     disp('Size step:')
+%                     disp(num2str(size(this.stepSize)))
+%                     disp('Size dir:')
+%                     disp(num2str(size(dir)))
+                    continue
+%                     error('The error...')
+                end
+
+                this.update_tracking_constraints();
+
+                % interpolate
+                this.interpolate(point);
+                
+                % mask out NaN values
+                mask = this.mask_nan();
+                point = point(:,mask);
+                dir = dir(:,mask);
+                flist = flist(mask);
+                
+                % process function
+                this.process();
+                
+                % get new direction
+                [newDir, val, angle] = this.getDir(dir);
+                
+                % mask out small peaks
+                mask = val > this.threshold;
+                point = point(:,mask);
+                dir = dir(:,mask);
+                newDir = newDir(:,mask);
+                flist = flist(mask);
+                angle = angle(mask);
+                val = val(:,mask);
+                
+                % mask out large angles
+                mask = angle < this.maxAngle;
+                point = point(:,mask);
+                dir = dir(:,mask);
+                newDir = newDir(:,mask);
+                flist = flist(mask);
+                val = val(:,mask);
+                
+                % make sure we don't move back in the streamline
+                flipsign = sign(sum(dir.*newDir,1));
+                
+                % update dir
+                dir = flipsign([1 1 1],:).*newDir;
+                
+                % stop if we are out of points
+                if isempty(point)
+                    break
+                end
+                
+                % add points to the tracts
+                for i=1:length(flist)
+                    tract{flist(i)}(it,:) = point(:,i);
+                    tractVal{flist(i)}(it,:) = val(:,i);
+                end
+                it = it + 1;
+            end
+        end        
         function [dir, val, angle] = getDir(this, prevDir)
             if(this.sample_fod_peaks == 1)
                 [dir,val] = this.getSampledDir(prevDir);
@@ -267,10 +346,10 @@ classdef DistProbSHTracker < SHTracker
         
         function this = update_tracking_constraints(this)
             if(this.stepSize_sd ~= 0)
-                this.stepSize = eps+max(normrnd(this.stepSize_mu,this.stepSize_sd),0);
+                this.stepSize = eps+max(normrnd(this.stepSize_mu,this.stepSize_sd),0.01*this.stepSize_mu);
             end
             if(this.maxAngle_sd ~= 0)
-                this.maxAngle = eps+max(normrnd(this.maxAngle_mu,this.maxAngle_sd),0);
+                this.maxAngle = eps+min(max(normrnd(this.maxAngle_mu,this.maxAngle_sd),10),90);
             end
         end
         

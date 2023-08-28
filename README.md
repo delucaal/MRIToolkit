@@ -4,8 +4,39 @@
  </a> 
  </p>
  
- # [MRIToolkit](https://github.com/delucaal/MRIToolkit) [update 26-09-2021] 
-New in this version [1.5]: 
+ # [MRIToolkit](https://github.com/delucaal/MRIToolkit) [update 17-02-2023] 
+New in this version [1.6]: 
+- This is the last stable release before a major change in structure. From the next release, all main functionalities will be come available as standalone commands and be designed to fully rely on Niftis only.
+- Fixes to the handling of Nifti headers
+- Automated brain extraction using image registration
+- added new class MRT_Library that will collect all own methods currently in MRTTrack and MRTQuant (transition in progress). This will clean MRTTrack and MRTQuant which are meant as documented interfaces.
+- Dramatic speed up of GRL and mFOD (major revision of MRTTrack.PerformDeconv)
+- Changes to MRTQuant.LoadNifti and SaveNifti, which now allows to preserve the original header of NIFTIs (if required). In future releases, no modifications of the headers will be required.
+- Update of Neuro.m to support the latest version of Elastix
+- Compressed niftis are now (un)compressed in a temporary folder
+- Added functions to track multiple FODs simultaneously
+- Changes to the automatic handling of Q-S form of NIFTIs
+- New mFOD fiber tracking
+- New TerminateTractsWithFraction approach with 1 voxel tolerance
+- Moved Trackers to aanother location
+- Fixes to SHPrecomp
+- Fixes to MRIToolkitInit
+- Tractography can now use parallel computing
+- Handling of NIFTI scaling factors
+- Failsafe mode for registration
+- Support for FSL Eddy
+- Support for FOD normalization
+- One call command to run GRL
+- Fix for MSCSD (probably still needs amendment on the detection of data shells)
+- Fix fot CAT12 processing
+- command line fixes
+- standardized preproc includes conformation
+- fixes to conformation
+- support for offset in DKI for GRL
+- fixes to DKI export
+
+
+Update 09-2021:
 - [NEW] Checkout the [tutorial](https://github.com/delucaal/MRIToolkit/tree/master/GettingStarted/Diffusion/7_WMA) on how to install/use automated tractography clustering (WMA) algorithm with CSD/GRL/mFOD
 - Fixes to MSCSD-related functions
 - Fixes to WM automated clustering

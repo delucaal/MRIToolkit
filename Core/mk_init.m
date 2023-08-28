@@ -13,3 +13,4 @@ global MRIToolkit;
 MRIToolkit.core_version = 1.2;
 
 addpath(get_executed_file_path())
+addpath(fullfile(get_executed_file_path(),'Trackers'))

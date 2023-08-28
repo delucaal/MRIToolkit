@@ -17,7 +17,7 @@ function mrtd_preproc(varargin)
                    ' 4=[x z y] =[y z x] 6=[z x y]'];
         help = [help newline '-grad_flip: how to flip the sign of the diffusion gradients 1=[x y z] 2=[-x y z] 3=[x -y z] 4=[x y -z]'];
         help = [help newline '-epi: .nii file to perform EPI correction (T1 or T2 image)'];
-        help = [help newline '-epi_constraint: allow deformation on specific axis. Input between quotas "1 1 1"'];
+        help = [help newline '-epi_constraint: allow deformation on specific axis. Input as a three digit number: 101'];
         help = [help newline '-epi_reg_mode: image to use for registration to structural. One between "fa" (default), "b0", "dwis"'];
         help = [help newline '-epi_normcorr: 0 or 1. Use normalized correlation in place of mutual information to drive the registration.'];        
         help = [help newline '-denoise: 0 or 1. Perform MP-PCA denoising'];        
@@ -84,7 +84,7 @@ function mrtd_preproc(varargin)
         epi_constraint = [1 1 1];
     else
         pieces = strsplit(epi_constraint,' ');
-        epi_constraint = [str2double(pieces{1}) str2double(pieces{2}) str2double(pieces{3})];
+        epi_constraint = [str2double(pieces{1}(1)) str2double(pieces{1}(2)) str2double(pieces{1}(3))];
     end      
     epi_reg_mode = GiveValueForName(coptions,'-epi_reg_mode');
     if(isempty(epi_reg_mode))

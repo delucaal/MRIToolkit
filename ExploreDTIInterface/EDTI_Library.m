@@ -1744,15 +1744,14 @@ classdef EDTI_Library < handle
         end
         
         % From ExploreDTI: helper function for Motion/Eddy/EPI correction
-        % Performs the b-matrix rotation
+        % Performs the b-matrix rotation. 
         function [b, g] = E_DTI_reorient_grad_and_b_matrix_rigid_rotation(b,g,Rot)
-            
             M = zeros(4,3);
             M(1,:) = [Rot{1} Rot{2} Rot{3}]*(180/pi);
             M(3,:) = 1;
             World_Trafo = EDTI_Library.E_DTI_Convert_aff_par_2_aff_transf_matrix(M);
             R = World_Trafo(1:3,1:3);
-            
+        
             b_old = b;
             g_old = g;
             
@@ -2221,7 +2220,7 @@ classdef EDTI_Library < handle
             kappa = 1.5;
             
             % h = EDTI_Library.E_DTI_gaussian3([3 3 3], 1, VDims);
-            
+            AK = real(AK);
             AKA = AK;
             BK = false(size(AK));
             
@@ -2257,7 +2256,11 @@ classdef EDTI_Library < handle
                             end
                             
                             if length(D)>10
-                                y = prctile(D,[25 75]);
+                                try
+                                    y = prctile(D,[25 75]);
+                                catch err
+                                    disp(err)
+                                end
                                 
                                 IQR = (y(2)-y(1));
                                 
@@ -3195,10 +3198,10 @@ classdef EDTI_Library < handle
                 close(h_k)
             end
             
-            if max(DWIc(:))<intmax('int16')
-                clear DWI;
-                DWIc = int16(round(DWIc));
-            end
+%             if max(DWIc(:))<intmax('int16')
+%                 clear DWI;
+%                 DWIc = int16(round(DWIc));
+%             end
             
             EDTI_Library.E_DTI_write_nifti_file(DWIc,VDims,par.f_out_nii);
             copyfile(par.f_in_txt,par.f_out_txt);
@@ -5653,6 +5656,7 @@ classdef EDTI_Library < handle
             sh = SH(lmax,grad);
             
             dwi_sh = sh.coef(dwi);
+%             dwi_sh = sh.reg_coef(dwi,0.001);
             
             % axial symmetric RF in z direction for every voxel, FA tensor = 0.05,
             % werkt voor lmax = 6 en 8
@@ -5769,7 +5773,7 @@ classdef EDTI_Library < handle
             save([fin(1:end-4) '_r_sh.mat'],'r_shtot','r_shtot_sd','-v7.3');
             
             load(fin,'DWI','VDims','NrB0','b','g','FA','bval','MDims')
-            bvals=round(sum(b(:,[1 4 6]),2)/100)*100;
+            bvals=round(sum(b(:,[1 4 6]),2)/10)*10;
             
             if length(ubvals)>2
                 disp(['Selecting a subset of the data: ' num2str(ubvals(1)) 's/mm2 and ' num2str(ubvals(end)) 's/mm2']);
@@ -5982,8 +5986,8 @@ classdef EDTI_Library < handle
             
             % by f.guo
             bvals = sum(b(:,[1 4 6]),2);
-            bvals = round(bvals/10) *10;
-%             bvals = round(bvals/100) *100;
+%             bvals = round(bvals/10) *10;
+            bvals = round(bvals/100) *100;
             
             % determine the number of unique shells and order by increasing b-value
             bvalues = unique(bvals);
@@ -7352,7 +7356,8 @@ classdef EDTI_Library < handle
             V_KA = sqrt(V_KA-V_MK);
             
             KA(mask) = V_KA(:);
-            
+            KA = real(KA);
+
             [dummy, KA] = EDTI_Library.E_DTI_local_outlier_correction_avg(KA,mask);
             % y = prctile(KA(mask),[0.1 99.9]);
             % KA = EDTI_Library.E_DTI_outlier_smoothing(KA,mask,y);

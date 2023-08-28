@@ -244,7 +244,7 @@ function text = read_text_file(file)
     f = fopen(file,'rt');
     text = [];
     while(~feof(f))
-        text = [text;fgetl(f)];
+        text = [text fgetl(f)];
     end
     fclose(f);
 end
