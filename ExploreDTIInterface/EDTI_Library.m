@@ -2220,7 +2220,7 @@ classdef EDTI_Library < handle
             kappa = 1.5;
             
             % h = EDTI_Library.E_DTI_gaussian3([3 3 3], 1, VDims);
-            
+            AK = real(AK);
             AKA = AK;
             BK = false(size(AK));
             
@@ -2256,7 +2256,11 @@ classdef EDTI_Library < handle
                             end
                             
                             if length(D)>10
-                                y = prctile(D,[25 75]);
+                                try
+                                    y = prctile(D,[25 75]);
+                                catch err
+                                    disp(err)
+                                end
                                 
                                 IQR = (y(2)-y(1));
                                 
@@ -7352,7 +7356,8 @@ classdef EDTI_Library < handle
             V_KA = sqrt(V_KA-V_MK);
             
             KA(mask) = V_KA(:);
-            
+            KA = real(KA);
+
             [dummy, KA] = EDTI_Library.E_DTI_local_outlier_correction_avg(KA,mask);
             % y = prctile(KA(mask),[0.1 99.9]);
             % KA = EDTI_Library.E_DTI_outlier_smoothing(KA,mask,y);

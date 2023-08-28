@@ -3002,12 +3002,14 @@ classdef MRTTrack < handle
             % FiberLengthRange: The mininum - maximum allowed fiber length in mm: [30 500]
             % SeedMask: A mask to perform the seeding. If empty, the whole
             %   volume is used
+            % RandomPerturbation: whether to perturbate the seeds randomly
             % Default parameters:
             %  SeedPointRes: [2 2 2]
             %             StepSize: 1
             %          AngleThresh: 30
             %     FiberLengthRange: [30 500]
             %     FODThresh: 0.1
+            %     RandomPerturbation: 0
             
             if(isempty(varargin))
                 my_help('MRTTrack.PerformFODBased_FiberTracking');
@@ -3105,7 +3107,12 @@ classdef MRTTrack < handle
                 parameters.SeedMask = option;
             end
             
-            parameters.randp = 0;
+            option = GiveValueForName(coptions,'RandomPerturbation');
+            if(isempty(option))
+                parameters.randp = 0;
+            else
+                parameters.randp = option;
+            end            
             
             json.TrackingParameters = parameters;
             

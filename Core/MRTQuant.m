@@ -1257,6 +1257,9 @@ classdef MRTQuant < handle
             % bvec_file: The corresponding .bvec file (only in combination with nii_file)
             % txt_file: as alternative to bval/bvec
             % topup_nii: a .nii_file acquired with reversed phase encoding (optional).
+            %   If this file has less encodings than mat_file/nii_file, it is
+            %   only used to estimate the distortion correction field.
+            %   Otherwise, it is passed along to Eddy for full reconstruction.
             % topup_dir: 1 for LR, 2 for AP (default), 3 for FH
             % repol: 1 to enable automated outlier rejection (default = 0)
             % Only reversed b=0s/mm2 are supported at this stage
@@ -1453,7 +1456,25 @@ classdef MRTQuant < handle
 
             % Run EDDY
 
-            indices = ones(1,length(bvals));
+            if(isempty(topup_nii) || length(rev_bvals) ~= length(bvals))                   
+                indices = ones(1,length(bvals));
+            else
+                indices = [ones(1,length(bvals)) (sum(b0s>0)+1)*ones(1,length(bvals))];
+                % Concatenate Data
+                data = MRTQuant.LoadNifti(fullfile(temp_direc,'data.nii'));
+                data_rev = MRTQuant.LoadNifti(fullfile(temp_direc,'data_rev.nii'));
+                B0_1 = data.img(:,:,:,find(bvals == min(bvals),1));
+                B0_2 = data_rev.img(:,:,:,find(rev_bvals == min(rev_bvals),1));
+                R = nanmean(B0_1(:))/nanmean(B0_2(:)); % Ensure that the scaling is consistent
+                data.img = cat(4,data.img,data_rev.img*R);
+
+                bvals = [bvals' rev_bvals];
+                save(fullfile(temp_direc,'bvals'),'bvals','-ascii');
+                bvecs = [bvecs' load(strrep(bval_reverse_file,'.bval','.bvec'))];
+                save(fullfile(temp_direc,'bvecs'),'bvecs','-ascii');
+                
+                MRTQuant.WriteNifti(data,fullfile(temp_direc,'data.nii'),0);
+            end
             save(fullfile(temp_direc,'indices.txt'),'indices','-ascii');
 
             % Derive a mask
@@ -1468,7 +1489,7 @@ classdef MRTQuant < handle
             MRTQuant.WriteNifti(mask,fullfile(temp_direc,'mask.nii'));
 
             if(ispc)
-                % remap for BASH
+                % remap for BASH (WSL)
                 b_temp = strrep(temp_direc,'C:','c');
                 b_temp = strrep(b_temp,'D:','d');
                 b_temp = strrep(b_temp,'E:','e');
