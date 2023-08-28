@@ -1,7 +1,8 @@
+
 function mrtd_dti_dki_folder(varargin)
 disp('mrtd_dti_dki_folder');
 coptions = varargin;
-if(length(varargin{1}) > 1)
+if(isdeployed && length(varargin{1}) > 1)
     coptions = varargin{1};
 end
 %     disp(varargin)
@@ -24,29 +25,29 @@ if(isempty(coptions) || isempty(coptions{1}) || strcmpi(coptions{1},'-help'))
 end
 
 tgt_folder = '';
-grad_perm = [];
-grad_flip = [];
+grad_perm = '';
+grad_flip = '';
 estimator = 'ols';
-mkcurve = 0;
-dki = 0;
-dki_constraints = [];
+mkcurve = '0';
+dki = '0';
+dki_constraints = '';
 
 for input_id =1:2:length(coptions)
     value = coptions{input_id};
     if(strcmp(value,'-folder'))
         tgt_folder = coptions{input_id+1};
     elseif(strcmp(value,'-grad_perm'))
-        grad_perm = str2double(coptions{input_id+1});
+        grad_perm = coptions{input_id+1};
     elseif(strcmp(value,'-grad_flip'))
-        grad_flip = str2double(coptions{input_id+1});
+        grad_flip = coptions{input_id+1};
     elseif(strcmp(value,'-estimator'))
         estimator = coptions{input_id+1};
     elseif(strcmp(value,'-dki'))
-        dki = str2double(coptions{input_id+1});
+        dki = coptions{input_id+1};
     elseif(strcmp(value,'-mkcurve'))
-        mkcurve = str2double(coptions{input_id+1});
+        mkcurve = (coptions{input_id+1});
     elseif(strcmp(value,'-dki_constraints'))
-        dki_constraints = str2double(coptions{input_id+1});
+        dki_constraints = (coptions{input_id+1});
     end
     
 end
@@ -56,8 +57,15 @@ if(isempty(tgt_folder))
 end
 
 files2fit = dir(fullfile(tgt_folder,'*.bval'));
-for fileid=1:length(files2fit)
+gcp;
+pctRunOnAll('MRIToolkitInit');
+
+parfor fileid=1:length(files2fit)
     basename = fullfile(files2fit(fileid).folder,files2fit(fileid).name(1:end-5));
+    if(~isempty(dir([basename '_L1.nii*'])))
+        disp('Already processed, not overriding');
+        continue
+    end
     try
         bval = [basename '.bval'];
         bvec = [basename '.bvec'];
@@ -66,8 +74,12 @@ for fileid=1:length(files2fit)
           '-out',basename,'-dki',dki,'-mkcurve',mkcurve,'-dki_constraints',...
           dki_constraints,'-estimator',estimator,'-grad_perm',grad_perm,...
           '-grad_flip',grad_flip);
-    catch
+    catch err
         disp(['Error while fitting ' basename]);
+        for ij=1:length(err.stack)
+            disp(err.stack(ij).name)
+            disp(err.stack(ij).line)
+        end
     end
 end
 

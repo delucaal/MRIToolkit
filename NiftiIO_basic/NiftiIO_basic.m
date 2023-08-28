@@ -48,16 +48,33 @@ classdef NiftiIO_basic < handle
             end
 
             AcquisitionTypes = {};
-            AcquisitionCategories = {
-                {'t1','anat'},...
-                {'t2','anat'},...
-                {'flair','anat'},...
-                {'dwi','dwi'},...
-                {'dti','dwi'},...
-                {'dmri','dwi'},...
-                {'fmri','func'},...
-                {'bold','func'}
-            };
+            
+            source_file = which('BIDSdefinitions.txt');
+            if(isempty(source_file))
+                disp('Cannot find BIDSdefinitions.txt in the path. Using built-in definitions');
+                AcquisitionCategories = {
+                    {'t1','anat'},...
+                    {'t2','anat'},...
+                    {'flair','anat'},...
+                    {'dwi','dwi'},...
+                    {'dti','dwi'},...
+                    {'dmri','dwi'},...
+                    {'fmri','func'},...
+                    {'bold','func'}
+                };
+            else
+                AcquisitionCategories = {};
+                f = fopen(source_file,'rt');
+                while(~feof(f))
+                   l = fgetl(f);
+                   if(contains(l,'#') || isempty(l))
+                       continue
+                   end
+                   parts = strsplit(l,',');
+                   AcquisitionCategories(end+1) = {parts};
+                end
+                fclose(f);
+            end
 
             SubjectsFolder = dir(dicom_folder);
             for subj_id=1:length(SubjectsFolder)
@@ -66,10 +83,20 @@ classdef NiftiIO_basic < handle
                 end
                 delete(fullfile(TempDirectory,'*'));
                 full_path = fullfile(dicom_folder,SubjectsFolder(subj_id).name);
-                full_out_path = fullfile(RawFolder,['sub-' SubjectsFolder(subj_id).name]);
+                if(contains(SubjectsFolder(subj_id).name,'sub-') == false)
+                    full_out_path = fullfile(RawFolder,['sub-' SubjectsFolder(subj_id).name]);
+                else
+                    full_out_path = fullfile(RawFolder,SubjectsFolder(subj_id).name);
+                end
                 npaths = length(dir([full_out_path '*']))+1;
-                full_out_path = strcat(full_out_path,['_ses-' num2str(npaths)]);
-                final_prefix = ['sub-' SubjectsFolder(subj_id).name '_ses-' num2str(npaths)];
+                final_prefix = SubjectsFolder(subj_id).name;
+                if(contains(SubjectsFolder(subj_id).name,'sub-') == false)
+                    final_prefix = ['sub-' final_prefix];
+                end
+                if(contains(SubjectsFolder(subj_id).name,'-ses-') == false)
+                    final_prefix = [final_prefix '-ses-' num2str(npaths)];
+                    full_out_path = strcat(full_out_path,['-ses-' num2str(npaths)]);
+                end
                 
                 NiftiIO_basic.ConvertDicomFolder2Nifti(full_path,TempDirectory);
 

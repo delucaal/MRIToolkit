@@ -60,6 +60,16 @@ for input_id =1:2:length(coptions)
     
 end
 
+if(isnan(grad_perm))
+    grad_perm = [];
+end
+if(isnan(grad_flip))
+    grad_flip = [];
+end
+if(isnan(dki_constraints))
+    dki_constraints = [];
+end
+
 if(isempty(nii_file))
     error('Missing mandatory argument -nii');
 elseif(isempty(bval_file))

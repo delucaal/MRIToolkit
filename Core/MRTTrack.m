@@ -89,13 +89,16 @@ classdef MRTTrack < handle
             obj.weighted_HRKernel = obj.HRKernel;
             
             % Weighted kernels for the lower shells
-            for ij=1:size(obj.LRKernel,2)
-                obj.weighted_LRKernel(:,ij) = obj.LRKernel(:,ij).*obj.shell_weight;
-            end
+%             for ij=1:size(obj.LRKernel,2)
+%                 obj.weighted_LRKernel(:,ij) = obj.LRKernel(:,ij).*obj.shell_weight;
+%             end
+%             
+%             for ij=1:size(obj.HRKernel,2)
+%                 obj.weighted_HRKernel(:,ij) = obj.HRKernel(:,ij).*obj.shell_weight;
+%             end
             
-            for ij=1:size(obj.HRKernel,2)
-                obj.weighted_HRKernel(:,ij) = obj.HRKernel(:,ij).*obj.shell_weight;
-            end
+            obj.weighted_LRKernel = obj.LRKernel .* repmat(obj.shell_weight,[1 size(obj.LRKernel,2)]);
+            obj.weighted_HRKernel = obj.HRKernel .* repmat(obj.shell_weight,[1 size(obj.HRKernel,2)]);
             
         end
         

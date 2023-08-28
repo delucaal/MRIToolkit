@@ -1,0 +1,13 @@
+# A simple definition file for placing NIFTI files in subfolders
+# based on their name. 
+# The format is keyword,subfolder. MRIToolkit will look for
+# *keywork* in the NIFTI filename
+
+t1,anat
+t2,anat
+flair,anat
+dwi,dwi
+dti,dwi
+dmri,dwi
+fmri,func
+bold,func
