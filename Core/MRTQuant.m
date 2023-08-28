@@ -1257,6 +1257,9 @@ classdef MRTQuant < handle
             % bvec_file: The corresponding .bvec file (only in combination with nii_file)
             % txt_file: as alternative to bval/bvec
             % topup_nii: a .nii_file acquired with reversed phase encoding (optional).
+            %   If this file has less encodings than mat_file/nii_file, it is
+            %   only used to estimate the distortion correction field.
+            %   Otherwise, it is passed along to Eddy for full reconstruction.
             % topup_dir: 1 for LR, 2 for AP (default), 3 for FH
             % repol: 1 to enable automated outlier rejection (default = 0)
             % Only reversed b=0s/mm2 are supported at this stage
@@ -1330,7 +1333,7 @@ classdef MRTQuant < handle
                 end
             else
                 [a,~] = system(['' MRIToolkit.FSL '/bin/topup']);
-                if(a ~= 0)
+                if(a ~= 0 && a ~= 1)
                     [a,~] = system('". ~/.profile;. ~/.bashrc; topup');
                     if(a ~= 0)
                         error('Cannot find FSL in the provided path.')
@@ -1351,12 +1354,17 @@ classdef MRTQuant < handle
                 end
             end
 
-            if(isempty(txt_file))
+            if(isempty(txt_file) && isempty(mat_file))
                 bvals = load(bval_file);
                 copyfile(bval_file,fullfile(temp_direc,'bvals'));
                 copyfile(bvec_file,fullfile(temp_direc,'bvecs'));
             else
-                [bvals,bvecs] = MRTQuant.bval_bvec_from_b_Matrix(load(txt_file));
+                if(isempty(mat_file))
+                    [bvals,bvecs] = MRTQuant.bval_bvec_from_b_Matrix(load(txt_file));
+                else
+                    g = load(mat_file,'b');
+                    [bvals,bvecs] = MRTQuant.bval_bvec_from_b_Matrix(g.b);
+                end
                 t_bvals = bvals';
                 t_bvecs = bvecs';
                 save(fullfile(temp_direc,'bvals'),'t_bvals','-ascii');
@@ -1368,6 +1376,7 @@ classdef MRTQuant < handle
                 data = MRTQuant.LoadNifti(fullfile(temp_direc,'data.nii'));
             else
                 data = MRTQuant.EDTI_Data_2_MRIToolkit('mat_file',mat_file,'no_preproc',1);
+                MRTQuant.WriteNifti(data,fullfile(temp_direc,'data.nii'));
             end
 
             if(~isempty(topup_nii))
@@ -1434,7 +1443,11 @@ classdef MRTQuant < handle
                         ' --iout=' fullfile(temp_direc,'unwarped_b0s.nii') ' -v --config=b02b0.cnf'];
                 end
 
-                system(cmd);
+                if(ismac)
+                    system(['. ~/.zprofile; ' cmd]);
+                else
+                    system(cmd);
+                end
             else
                 % Prepare the descriptor file
                 pe_inst_1 = [0 1 0 0.01];
@@ -1443,7 +1456,25 @@ classdef MRTQuant < handle
 
             % Run EDDY
 
-            indices = ones(1,length(bvals));
+            if(isempty(topup_nii) || length(rev_bvals) ~= length(bvals))                   
+                indices = ones(1,length(bvals));
+            else
+                indices = [ones(1,length(bvals)) (sum(b0s>0)+1)*ones(1,length(bvals))];
+                % Concatenate Data
+                data = MRTQuant.LoadNifti(fullfile(temp_direc,'data.nii'));
+                data_rev = MRTQuant.LoadNifti(fullfile(temp_direc,'data_rev.nii'));
+                B0_1 = data.img(:,:,:,find(bvals == min(bvals),1));
+                B0_2 = data_rev.img(:,:,:,find(rev_bvals == min(rev_bvals),1));
+                R = nanmean(B0_1(:))/nanmean(B0_2(:)); % Ensure that the scaling is consistent
+                data.img = cat(4,data.img,data_rev.img*R);
+
+                bvals = [bvals' rev_bvals];
+                save(fullfile(temp_direc,'bvals'),'bvals','-ascii');
+                bvecs = [bvecs' load(strrep(bval_reverse_file,'.bval','.bvec'))];
+                save(fullfile(temp_direc,'bvecs'),'bvecs','-ascii');
+                
+                MRTQuant.WriteNifti(data,fullfile(temp_direc,'data.nii'),0);
+            end
             save(fullfile(temp_direc,'indices.txt'),'indices','-ascii');
 
             % Derive a mask
@@ -1458,7 +1489,7 @@ classdef MRTQuant < handle
             MRTQuant.WriteNifti(mask,fullfile(temp_direc,'mask.nii'));
 
             if(ispc)
-                % remap for BASH
+                % remap for BASH (WSL)
                 b_temp = strrep(temp_direc,'C:','c');
                 b_temp = strrep(b_temp,'D:','d');
                 b_temp = strrep(b_temp,'E:','e');
@@ -1466,7 +1497,7 @@ classdef MRTQuant < handle
                 b_temp = strrep(b_temp,'\','/');
                 b_temp = ['/mnt/' b_temp];
 
-                cmd = [base_cmd 'eddy_openmp --imain=' b_temp '/data.nii' ...
+                cmd = [base_cmd 'eddy --imain=' b_temp '/data.nii' ...
                     ' --bvals=' b_temp '/bvals' ...
                     ' --bvecs=' b_temp '/bvecs' ...
                     ' --acqp=' b_temp '/topup.txt' ...
@@ -1487,7 +1518,7 @@ classdef MRTQuant < handle
 
                 cmd = [cmd '"'];
             else
-                cmd = [base_cmd 'eddy_openmp --imain=' fullfile(temp_direc,'data.nii') ...
+                cmd = [base_cmd 'eddy --imain=' fullfile(temp_direc,'data.nii') ...
                     ' --bvals=' fullfile(temp_direc,'bvals') ...
                     ' --bvecs=' fullfile(temp_direc,'bvecs') ...
                     ' --acqp=' fullfile(temp_direc,'topup.txt') ...
@@ -1505,6 +1536,10 @@ classdef MRTQuant < handle
                 if(~isempty(topup_nii))
                     cmd = [cmd ' --topup=' fullfile(temp_direc,'topup')];
                 end
+
+                if(ismac)
+                    cmd = ['. ~/.zprofile; ' cmd];
+                end
             end
             system(cmd);
 
@@ -1515,6 +1550,10 @@ classdef MRTQuant < handle
                 end
             else
                 output = [output '.nii.gz'];
+            end
+            if(exist(fullfile(temp_direc,'eddy_corrected.nii.gz'),'file') < 1)
+                cmd = strrep(cmd,';eddy ',';eddy_openmp ');
+                system(cmd);
             end
             copyfile(fullfile(temp_direc,'eddy_corrected.nii.gz'),output);
             copyfile(fullfile(temp_direc,'eddy_corrected.eddy_rotated_bvecs'),...
@@ -2228,8 +2267,9 @@ classdef MRTQuant < handle
             ncomponents = components_blocks{1};
                 
             if(nargin > 1)
+                [sx,sy,sz,st] = size(vol.img);
                 OUT.VD = vol.VD;
-                OUT.img = DataRecon;
+                OUT.img = DataRecon(1:sx,1:sy,1:sz,1:st);
                 MRTQuant.WriteNifti(OUT,[save_prefix '_denoised.nii']);
                 OUT.img = noise_map;
                 MRTQuant.WriteNifti(OUT,[save_prefix '_noisemap.nii']);
@@ -3286,6 +3326,8 @@ avg_data.img = zeros([size(data.img(:,:,:,1)) length(avg_data.bvals)]);
 avg_data.bvecs = zeros(length(avg_data.bvals),3);
 avg_data.mask = data.mask;
 
+data.img(data.img < 0) = 0;
+
 for ij=1:length(avg_data.bvals)
     SEL = abs(data.bvals-avg_data.bvals(ij)) < 1;
     avg_data.img(:,:,:,ij) = geomean(squeeze(data.img(:,:,:,SEL)),4);
@@ -3488,15 +3530,16 @@ end
 if(do_clean == 1)
     NGnii.img = NG(:,:,:,1);
     FractionsNii.img = LSQNONNEG_CL_f;
-    FractionsNii.img = LSQNONNEG_CL_D_mu;
+    FractionsD = FractionsNii;
+    FractionsD.img = LSQNONNEG_CL_D_mu;
     if(contains(data_name,'.mat'))
         MRTQuant.WriteNifti(NGnii,[parameters.output_prefix '_NG.nii'],0);
         MRTQuant.WriteNifti(FractionsNii,[parameters.output_prefix '_f.nii'],0);
-        MRTQuant.WriteNifti(FractionsNii,[parameters.output_prefix '_D.nii'],0);
+        MRTQuant.WriteNifti(FractionsD,[parameters.output_prefix '_D.nii'],0);
     else
         save_untouch_nii(NGnii,[parameters.output_prefix '_NG.nii']);
         save_untouch_nii(FractionsNii,[parameters.output_prefix '_f.nii']);
-        save_untouch_nii(FractionsNii,[parameters.output_prefix '_D.nii']);
+        save_untouch_nii(FractionsD,[parameters.output_prefix '_D.nii']);
     end
 end
 

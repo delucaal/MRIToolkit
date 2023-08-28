@@ -32,7 +32,7 @@ classdef ReportMaker < handle
              if(strcmpi(folders(foid).name(1),'.') > 0)
                  continue
              end
-             me.AddFolder(fullfile(root_folder,folders(foid).name));
+             me.AddFolder(fullfile(folders(foid).folder,folders(foid).name));
           end
        end
        
@@ -100,7 +100,7 @@ classdef ReportMaker < handle
                        
                        html_code = concat_html(html_code,'<th>');
                       
-                       file = dir(fullfile(me.datafolder,the_folder,cel.rel_path_to_file,cel.search_string));
+                       file = dir(fullfile(the_folder,cel.rel_path_to_file,cel.search_string));
                        if(isempty(file) || length(file) > 1)
                            warning('CHECK 1');
                            html_code = concat_html(html_code,'</th>');
@@ -121,7 +121,7 @@ classdef ReportMaker < handle
                               else
                                   overlay_img = 0;
                                   if(cel.overlay_on ~= 0)
-                                     tfile = dir(fullfile(me.datafolder,the_folder, me.images2scan{cel.overlay_on}.rel_path_to_file, me.images2scan{cel.overlay_on}.search_string));
+                                     tfile = dir(fullfile(the_folder, me.images2scan{cel.overlay_on}.rel_path_to_file, me.images2scan{cel.overlay_on}.search_string));
                                      [~,tfn,~] = fileparts(tfile.name);
                                      overlay_img = ['Niftis/' spf '_' tfn '.nii'];
                                   end
@@ -139,7 +139,7 @@ classdef ReportMaker < handle
                           else
                               overlay_img = 0;
                               if(cel.overlay_on ~= 0)
-                                 tfile = dir(fullfile(me.datafolder,the_folder, me.images2scan{cel.overlay_on}.rel_path_to_file, me.images2scan{cel.overlay_on}.search_string));
+                                 tfile = dir(fullfile(the_folder, me.images2scan{cel.overlay_on}.rel_path_to_file, me.images2scan{cel.overlay_on}.search_string));
                                  [~,tfn,~] = fileparts(tfile.name);
                                  overlay_img = ['Niftis/' spf '_' tfn '.nii'];
                               end

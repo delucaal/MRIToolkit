@@ -209,9 +209,9 @@ classdef MRT_Library < handle
             nhr_vert = sum(nreconstruction_vertices);
             
             for ij=1:length(nreconstruction_vertices)
-                super_scheme{ij} = gen_scheme(nreconstruction_vertices(ij),4); % the reconstruction scheme. Change 300 to any number
+                super_scheme{ij} = MRT_Library.gen_scheme(nreconstruction_vertices(ij),4); % the reconstruction scheme. Change 300 to any number
                 [phi{ij}, theta{ij}] = cart2sph(super_scheme{ij}.vert(:,1),super_scheme{ij}.vert(:,2),super_scheme{ij}.vert(:,3)); % polar decomposition
-                lr_scheme{ij} = gen_scheme(min(length(data.bvals),lr_nreconstruction_vertices(ij)),4);
+                lr_scheme{ij} = MRT_Library.gen_scheme(min(length(data.bvals),lr_nreconstruction_vertices(ij)),4);
                 [phi_LR{ij}, theta_LR{ij}] = cart2sph(lr_scheme{ij}.vert(:,1),lr_scheme{ij}.vert(:,2),lr_scheme{ij}.vert(:,3));
                 
                 nlr_vert = nlr_vert + size(lr_scheme{ij}.vert,1);
@@ -271,13 +271,13 @@ classdef MRT_Library < handle
                     % ISOTROPIC PART
                     % HR
                     for l=1:length(isoDs)
-                        Kernel{ij}(:,end+1) = create_signal_multi_tensor([0 0], 1, [isoDs(l) isoDs(l) isoDs(l)], ...
+                        Kernel{ij}(:,end+1) = MRT_Library.create_signal_multi_tensor([0 0], 1, [isoDs(l) isoDs(l) isoDs(l)], ...
                             bmat{ij}(:,4), bmat{ij}(:,1:3), 1, 0, 0);
                     end
                     
                     % LR
                     for l=1:length(isoDs)
-                        Kernel_LR{ij}(:,end+1) = create_signal_multi_tensor([0 0], 1, [isoDs(l) isoDs(l) isoDs(l)], ...
+                        Kernel_LR{ij}(:,end+1) = MRT_Library.create_signal_multi_tensor([0 0], 1, [isoDs(l) isoDs(l) isoDs(l)], ...
                             bmat{ij}(:,4), bmat{ij}(:,1:3), 1, 0, 0);
                     end
                     
@@ -319,12 +319,12 @@ classdef MRT_Library < handle
                 % ISOTROPIC PART
                 % HR
                 for l=1:length(isoDs)
-                    HRKernel(:,hr_index_columns+l) = create_signal_multi_tensor([0 0], 1, [isoDs(l) isoDs(l) isoDs(l)], ...
+                    HRKernel(:,hr_index_columns+l) = MRT_Library.create_signal_multi_tensor([0 0], 1, [isoDs(l) isoDs(l) isoDs(l)], ...
                         bmat{1}(:,4), bmat{1}(:,1:3), 1, 0, 0);
                 end
                 % LR
                 for l=1:length(isoDs)
-                    LRKernel(:,lr_index_columns+l) = create_signal_multi_tensor([0 0], 1, [isoDs(l) isoDs(l) isoDs(l)], ...
+                    LRKernel(:,lr_index_columns+l) = MRT_Library.create_signal_multi_tensor([0 0], 1, [isoDs(l) isoDs(l) isoDs(l)], ...
                         bmat{1}(:,4), bmat{1}(:,1:3), 1, 0, 0);
                 end
             end
@@ -1250,8 +1250,14 @@ classdef MRT_Library < handle
                             || isempty(MRIToolkit.fibertracker.type))
                         t = SHTracker(v2w);
                     else
-                        disp('Not yet supported')
-                        continue
+%                         disp('Not yet supported')
+%                         continue
+                          disp('You are using a very experimental fiber tracker!');
+                          t = DistProbSHTracker(v2w);
+                          t.setNumberOfIterations(10);
+                          t.setParametersSD(0.3,10);
+                          t.weight_mode = 0;
+
 %                         eval(['t = ' MRIToolkit.fibertracker.type '(v2w);']);
 %                         if(isfield(MRIToolkit.fibertracker,'parameters'))
 %                             fields = fieldnames(MRIToolkit.fibertracker.parameters);
