@@ -44,6 +44,9 @@ classdef MRTQuant < handle
             end
 
             if(use_original_header < 1 || ~isfield(data,'hdr'))
+                if(isfield(data,'hdr'))
+                    data = rmfield(data,'hdr');
+                end
                 EDTI_Library.E_DTI_write_nifti_file(data.img, data.VD, file_name);
             else
                 data.img = flip(data.img,1);
@@ -64,7 +67,7 @@ classdef MRTQuant < handle
                 data.hdr.dime.datatype = 16;
                 data.hdr.dime.bitpix = 32;
 
-                data.hdr.dime.pixdim(2:4) = data.VD;
+                data.hdr.dime.pixdim(2:4) = data.VD([2 1 3]);
 
                 if(MRIToolkit.EnforceNiiGz > 0 && ~contains(file_name,'nii.gz'))
                     file_name = strrep(file_name,'nii','nii.gz');
