@@ -1684,10 +1684,12 @@ classdef MRTQuant < handle
         function ConcatenateVolumes(varargin)
             % Concatenate multiple 4D volumes along the 4-th dimension
             % Assumes corresponding .txt files or .bval / .bvec to be present
-            % with teh smae filename
+            % with the same filename
             % Input arguments:
             % nii_files: a cell array containing a list of .nii files separated by comma
             % output: the new .nii file containing a subset of the volumes.
+            % scale_wb0s: 0 or 1 (default 0). Whether to ensure intensities
+            %   are consistent across scans by looking at b0s
             if(isempty(varargin))
                 my_help('MRTQuant.ConcatenateVolumes');
                 return;
@@ -1700,6 +1702,11 @@ classdef MRTQuant < handle
             file_in = GiveValueForName(coptions,'nii_files');
             if(isempty(file_in))
                 error('Need to specify the input .nii files');
+            end
+            
+            scale_wb0s = GiveValueForName(coptions,'scale_wb0s');
+            if(isempty(scale_wb0s))
+                scale_wb0s = 0;
             end
 
             outname = GiveValueForName(coptions,'output');
@@ -1717,28 +1724,86 @@ classdef MRTQuant < handle
 
             final_vol.img = [];
             final_txt = [];
+            final_bv = [];
+            use_txt_or_bvalbvec = 1;
+            
             for volid=1:length(volumes)
-                data = MRTQuant.LoadNifti(volumes{volid});
+                ON = fullfile(MRT_Library.CreateTemporaryDir(),'1.nii');
+                MRTQuant.ApplyRescaleSlope('nii_file',volumes{volid},...
+                    'output',ON);
+                MRTQuant.ConformSpatialDimensions('nii_file',ON,...
+                    'output',ON);
+                data = MRTQuant.LoadNifti(ON);
+                delete(ON);
+                
                 if(contains(volumes{volid},'nii.gz'))
-                    bmat = load(strrep(volumes{volid},'nii.gz','txt'));
+                    bmat = strrep(volumes{volid},'nii.gz','txt');
                 elseif(contains(volumes{volid},'nii'))
-                    bmat = load(strrep(volumes{volid},'nii','txt'));
+                    bmat = strrep(volumes{volid},'nii','txt');
                 end
+                if(exist(bmat,'file') < 1)
+                    disp('Using bval/bvec instead of txt');
+                    use_txt_or_bvalbvec = 2;
+                    try
+                        bval = load(strrep(bmat,'.txt','.bval'));
+                        bvec = load(strrep(bmat,'.txt','.bvec'));
+                    catch
+                        disp(['Cannot find txt or bval/bvec for ' ...
+                            volumes{volid} ', skipping']);
+                        continue
+                    end
+                else
+                    bmat = load(bmat);
+                end
+                
                 if(~isempty(final_vol.img))
-                    final_vol.img = cat(4,final_vol.img,data.img);
-                    final_txt = cat(1,final_txt,bmat);
+                    if(use_txt_or_bvalbvec == 1)
+                        bv = sum(final_txt(:,[1 4 6]),2);
+                        bvp = sum(bmat(:,[1 4 6]),2);
+                        b0s_pre = bv <= min(bv);
+                        b0s_post = bvp <= min(bvp);
+                        final_txt = cat(1,final_txt,bmat);
+                    else
+                        b0s_pre = final_bv(:,end) <= min(final_bv(:,end));
+                        b0s_post = bval <= min(bval);
+                        final_bv = cat(1,final_bv,[bvec' bval']);
+                    end
+                    if(scale_wb0s == 1) % Ensure intensities are consistent across scans
+                       b0s_pre = mean(final_vol.img(:,:,:,b0s_pre),4);
+                       b0s_post = mean(data.img(:,:,:,b0s_post),4);
+                       V_pre = mean(b0s_pre(:));
+                       V_post = mean(b0s_post(:));
+                       R = V_pre/V_post;
+                    else
+                        R = 1;
+                    end
+                    final_vol.img = cat(4,final_vol.img,data.img*R);
                 else
                     final_vol.img = data.img;
                     final_vol.VD = data.VD;
-                    final_txt = bmat;
+                    if(use_txt_or_bvalbvec == 1)
+                        final_txt = bmat;
+                    else
+                        final_bv = [bvec' bval'];
+                    end
                 end
             end
 
-            MRTQuant.WriteNifti(final_vol,outname);
-            if(contains(outname,'nii.gz'))
-                save(strrep(outname,'nii.gz','txt'),'final_txt','-ascii');
-            elseif(contains(outname,'nii'))
-                save(strrep(outname,'nii','txt'),'final_txt','-ascii');
+            MRTQuant.WriteNifti(final_vol,outname,0);
+            if(use_txt_or_bvalbvec == 1)
+                outname = strrep(outname,'.nii.gz','.txt');
+                outname = strrep(outname,'.nii','.txt');
+                save(outname,'final_txt','-ascii');
+                outname = strrep(out_name,'.txt','');
+            else
+                outname = strrep(outname,'.nii.gz','.nii');
+                outname = strrep(outname,'.nii','.bval');
+                bv = final_bv(:,end)';
+                save(outname,'bv','-ascii');
+                outname = strrep(outname,'.bval','.bvec');
+                bv = final_bv(:,1:3)';
+                save(outname,'bv','-ascii');
+                outname = strrep(outname,'.bvec','');
             end
             NiftiIO_basic.WriteJSONDescription('output',outname(1:end-4),'props',json);
         end
@@ -2161,8 +2226,16 @@ classdef MRTQuant < handle
             end
 
             ms2 = (default_extent-1)/2;
+            ms12 = ms2+1;
+            [sx,sy,sz,st] = size(vol.img);
+            % Zero padding
+            ovol = vol.img;
+            vol.img = zeros(sx+2*ms2,sy+2*ms2,sz+2*ms2,st);
+            vol.img(ms2+1:end-ms2,ms2+1:end-ms2,ms2+1:end-ms2,:) = ovol;
+            clear ovol;
+            
             pool = gcp;
-            data_blocks = ceil(size(vol.img,3)/pool.NumWorkers);
+            data_blocks = floor(size(vol.img,3)/pool.NumWorkers);
 
             data_in_blocks = cell(pool.NumWorkers,1);
             components_blocks = cell(pool.NumWorkers,1);
@@ -2171,9 +2244,15 @@ classdef MRTQuant < handle
             global_indices = cell(pool.NumWorkers,1);
 
             for ikx=1:pool.NumWorkers
-                indices = max(1,(ikx-1)*data_blocks-default_extent):min(size(vol.img,3),ikx*data_blocks+default_extent);
+                indices = max(1,(ikx-1)*data_blocks-ms12):min(size(vol.img,3),ikx*data_blocks+ms12);
                 data_in_blocks(ikx) = {vol.img(:,:,indices,:)};
                 global_indices(ikx) = {indices};
+            end
+            if(ikx*data_blocks < sz)
+               % Make sure to include the whole volume
+               indices = indices{end}(end)+1:sz; 
+               data_in_blocks(end) = {cat(3,data_in_blocks{end},vol.img(:,:,indices,:))};
+               global_indices(end) = {cat(2,global_indices{end},indices)};
             end
 
             parfor block=1:pool.NumWorkers
@@ -2256,31 +2335,34 @@ classdef MRTQuant < handle
 
             t = toc;
     
-            components_blocks(1) = {components_blocks{1}(:,:,1:end-default_extent-1)};
-            sigma_blocks(1) = {sigma_blocks{1}(:,:,1:end-default_extent-1)};
-            datarecon_blocks(1) = {datarecon_blocks{1}(:,:,1:end-default_extent-1,:)};     
-            global_indices(1) = {global_indices{1}(1:end-default_extent-1)};
+            components_blocks(1) = {components_blocks{1}(:,:,1:end-ms12-1)};
+            sigma_blocks(1) = {sigma_blocks{1}(:,:,1:end-ms12-1)};
+            datarecon_blocks(1) = {datarecon_blocks{1}(:,:,1:end-ms12-1,:)};     
+            global_indices(1) = {global_indices{1}(1:end-ms12-1)};
             for ixx=2:pool.NumWorkers-1
-                components_blocks(1) = {cat(3,components_blocks{1},components_blocks{ixx}(:,:,default_extent+1:end-default_extent-1))};
-                sigma_blocks(1) = {cat(3,sigma_blocks{1},sigma_blocks{ixx}(:,:,default_extent+1:end-default_extent-1))};
-                datarecon_blocks(1) = {cat(3,datarecon_blocks{1},datarecon_blocks{ixx}(:,:,default_extent+1:end-default_extent-1,:))};
-                global_indices(1) = {cat(2,global_indices{1},global_indices{ixx}(default_extent+1:end-default_extent-1))};
+                components_blocks(1) = {cat(3,components_blocks{1},components_blocks{ixx}(:,:,ms12+1:end-ms12-1))};
+                sigma_blocks(1) = {cat(3,sigma_blocks{1},sigma_blocks{ixx}(:,:,ms12+1:end-ms12-1))};
+                datarecon_blocks(1) = {cat(3,datarecon_blocks{1},datarecon_blocks{ixx}(:,:,ms12+1:end-ms12-1,:))};
+                global_indices(1) = {cat(2,global_indices{1},global_indices{ixx}(ms12+1:end-ms12-1))};
             end
-            components_blocks(1) = {cat(3,components_blocks{1},components_blocks{end}(:,:,default_extent+1:end))};
-            sigma_blocks(1) = {cat(3,sigma_blocks{1},sigma_blocks{end}(:,:,default_extent+1:end))};
-            datarecon_blocks(1) = {cat(3,datarecon_blocks{1},datarecon_blocks{end}(:,:,default_extent+1:end,:))};
-            global_indices(1) = {cat(2,global_indices{1},global_indices{end}(default_extent+1:end))};
-
+            components_blocks(1) = {cat(3,components_blocks{1},components_blocks{end}(:,:,ms12+1:end))};
+            sigma_blocks(1) = {cat(3,sigma_blocks{1},sigma_blocks{end}(:,:,ms12+1:end))};
+            datarecon_blocks(1) = {cat(3,datarecon_blocks{1},datarecon_blocks{end}(:,:,ms12+1:end,:))};
+            global_indices(1) = {cat(2,global_indices{1},global_indices{end}(ms12+1:end))};
+            errors = sum(diff(global_indices{1}) ~= 1) > 0;
+            if(errors > 0)
+                error('Denoising: slice indices are not correct');
+            end
+            
             DataRecon = datarecon_blocks{1};
             noise_map = sigma_blocks{1};
             ncomponents = components_blocks{1};
                 
             if(nargin > 1)
-                [sx,sy,sz,st] = size(vol.img);
                 OUT.VD = vol.VD;
-                OUT.img = DataRecon(1:sx,1:sy,1:sz,1:st);
+                OUT.img = DataRecon(ms2+1:end-ms2,ms2+1:end-ms2,ms2+1:end-ms2,:);
                 MRTQuant.WriteNifti(OUT,[save_prefix '_denoised.nii']);
-                OUT.img = noise_map;
+                OUT.img = noise_map(ms2+1:end-ms2,ms2+1:end-ms2,ms2+1:end-ms2);
                 MRTQuant.WriteNifti(OUT,[save_prefix '_noisemap.nii']);
                 %                 E_DTI_write_nifti_file(components,VD,[save_prefix '_ncomponents.nii']);
             end

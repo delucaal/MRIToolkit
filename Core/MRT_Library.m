@@ -1574,9 +1574,21 @@ classdef MRT_Library < handle
             end
         end
 
-
         % From ExploreDTI: helper function for Motion/Eddy/EPI correction
         % This actually performs the EPI correction
+        function tmp_dir = CreateTemporaryDir()
+            done = false;
+            while(done == false)
+                par.temp_folder = fullfile(tempdir,['MRT_' num2str(randi(150)) '_' num2str(randi(150)) '_' num2str(randi(150))]);
+                if(exist(par.temp_folder,'dir') < 1)
+                    done= true;
+                end
+            end
+            tmp_dir = par.temp_folder;
+            mkdir(tmp_dir);
+        end
+        
+        % To be completed
         function data = TransformDataWithElastixParams(mat_file,out_name,ref_file,trafo_final_params)
             f_in = mat_file;
             
