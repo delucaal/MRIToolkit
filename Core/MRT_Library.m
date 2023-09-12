@@ -1910,7 +1910,123 @@ classdef MRT_Library < handle
             nv = params{ix};
             nv = [nv(1:sp-1) ' ' newvalue nv(ep:end)];
             params(ix) = {nv};
-        end            
+        end      
+
+        % From ExploreDTI: Helper function for the resampling of 3D volumes
+        function im = Resample_nii_file(im, res, VDims,method)
+            
+            
+            if ndims(im)==3
+                
+                try
+                    im = MRT_Library.Resample_nii_file_3D(im, res, VDims,method);
+                catch
+                    im = [];
+                    return;
+                end
+                
+            elseif ndims(im)==4
+                
+                try
+                    im1 = MRT_Library.Resample_nii_file_3D(im(:,:,:,1), res, VDims,method);
+                catch
+                    im = [];
+                    return;
+                end
+                
+                try
+                    
+                    im1 = repmat(im1,[1 1 1 size(im,4)]);
+                    
+                    for i=2:size(im,4)
+                        
+                        im1(:,:,:,i) = MRT_Library.Resample_nii_file_3D(im(:,:,:,i), res, VDims,method);
+                        
+                    end
+                    
+                    clear im;
+                    im = im1;
+                    clear im1;
+                    
+                catch
+                    im = [];
+                    return;
+                end
+            end
+        end
+        
+        % From ExploreDTI: Helper function for the resampling of 3D volumes
+        function im = Resample_nii_file_3D(im, res, VDims,res_method)
+            
+            if isa(im,'single')
+                fl = 1;
+            elseif isa(im,'int16')
+                fl = 2;
+            elseif isa(im,'uint16')
+                fl = 3;
+            elseif isa(im,'double')
+                fl = 4;
+            elseif isa(im,'int8')
+                fl = 5;
+            elseif isa(im,'uint8')
+                fl = 6;
+            else
+                fl = 7;
+            end
+            
+            im = single(im);
+                        
+            recon_res = VDims;
+            recon_mat = size(im);
+            recon_dims = recon_mat.*recon_res;
+            
+            [xi,yi,zi] = ndgrid(recon_res(1):recon_res(1):recon_dims(1),...
+                recon_res(2):recon_res(2):recon_dims(2),recon_res(3):recon_res(3):recon_dims(3));
+            
+            xi = single(xi);
+            yi = single(yi);
+            zi = single(zi);
+            
+            x_min = min(xi(:));
+            x_max = max(xi(:));
+            y_min = min(yi(:));
+            y_max = max(yi(:));
+            z_min = min(zi(:));
+            z_max = max(zi(:));
+            
+            [xj,yj,zj] = ndgrid(x_min:res(1):x_max,...
+                y_min:res(2):y_max,z_min:res(3):z_max);
+            
+            xj = single(xj);
+            yj = single(yj);
+            zj = single(zj);
+            
+            im = interpn(xi,yi,zi,im,xj,yj,zj,res_method);
+            
+            if fl==1
+                im = single(im);
+            elseif fl==2
+                im = round(im);
+                im(im>intmax('int16')) = intmax('int16');
+                im = int16(im);
+            elseif fl==3
+                im = round(im);
+                im(im>intmax('uint16')) = intmax('uint16');
+                im = uint16(im);
+            elseif fl==4
+                im = double(im);
+            elseif fl==5
+                im = round(im);
+                im(im>intmax('int8')) = intmax('int8');
+                im = int8(im);
+            elseif fl==6
+                im = round(im);
+                im(im>intmax('uint8')) = intmax('uint8');
+                im = uint8(im);
+            elseif fl==7
+                im = single(im);
+            end
+        end
 
     function out = my_help(fname)
             if(isdeployed)

@@ -474,6 +474,7 @@ classdef MRTQuant < handle
             % nii_file: The file to flip permute.
             % output: The flip/permuted file.
             % res: the desired resolutio, e.g. [1 1 1]
+            % method: spline (default), linear or nearest.
             if(isempty(varargin))
                 my_help('MRTQuant.ResampleDataSpatially');
                 return;
@@ -501,9 +502,14 @@ classdef MRTQuant < handle
                 file_out = [file_in(1:end-4) '_resampled.nii'];
             end
 
+            method = GiveValueForName(coptions,'method');
+            if(isempty(method))
+                method = 'spline';
+            end
+
             data = MRTQuant.LoadNifti(file_in);
 
-            data.img = EDTI_Library.E_DTI_resample_nii_file(data.img, tgt_res, data.VD);
+            data.img = MRT_Library.Resample_nii_file(data.img, tgt_res, data.VD,method);
             data.VD = tgt_res;
             if(isfield(data,'hdr'))
                 data = rmfield(data,'hdr');
