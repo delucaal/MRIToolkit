@@ -1794,7 +1794,7 @@ classdef MRTQuant < handle
                 outname = strrep(outname,'.nii.gz','.txt');
                 outname = strrep(outname,'.nii','.txt');
                 save(outname,'final_txt','-ascii');
-                outname = strrep(out_name,'.txt','');
+                outname = strrep(outname,'.txt','');
             else
                 outname = strrep(outname,'.nii.gz','.nii');
                 outname = strrep(outname,'.nii','.bval');
@@ -2250,7 +2250,7 @@ classdef MRTQuant < handle
             end
             if(ikx*data_blocks < sz)
                % Make sure to include the whole volume
-               indices = indices{end}(end)+1:sz; 
+               indices = indices(end)+1:sz; 
                data_in_blocks(end) = {cat(3,data_in_blocks{end},vol.img(:,:,indices,:))};
                global_indices(end) = {cat(2,global_indices{end},indices)};
             end
