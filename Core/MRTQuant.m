@@ -2244,7 +2244,7 @@ classdef MRTQuant < handle
             end
             if(ikx*data_blocks < sz)
                % Make sure to include the whole volume
-               indices = indices{end}(end)+1:sz; 
+               indices = indices(end)+1:sz; 
                data_in_blocks(end) = {cat(3,data_in_blocks{end},vol.img(:,:,indices,:))};
                global_indices(end) = {cat(2,global_indices{end},indices)};
             end
@@ -2329,10 +2329,11 @@ classdef MRTQuant < handle
 
             t = toc;
     
-            components_blocks(1) = {components_blocks{1}(:,:,1:end-ms12-1)};
-            sigma_blocks(1) = {sigma_blocks{1}(:,:,1:end-ms12-1)};
-            datarecon_blocks(1) = {datarecon_blocks{1}(:,:,1:end-ms12-1,:)};     
-            global_indices(1) = {global_indices{1}(1:end-ms12-1)};
+            eb1 = find(global_indices{1} == global_indices{2}(ms12+1));
+            components_blocks(1) = {components_blocks{1}(:,:,1:eb1-1)};
+            sigma_blocks(1) = {sigma_blocks{1}(:,:,1:eb1-1)};
+            datarecon_blocks(1) = {datarecon_blocks{1}(:,:,1:eb1-1,:)};     
+            global_indices(1) = {global_indices{1}(1:eb1-1)};
             for ixx=2:pool.NumWorkers-1
                 components_blocks(1) = {cat(3,components_blocks{1},components_blocks{ixx}(:,:,ms12+1:end-ms12-1))};
                 sigma_blocks(1) = {cat(3,sigma_blocks{1},sigma_blocks{ixx}(:,:,ms12+1:end-ms12-1))};

@@ -2505,7 +2505,8 @@ classdef EDTI_Library < handle
                 I = flipdim(I,2);
                 
                 if gzipped==1 || temp_file == true
-                    delete(fn)
+                    delete(fn);
+                    rmdir(temp_path);
                 end
                 
                 

@@ -1922,7 +1922,27 @@ classdef MRT_Library < handle
             nv = params{ix};
             nv = [nv(1:sp-1) ' ' newvalue nv(ep:end)];
             params(ix) = {nv};
-        end            
+        end  
+        
+        % Vectorize a 3D/4D NIFTI dataset to 1D/2D
+        function data = Vectorize(data_in)
+           data = data_in;
+           sx = data_in.hdr.dime.dim(2);
+           sy = data_in.hdr.dime.dim(3);
+           sz = data_in.hdr.dime.dim(4);
+           st = data_in.hdr.dime.dim(5);
+           data.img = reshape(data.img,sx*sy*sz,st);
+        end
+        
+        % Unvectorize a 3D/4D NIFTI dataset to 1D/2D
+        function data = Unvectorize(data_in)
+           data = data_in;
+           sx = data_in.hdr.dime.dim(2);
+           sy = data_in.hdr.dime.dim(3);
+           sz = data_in.hdr.dime.dim(4);
+           st = data_in.hdr.dime.dim(5);
+           data.img = reshape(data.img,sx,sy,sz,st);
+        end
 
     function out = my_help(fname)
             if(isdeployed)
