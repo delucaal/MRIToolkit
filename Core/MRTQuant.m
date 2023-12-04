@@ -2335,10 +2335,11 @@ classdef MRTQuant < handle
 
             t = toc;
     
-            components_blocks(1) = {components_blocks{1}(:,:,1:end-ms12-1)};
-            sigma_blocks(1) = {sigma_blocks{1}(:,:,1:end-ms12-1)};
-            datarecon_blocks(1) = {datarecon_blocks{1}(:,:,1:end-ms12-1,:)};     
-            global_indices(1) = {global_indices{1}(1:end-ms12-1)};
+            eb1 = find(global_indices{1} == global_indices{2}(ms12+1));
+            components_blocks(1) = {components_blocks{1}(:,:,1:eb1-1)};
+            sigma_blocks(1) = {sigma_blocks{1}(:,:,1:eb1-1)};
+            datarecon_blocks(1) = {datarecon_blocks{1}(:,:,1:eb1-1,:)};     
+            global_indices(1) = {global_indices{1}(1:eb1-1)};
             for ixx=2:pool.NumWorkers-1
                 components_blocks(1) = {cat(3,components_blocks{1},components_blocks{ixx}(:,:,ms12+1:end-ms12-1))};
                 sigma_blocks(1) = {cat(3,sigma_blocks{1},sigma_blocks{ixx}(:,:,ms12+1:end-ms12-1))};

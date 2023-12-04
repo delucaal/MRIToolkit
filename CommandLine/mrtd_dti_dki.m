@@ -106,5 +106,7 @@ MRTQuant.PerformDTI_DKIFit('nii_file',temp_file,'txt_file',[dest_basename '.txt'
     'mk_curve',mkcurve,'fit_mode',estimator);
 
 MRTQuant.MatMetrics2Nii([outfile '.mat'],dki);
+delete([dest_basename '*']);
+delete([temp_file '*']);
 
 end
