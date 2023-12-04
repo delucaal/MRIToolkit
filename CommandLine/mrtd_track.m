@@ -1,9 +1,11 @@
 function mrtd_track(varargin)
     disp('mrtd_track');
     coptions = varargin;
-    if(length(varargin{1}) > 1)
-        coptions = varargin{1};
-    end
+    % if(nargin > 0 && length(varargin{1}) > 1)
+    %     coptions = varargin{1};
+    % else
+    %     coptions = {};
+    % end
     %     disp(varargin)
 
     if(isempty(coptions) || isempty(coptions{1}) || strcmpi(coptions{1},'-help'))
@@ -99,13 +101,13 @@ end
 
 if(isempty(fod))
     disp('Performing DTI based tractography');
-    MRTQuant.PerformDTIBased_FiberTracking('mat_file',temp_mat_file,...
+    MRTTrack.PerformDTIBased_FiberTracking('mat_file',temp_mat_file,...
         'SeedPointRes', seed_res, 'AngleThresh', angle_thresh,...
         'StepSize', step_size, 'SeedMask', seed_mask_file,...
         'output',outfile);    
 else
     disp('Performing FOD based tractography');
-    MRTQuant.PerformFODBased_FiberTracking('mat_file',temp_mat_file,...
+    MRTTrack.PerformFODBased_FiberTracking('mat_file',temp_mat_file,...
         'fod_file',fod,'SeedPointRes', seed_res, 'AngleThresh', angle_thresh,...
         'StepSize', step_size, 'SeedMask', seed_mask_file,...
         'FODThresh',fod_thresh,'output',outfile);
