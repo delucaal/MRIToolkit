@@ -1944,8 +1944,6 @@ classdef MRT_Library < handle
            data.img = reshape(data.img,sx,sy,sz,st);
         end
 
-        end      
-
         % From ExploreDTI: Helper function for the resampling of 3D volumes
         function im = Resample_nii_file(im, res, VDims,method)
             
