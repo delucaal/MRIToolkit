@@ -268,10 +268,10 @@ classdef MRTQuant < handle
             json_def = NiftiIO_basic.ReadJSONDescription('json_file',json_in);
 
             try
-                hdr = MRTQuant.LoadNifti(data_in);
+                hdr = load_untouch_nii(data_in);
             catch
                 data_in = [data_in '.gz'];
-                hdr = MRTQuant.LoadNifti(data_in);
+                hdr = load_untouch_nii(data_in);
             end
 
             out_data.img = single(hdr.img);
@@ -285,14 +285,14 @@ classdef MRTQuant < handle
                 end
             end
 
-            out_data.img = permute(out_data.img,[json_def.permute_order; 4]);
+            out_data.img = permute(out_data.img,[json_def.permute_order 4]);
             out_data.hdr = json_def.original_header;
             out_data.hdr.dime.scl_inter = 0;
             out_data.hdr.dime.scl_slope = 1;
             out_data.hdr.dime.datatype = 16;
-            out_data.hdr.dime.bitpix = 32;
-            out_data.untouch = 1;
-            save_untouch_nii(out_data,data_out);
+            out_data.h
+
+            MRTQuant.WriteNifti(out_data,data_out,0);
 
             json.CallFunction = 'MRTQuant.ConformSpatialDimensions';
             json.Description = my_help('MRTQuant.ConformSpatialDimensions');

@@ -1,9 +1,9 @@
 function mrtd_coordsys_fix(varargin)
     disp('mrtd_coordsys_fix');
     coptions = varargin;
-    if(length(varargin{1}) > 1)
-        coptions = varargin{1};
-    end
+    % if(length(varargin{1}) > 1)
+    %     coptions = varargin{1};
+    % end
     %     disp(varargin)
 
     if(isempty(coptions) || isempty(coptions{1}) || strcmpi(coptions{1},'-help'))
@@ -24,7 +24,7 @@ function mrtd_coordsys_fix(varargin)
     if(isempty(file_in))
         error('Need to specify the target .nii file');
     end
-    auto_fix = GiveValueForName(coptions,'-nii');
+    auto_fix = GiveValueForName(coptions,'-auto');
     if(isempty(auto_fix))
         auto_fix = 0;
     end

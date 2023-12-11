@@ -1,9 +1,9 @@
 function mrtd_coordsys_check(varargin)
     disp('mrtd_coordsys_check');
     coptions = varargin;
-    if(length(varargin{1}) > 1)
-        coptions = varargin{1};
-    end
+    % if(length(varargin{1}) > 1)
+    %     coptions = varargin{1};
+    % end
     %     disp(varargin)
 
     if(isempty(coptions) || isempty(coptions{1}) || strcmpi(coptions{1},'-help'))

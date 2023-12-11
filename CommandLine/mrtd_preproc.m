@@ -23,6 +23,8 @@ function mrtd_preproc(varargin)
         help = [help newline '-denoise: 0 or 1. Perform MP-PCA denoising'];        
         help = [help newline '-sdc: 0 or 1. Perform signal drift correction'];        
         help = [help newline '-gibbs: 0 or 1. Perform Gibbs ringing correction'];        
+        help = [help newline '-use_fsl: 0 or 1. Whether to perform the processing via FSL.'];        
+        help = [help newline '-topup: reverse phase encoding file. If specified, processing will be performed via FSL.'];        
         help = [help newline];
         fprintf(help);
         
@@ -114,6 +116,20 @@ function mrtd_preproc(varargin)
     else
         denoise = str2double(denoise);
     end      
+
+    use_fsl = GiveValueForName(coptions,'-use_fsl');
+    if(isempty(use_fsl))
+        use_fsl = 0;
+    else
+        use_fsl = str2double(use_fsl);
+    end      
+
+    topup = GiveValueForName(coptions,'-topup');
+    if(isempty(topup))
+        topup = [];
+    else
+        use_fsl = 1;
+    end      
     
     ext = '.nii';
     shift = 4;
@@ -158,14 +174,44 @@ function mrtd_preproc(varargin)
         'grad_flip',grad_flip);
     
     disp('Motion correction');
+    % If an EPI tgt is specified, make sure it is Elastix "friendly"
     if(~isempty(epi_tgt))
-        MRTQuant.PerformMocoEPI('mat_file',temp_mat_file,'epi_tgt',epi_tgt,'constraint_epi',epi_constraint,'epi_reg_mode',epi_reg_mode,'use_normcorr',epi_normcorr);
-        mrt_data = MRTQuant.EDTI_Data_2_MRIToolkit('mat_file',[temp_mat_file(1:end-4) '_MD_C_trafo.mat']);
+        temp_tgt = strrep(temp_file,'.nii','_target.nii');
+        MRTQuant.ConformSpatialDimensions('nii_file',epi_tgt,'output',temp_tgt);
     else
-        MRTQuant.PerformMocoEPI('mat_file',temp_mat_file);
-        mrt_data = MRTQuant.EDTI_Data_2_MRIToolkit('mat_file',[temp_mat_file(1:end-4) '_MD_C_native.mat']);
+        temp_tgt = [];
     end
-    
+
+    if(use_fsl == 0)
+        if(~isempty(epi_tgt))
+            MRTQuant.PerformMocoEPI('mat_file',temp_mat_file,'epi_tgt',temp_tgt,'constraint_epi',epi_constraint,'epi_reg_mode',epi_reg_mode,'use_normcorr',epi_normcorr);
+            mrt_data = MRTQuant.EDTI_Data_2_MRIToolkit('mat_file',[temp_mat_file(1:end-4) '_MD_C_trafo.mat']);
+        else
+            MRTQuant.PerformMocoEPI('mat_file',temp_mat_file);
+            mrt_data = MRTQuant.EDTI_Data_2_MRIToolkit('mat_file',[temp_mat_file(1:end-4) '_MD_C_native.mat']);
+        end
+    else
+        % First correct for motion and eventually EPI using FSL
+        fsl_preproc = strrep(temp_mat_file,'.mat','_fsl.nii');
+        if(~isempty(topup))
+            MRTQuant.PerformMocoEPI_FSL('mat_file',temp_mat_file,'output',fsl_preproc,...
+                'topup_nii',topup);
+        else
+            MRTQuant.PerformMocoEPI_FSL('mat_file',temp_mat_file,'output',fsl_preproc);
+        end
+        temp_mat_file_fsl = MRTQuant.QuickNiiBvalBvecToMat('nii_file',fsl_preproc,...
+        'bval_file',strrep(fsl_preproc,'.nii','.bval'),'bvec_file',strrep(fsl_preproc,'.nii','.bvec'),'grad_perm',grad_perm,...
+        'grad_flip',grad_flip);
+
+        if(~isempty(epi_tgt))
+            MRTQuant.PerformMocoEPI('mat_file',temp_mat_file_fsl,'epi_tgt',temp_tgt,'constraint_epi',epi_constraint,'epi_reg_mode',epi_reg_mode,'use_normcorr',epi_normcorr,'do_moco',0);
+            mrt_data = MRTQuant.EDTI_Data_2_MRIToolkit('mat_file',[temp_mat_file_fsl(1:end-4) '_MD_C_trafo.mat']);
+        else
+            mrt_data = MRTQuant.EDTI_Data_2_MRIToolkit('mat_file',temp_mat_file_fsl);
+        end
+        delete([temp_mat_file_fsl(1:end-4) '*'])
+    end
+    delete([temp_mat_file(1:end-4) '*'])
 %     [fp,fn,~] = fileparts(output_file);
 %     output_file = fullfile(fp,fn);
     delimiter = strfind(output_file,'.nii');

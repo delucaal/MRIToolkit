@@ -1,20 +1,20 @@
 function mrtd_neuro(varargin)
     disp('mrtd_neuro');
     coptions = varargin;
-    if(length(varargin{1}) > 1)
-        coptions = varargin{1};
-    end
+    % if(length(varargin{1}) > 1)
+    %     coptions = varargin{1};
+    % end
     %     disp(varargin)
 
     if(isempty(coptions) || isempty(coptions{1}) || strcmpi(coptions{1},'-help'))
-        help = 'This tool applies some popular neuroimaging pipelines';
+        help = 'This tool performs some neuroimaging tasks';
         help = [help newline];
-        help = [help newline 'FOD-based usage: mrtd_neuro -t1 t1_file.nii -flair flair.nii -apply cat12pipeline -out output_folder'];
+        help = [help newline 'FOD-based usage: mrtd_neuro -t1 t1_file.nii -flair flair.nii -apply cat12pipeline/brainextraction -out output_folder'];
         help = [help newline];
         help = [help newline '-t1: T1-weighted .nii file'];
         help = [help newline '-flair: FLAIR .nii file'];
-        help = [help newline '-out: output folder'];
-        help = [help newline '-apply: "cat12pipeline"'];
+        help = [help newline '-out: output folder (for cat12) or output file'];
+        help = [help newline '-apply: "cat12pipeline" or "brainextraction"'];
         help = [help newline];
         fprintf(help);
 
@@ -42,6 +42,10 @@ end
 
 if(isempty(outfile))
     error('Missing mandatory argument -out');
+end
+
+if(isempty(t1_file))
+    error('Missing mandatory argument -t1');
 end
 
 try
@@ -76,5 +80,7 @@ if(strcmpi(method,'cat12pipeline'))
     if(should_remove_flair == 1)
         delete(flair_file);
     end
+elseif(strcmpi(method,'brainextraction'))
+    Neuro.BrainExtractionWithRegistration('nii_file',t1_file,'output',outfile);
 end
 end
