@@ -4364,7 +4364,7 @@ if(nargin < 3)
 end
 S = exp(-bvalue*tgt_diffusivity)*ones(size(bh,1),1);
 K = RichardsonLucy(S,bh,200);
-nn_val = max(K)*2;
+nn_val = max(K)*2*0.1; % Modified 11-12-2023 (improves sharpness of FODs and resoution of crossing fibes)
 end
 
 % Function to convert from MAT 2 VTK. Original implementation in

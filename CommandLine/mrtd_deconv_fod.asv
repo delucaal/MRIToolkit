@@ -28,7 +28,7 @@ function mrtd_deconv_fod(varargin)
         help = [help newline '-shell_weight: Inner-shell weighting factor (GRL only)'];
         help = [help newline];
         help = [help newline 'GRL default usage: mrtd_deconv_fod -method grl_auto -nii file.nii -bval file.bval -bvec file.bvec -out GRL_processing'];
-        help = [help newline 'mFOD default usage: mrtd_deconv_fod -method mfod -nii file.nii -bval file.bval -bvec file.bvec -out mFOD_processing -aniso_rf_dki "auto" -aniso_rf_noddi "0.4 1.7 1 0 3 1" -iso_rf 3'];
+        help = [help newline 'mFOD default usage: mrtd_deconv_fod -method mfod -nii file.nii -bval file.bval -bvec file.bvec -out mF -aniso_rf_dki "auto" -aniso_rf_noddi "0.4 1.7 1 0 3 1" -iso_rf 3'];
         help = [help newline];
         fprintf(help);
 
@@ -158,8 +158,7 @@ elseif(strcmp(deconv_method,'grl') || strcmp(deconv_method,'mfod'))
     
     GRL_Results = SD.PerformDeconv();
     MRTTrack.SaveOutputToNii(SD,GRL_Results,outfile);
-elseif(strcmp(deconv_method,'grl_auto'))
-    MRTTrack.PerformGRL('mat_file',temp_mat_file,'output',outfile); 
+
 else
     error(['Unknown deconvolution method ' method]);
 end
