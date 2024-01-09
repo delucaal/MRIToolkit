@@ -698,9 +698,9 @@ classdef EDTI_Library < handle
             TP = MRT_Library.GetElastixParameter(At,'TransformParameters');
             TP = strsplit(TP);
             TP = TP(cellfun(@isempty,TP) == false);
-            Rig{1} = str2double(TP{2});
-            Rig{2} = str2double(TP{1});
-            Rig{3} = str2double(TP{3});            
+            Rig{1} = str2double(TP{3});
+            Rig{2} = str2double(TP{2});
+            Rig{3} = str2double(TP{4});            
             
             % At = textread(Trafo_rig_result,'%s','delimiter','\n','bufsize',2^18);
             
@@ -718,7 +718,7 @@ classdef EDTI_Library < handle
                 if par.R2D.type~=3
                     FinTrafoN{i} = [Fol filesep 'Final_Trafo.txt'];
                     % At{4} = ['(InitialTransformParametersFileName "' for_trafo.trafo_names{i} '")'];
-                    MRT_Library.SetElastixParameter(At,'InitialTransformParametersFileName',for_trafo.trafo_names{i});
+                    At = MRT_Library.SetElastixParameter(At,'InitialTransformParametersFileName',for_trafo.trafo_names{i});
                     %suc = EDTI_Library.E_DTI_SMECEPI_write_tra_file(At,FinTrafoN{i});
                     MRT_Library.WriteElastixParameters(FinTrafoN{i},At);
                     suc = true;
@@ -729,7 +729,7 @@ classdef EDTI_Library < handle
                 else
                     FinTrafoN_R{i} = [Fol filesep 'Final_Trafo_Rigid_step.txt'];
                     FinTrafoN{i} = [Fol filesep 'Final_Trafo.txt'];
-                    MRT_Library.SetElastixParameter(At,'InitialTransformParametersFileName',for_trafo.trafo_names{i});
+                    At = MRT_Library.SetElastixParameter(At,'InitialTransformParametersFileName',for_trafo.trafo_names{i});
                     MRT_Library.WriteElastixParameters(FinTrafoN_R{i},At);
                     suc = true;
                     
@@ -739,7 +739,7 @@ classdef EDTI_Library < handle
                         EDTI_Library.E_DTI_remove_temp_f(for_trafo.dir_temp);
                         return;
                     end
-                    MRT_Library.SetElastixParameter(At_nr,'InitialTransformParametersFileName',FinTrafoN_R{i});
+                    At_nr = MRT_Library.SetElastixParameter(At_nr,'InitialTransformParametersFileName',FinTrafoN_R{i});
                     MRT_Library.WriteElastixParameters(FinTrafoN{i},At_nr);
                     suc = true;
 
@@ -9073,6 +9073,10 @@ classdef EDTI_Library < handle
             %
             %
             seedPoints = zeros(3,n);
+            if(isempty(find(mask,1)))
+                warning('The calculated mask is empty');
+                return
+            end
             i = 1;
             while i<=n
                 point=(rand([3,1]).*(size(mask)-1)')+[1 1 1]';

@@ -3318,7 +3318,10 @@ classdef MRTQuant < handle
                         disp('Some directories could not be deleted. Please retry in a later moment.');
                     end
                 end
+                delete(fullfile(tf,[identifiers{id} '*']));
             end
+            delete(fullfile(tf,'tempnii*'));
+            delete(fullfile(tf,'mrtd*'));
         end
 
     end
