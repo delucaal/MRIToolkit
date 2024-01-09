@@ -2,8 +2,6 @@
 %%% Alberto De Luca - alberto@isi.uu.nl $%%%
 %%% Distributed under the terms of LGPLv3  %%%
 
-
-
 function DW_Elastix_Register(moving,fixed,regparlist,output_dir,mMask,fMask,outfilename)
     global MRIToolkit;
     if(isfield(MRIToolkit,'Elastix'))

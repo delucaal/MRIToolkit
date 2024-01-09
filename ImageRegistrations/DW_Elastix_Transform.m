@@ -2,8 +2,6 @@
 %%% Alberto De Luca - alberto@isi.uu.nl $%%%
 %%% Distributed under the terms of LGPLv3  %%%
 
-
-
 function DW_Elastix_Transform(filein,fileout,transform_parameters)
     global MRIToolkit;
     if(isfield(MRIToolkit,'Elastix'))

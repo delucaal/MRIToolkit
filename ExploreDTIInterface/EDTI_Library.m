@@ -345,13 +345,15 @@ classdef EDTI_Library < handle
                 
                 for i=1:Le
                     
-                    A = textread(trafo_names{i},'%s');
+                    % A = textread(trafo_names{i},'%s');
                     
-                    DM_info{i}{1} = ...
-                        [str2num(A{7})*(180/pi) str2num(A{6})*(180/pi) str2num(A{8})*(180/pi);
-                        str2num(A{16}) str2num(A{15}) str2num(A{17}(1:end-1));
-                        str2num(A{13}) str2num(A{12}) str2num(A{14});
-                        str2num(A{10})  str2num(A{9}) str2num(A{11})];
+                    % DM_info{i}{1} = ...
+                    %     [str2num(A{7})*(180/pi) str2num(A{6})*(180/pi) str2num(A{8})*(180/pi);
+                    %     str2num(A{16}) str2num(A{15}) str2num(A{17}(1:end-1));
+                    %     str2num(A{13}) str2num(A{12}) str2num(A{14});
+                    %     str2num(A{10})  str2num(A{9}) str2num(A{11})];
+                    
+                    DM_info{i}{1} = ImageRegistrations.ElastixRotationMatrix(trafo_names{i});
                     
                     DM_info{i}{2} = EDTI_Library.E_DTI_Tra_Par_2_Tra_Mat(DM_info{i}{1});
                     

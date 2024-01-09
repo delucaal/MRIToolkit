@@ -60,7 +60,8 @@ function MRIToolkitInit(SelectedToolboxes)
     end
     
     run_folder = get_executed_file_path();
-    
+    MRIToolkit.RootFolder = run_folder;
+
     % Add all toolboxes if no input is specified
     if(nargin < 1)
         SelectedToolboxes = available_toolboxes;
