@@ -1907,10 +1907,15 @@ classdef MRT_Library < handle
         function [parval,ix] = GetElastixParameter(params,parameter_name)
             parval = NaN;
             for ix=1:length(params)
-                if(contains(params{ix},parameter_name))
-                    sp = strfind(params{ix},' ');
-                    ep = strfind(params{ix},')');
-                    parval = params{ix}(sp:ep-1);
+                sp = strfind(params{ix},'(');
+                ep = strfind(params{ix},')');
+                if(isempty(sp))
+                    continue
+                end
+                line = params{ix}(sp+1:ep-1);
+                parts = strsplit(line);
+                if(strcmp(parts{1},parameter_name))
+                    parval = line;
                     return
                 end
             end

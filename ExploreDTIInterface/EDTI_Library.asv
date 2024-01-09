@@ -729,22 +729,14 @@ classdef EDTI_Library < handle
                 else
                     FinTrafoN_R{i} = [Fol filesep 'Final_Trafo_Rigid_step.txt'];
                     FinTrafoN{i} = [Fol filesep 'Final_Trafo.txt'];
-                    MRT_Library.SetElastixParameter(At,'InitialTransformParametersFileName',for_trafo.trafo_names{i});
-                    MRT_Library.WriteElastixParameters(FinTrafoN_R{i},At);
-                    suc = true;
-                    
-                    % At{4} = ['(InitialTransformParametersFileName "' for_trafo.trafo_names{i} '")'];
-                    % suc = EDTI_Library.E_DTI_SMECEPI_write_tra_file(At,FinTrafoN_R{i});
+                    At{4} = ['(InitialTransformParametersFileName "' for_trafo.trafo_names{i} '")'];
+                    suc = EDTI_Library.E_DTI_SMECEPI_write_tra_file(At,FinTrafoN_R{i});
                     if suc==0
                         EDTI_Library.E_DTI_remove_temp_f(for_trafo.dir_temp);
                         return;
                     end
-                    MRT_Library.SetElastixParameter(At_nr,'InitialTransformParametersFileName',FinTrafoN_R{i});
-                    MRT_Library.WriteElastixParameters(FinTrafoN{i},At_nr);
-                    suc = true;
-
-                    % At_nr{4} = ['(InitialTransformParametersFileName "' FinTrafoN_R{i} '")'];
-                    % suc = EDTI_Library.E_DTI_SMECEPI_write_tra_file(At_nr,FinTrafoN{i});
+                    At_nr{4} = ['(InitialTransformParametersFileName "' FinTrafoN_R{i} '")'];
+                    suc = EDTI_Library.E_DTI_SMECEPI_write_tra_file(At_nr,FinTrafoN{i});
                     if suc==0
                         EDTI_Library.E_DTI_remove_temp_f(for_trafo.dir_temp);
                         return;
