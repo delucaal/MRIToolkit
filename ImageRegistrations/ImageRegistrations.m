@@ -13,7 +13,7 @@ classdef ImageRegistrations < handle
                     if(~ismac)
                         elastix_cmd = ['LD_LIBRARY_PATH=' elastix_path ' ' elastix_cmd];
                     else
-                        elastix_cmd = ['DYLD_LIBRARY_PATH=' elastix_path ' ' elastix_path 'elastix_Mac_64'];
+                        elastix_cmd = ['DYLD_LIBRARY_PATH=' elastix_path ' ' elastix_cmd];
                     end
                 end
             end
