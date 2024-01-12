@@ -219,6 +219,7 @@ function html_code = html_img_tag(img_name,nii_name,ax_or_coronal,width_in_px,cm
     html_code = ['<a href="' img_name '"><img src="' img_name ...
                 '" href="' img_name '" '...
                 ' style="width:' num2str(width_in_px) 'px" /></a>'];
+    set(gcf,'color','k')
     print(gcf,img_name,'-dpng','-r150');
 end
 
@@ -234,7 +235,7 @@ function html_code = html_img_tag_3dviewer(img_name,nii_name,ax_or_coronal,width
     if(ax_or_coronal == 1)
         imagesc(squeeze(img(:,:,round(end/2),:)),[0 1]);axis off;axis image;
         colormap(cmap)
-        overlay_img = 0;
+        %overlay_img = 0;
     end
 
     [out_folder,out_name] = fileparts(img_name);
@@ -252,6 +253,7 @@ function html_code = html_img_tag_3dviewer(img_name,nii_name,ax_or_coronal,width
                 '" href="' img_name '" '...
                 ' style="width:' num2str(width_in_px) 'px" /></a>'];
     end            
+    set(gcf,'color','k')
     print(gcf,img_name,'-dpng','-r150');
 end
 
