@@ -247,12 +247,20 @@ function mrtd_preproc(varargin)
       V(~isfinite(V)) = 0;
       V2(~isfinite(V2)) = 0;
       subplot(1,2,1)
-      imagesc(V,[0 prctile(V(:),95)]);
+      max_value = prctile(V(:),95);
+      if(max_value == 0)
+          max_value = eps;
+      end
+      imagesc(V,[0 max_value]);
       axis image; % this ensures that getframe() returns a consistent size
       axis off;
       drawnow 
       subplot(1,2,2)
-      imagesc(V2,[0 prctile(V2(:),95)]);
+      max_value = prctile(V2(:),95);
+      if(max_value == 0)
+          max_value = eps;
+      end      
+      imagesc(V2,[0 max_value]);
       axis image; % this ensures that getframe() returns a consistent size
       axis off;
       drawnow 

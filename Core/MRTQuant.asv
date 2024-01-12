@@ -69,9 +69,9 @@ classdef MRTQuant < handle
                 else
                     data.hdr.dime.dim([1 5]) = [3 1];
                 end
-                data.img = single(data.img);
-                data.hdr.dime.datatype = 16;
-                data.hdr.dime.bitpix = 32;
+                % data.img = single(data.img);
+                %data.hdr.dime.datatype = 16;
+                %data.hdr.dime.bitpix = 32;
                 if(is_mask)
                     data.img = logical(data.img);
                     data.hdr.dime.datatype = 2;

@@ -2,28 +2,8 @@
 %%% Alberto De Luca - alberto@isi.uu.nl $%%%
 %%% Distributed under the terms of LGPLv3  %%%
 
-
-
 function DW_Elastix_Register(moving,fixed,regparlist,output_dir,mMask,fMask,outfilename)
-    global MRIToolkit;
-    if(isfield(MRIToolkit,'Elastix'))
-        elastix_path = MRIToolkit.Elastix.Location;
-        elastix_cmd = MRIToolkit.Elastix.ElastixCMD;
-        if(~ispc)
-            if(~ismac)
-                elastix_cmd = ['LD_LIBRARY_PATH=' elastix_path ' ' elastix_cmd];
-            else
-                elastix_cmd = ['DYLD_LIBRARY_PATH=' elastix_path ' ' elastix_path 'elastix_Mac_64'];
-            end
-        end
-    else
-        elastix_path = '/Users/alb/Desktop/M_Code_ExploreDTI_v4.8.6/Source/MD_cor_E/macOSX64/';
-        if(~ismac)
-            elastix_cmd = ['LD_LIBRARY_PATH=' elastix_path ' ' elastix_path 'elastix_Mac_64'];
-        else
-            elastix_cmd = ['DYLD_LIBRARY_PATH=' elastix_path ' ' elastix_path 'elastix_Mac_64'];
-        end
-    end
+    elastix_cmd = ImageRegistrations.BasicElastixCall();
     sentence = [elastix_cmd ' -m ' moving ' -f ' fixed ' -out ' output_dir];
     if(exist('mMask','var') > 0 && ~isempty(mMask))
        sentence = [sentence ' -mMask ' mMask];

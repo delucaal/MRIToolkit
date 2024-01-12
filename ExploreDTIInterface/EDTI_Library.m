@@ -2,8 +2,6 @@
 %%% Alberto De Luca - alberto@isi.uu.nl $%%%
 %%% Distributed under the terms of LGPLv3  %%%
 
-
-
 % This class transforms the processing methods originally implemented in ExploreDTI
 % into a library, made consistent into a class enforcing its consistency,
 % ease of use and availability for scripting / command line tools without
@@ -345,13 +343,15 @@ classdef EDTI_Library < handle
                 
                 for i=1:Le
                     
-                    A = textread(trafo_names{i},'%s');
+                    % A = textread(trafo_names{i},'%s');
                     
-                    DM_info{i}{1} = ...
-                        [str2num(A{7})*(180/pi) str2num(A{6})*(180/pi) str2num(A{8})*(180/pi);
-                        str2num(A{16}) str2num(A{15}) str2num(A{17}(1:end-1));
-                        str2num(A{13}) str2num(A{12}) str2num(A{14});
-                        str2num(A{10})  str2num(A{9}) str2num(A{11})];
+                    % DM_info{i}{1} = ...
+                    %     [str2num(A{7})*(180/pi) str2num(A{6})*(180/pi) str2num(A{8})*(180/pi);
+                    %     str2num(A{16}) str2num(A{15}) str2num(A{17}(1:end-1));
+                    %     str2num(A{13}) str2num(A{12}) str2num(A{14});
+                    %     str2num(A{10})  str2num(A{9}) str2num(A{11})];
+                    
+                    DM_info{i}{1} = ImageRegistrations.ElastixRotationMatrix(trafo_names{i});
                     
                     DM_info{i}{2} = EDTI_Library.E_DTI_Tra_Par_2_Tra_Mat(DM_info{i}{1});
                     
@@ -687,20 +687,26 @@ classdef EDTI_Library < handle
             
             Trafo_rig_result = [for_trafo.dir_temp filesep 'TransformParameters.0.txt'];
             % Rig = EDTI_Library.E_DTI_get_Trafo_par_EPI_rigid_rotation_components(Trafo_rig_result);
+            % Q = textread(Trafo_rig_result,'%s');
+            % Rig{1} = str2num(Q{7});
+            % Rig{2} = str2num(Q{6});
+            % Rig{3} = str2num(Q{8});
+
+            At = MRT_Library.ReadElastixParameters(Trafo_rig_result);
+            TP = MRT_Library.GetElastixParameter(At,'TransformParameters');
+            TP = strsplit(TP);
+            TP = TP(cellfun(@isempty,TP) == false);
+            Rig{1} = str2double(TP{3});
+            Rig{2} = str2double(TP{2});
+            Rig{3} = str2double(TP{4});            
             
-            Q = textread(Trafo_rig_result,'%s');
-            Rig{1} = str2num(Q{7});
-            Rig{2} = str2num(Q{6});
-            Rig{3} = str2num(Q{8});
-            
-            
-            At = textread(Trafo_rig_result,'%s','delimiter','\n','bufsize',2^18);
+            % At = textread(Trafo_rig_result,'%s','delimiter','\n','bufsize',2^18);
             
             if par.R2D.type==3
                 
                 Trafo_nonrig_result = [for_trafo.dir_temp filesep 'TransformParameters.1.txt'];
-                At_nr = textread(Trafo_nonrig_result,'%s','delimiter','\n','bufsize',2^18);
-                
+                % At_nr = textread(Trafo_nonrig_result,'%s','delimiter','\n','bufsize',2^18);
+                At_nr = MRT_Library.ReadElastixParameters(Trafo_nonrig_result);
             end
             
             for i=1:length(for_trafo.trafo_names)
@@ -709,8 +715,11 @@ classdef EDTI_Library < handle
                 
                 if par.R2D.type~=3
                     FinTrafoN{i} = [Fol filesep 'Final_Trafo.txt'];
-                    At{4} = ['(InitialTransformParametersFileName "' for_trafo.trafo_names{i} '")'];
-                    suc = EDTI_Library.E_DTI_SMECEPI_write_tra_file(At,FinTrafoN{i});
+                    % At{4} = ['(InitialTransformParametersFileName "' for_trafo.trafo_names{i} '")'];
+                    At = MRT_Library.SetElastixParameter(At,'InitialTransformParametersFileName',for_trafo.trafo_names{i});
+                    %suc = EDTI_Library.E_DTI_SMECEPI_write_tra_file(At,FinTrafoN{i});
+                    MRT_Library.WriteElastixParameters(FinTrafoN{i},At);
+                    suc = true;
                     if suc==0
                         EDTI_Library.E_DTI_remove_temp_f(for_trafo.dir_temp);
                         return;
@@ -718,14 +727,22 @@ classdef EDTI_Library < handle
                 else
                     FinTrafoN_R{i} = [Fol filesep 'Final_Trafo_Rigid_step.txt'];
                     FinTrafoN{i} = [Fol filesep 'Final_Trafo.txt'];
-                    At{4} = ['(InitialTransformParametersFileName "' for_trafo.trafo_names{i} '")'];
-                    suc = EDTI_Library.E_DTI_SMECEPI_write_tra_file(At,FinTrafoN_R{i});
+                    At = MRT_Library.SetElastixParameter(At,'InitialTransformParametersFileName',for_trafo.trafo_names{i});
+                    MRT_Library.WriteElastixParameters(FinTrafoN_R{i},At);
+                    suc = true;
+                    
+                    % At{4} = ['(InitialTransformParametersFileName "' for_trafo.trafo_names{i} '")'];
+                    % suc = EDTI_Library.E_DTI_SMECEPI_write_tra_file(At,FinTrafoN_R{i});
                     if suc==0
                         EDTI_Library.E_DTI_remove_temp_f(for_trafo.dir_temp);
                         return;
                     end
-                    At_nr{4} = ['(InitialTransformParametersFileName "' FinTrafoN_R{i} '")'];
-                    suc = EDTI_Library.E_DTI_SMECEPI_write_tra_file(At_nr,FinTrafoN{i});
+                    At_nr = MRT_Library.SetElastixParameter(At_nr,'InitialTransformParametersFileName',FinTrafoN_R{i});
+                    MRT_Library.WriteElastixParameters(FinTrafoN{i},At_nr);
+                    suc = true;
+
+                    % At_nr{4} = ['(InitialTransformParametersFileName "' FinTrafoN_R{i} '")'];
+                    % suc = EDTI_Library.E_DTI_SMECEPI_write_tra_file(At_nr,FinTrafoN{i});
                     if suc==0
                         EDTI_Library.E_DTI_remove_temp_f(for_trafo.dir_temp);
                         return;
@@ -2618,8 +2635,8 @@ classdef EDTI_Library < handle
             switch (dat.class)
                 case 'logical'
                     I = single(I);
-                    hdr.datatype = 16;
-                    hdr.bitpix = 32;
+                    hdr.datatype = 2;
+                    hdr.bitpix = 2;
                 case 'uint8'
                     hdr.datatype = 2;
                     hdr.bitpix = 8;
@@ -9054,6 +9071,10 @@ classdef EDTI_Library < handle
             %
             %
             seedPoints = zeros(3,n);
+            if(isempty(find(mask,1)))
+                warning('The calculated mask is empty');
+                return
+            end
             i = 1;
             while i<=n
                 point=(rand([3,1]).*(size(mask)-1)')+[1 1 1]';

@@ -77,7 +77,7 @@ for input_id =1:2:length(coptions)
     elseif(strcmp(value,'-iso_rf'))
         iso_rf(end+1) = {coptions{input_id+1}};
     elseif(strcmp(value,'-mat'))
-        mat_file = {coptions{input_id+1}};
+        mat_file = coptions{input_id+1};
     end
     
 end

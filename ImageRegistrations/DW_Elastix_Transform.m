@@ -2,26 +2,8 @@
 %%% Alberto De Luca - alberto@isi.uu.nl $%%%
 %%% Distributed under the terms of LGPLv3  %%%
 
-
-
 function DW_Elastix_Transform(filein,fileout,transform_parameters)
-    global MRIToolkit;
-    if(isfield(MRIToolkit,'Elastix'))
-        elastix_path = MRIToolkit.Elastix.Location;
-        transformix_cmd = MRIToolkit.Elastix.TransformixCMD;
-        if(~ispc)
-            if(~ismac)
-                transformix_cmd = ['LD_LIBRARY_PATH=' elastix_path ' ' transformix_cmd];
-            else
-                transformix_cmd = ['DYLD_LIBRARY_PATH=' elastix_path ' ' transformix_cmd];
-            end
-        end
-    else
-%         elastix_path = '/Users/alb/Desktop/M_Code_ExploreDTI_v4.8.6/Source/MD_cor_E/macOSX64/';
-        elastix_path = 'E:\dMRI_Tools\ExploreDTI\M_Code_ExploreDTI_v4.8.6\Source\MD_cor_E\win64\';
-%         transformix_cmd = ['LD_LIBRARY_PATH=' elastix_path ' ' elastix_path 'transformix_Mac_64'];
-        transformix_cmd = [elastix_path 'transformix_64.exe'];
-    end
+    transformix_cmd = ImageRegistrations.BasicTransformixCall();
     mkdir('temp_transformix');  
     if(contains(filein,'.nii') < 1)
         header = load_untouch_header_only([filein '.nii']);
