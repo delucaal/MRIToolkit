@@ -2820,6 +2820,57 @@ classdef MRTTrack < handle
                 end
             end
         end
+
+        function TractographyClustering_RecoBundlesX(varargin)
+            % Runs the RecoBundlesX clustering via Scilpy.
+            % Input arguments:
+            % mat_file: the reference .MAT file with the DTI/DKI fit (.mat)
+            % tract_file: the input tractography file in TRK (.trk)
+            % format
+            % output: the output folder containing the clustered
+            % tractogaphy
+            % keep_temp: whether to keep intermediate temporary files
+            % (default false)
+            
+            global MRIToolkit;
+            ShellAndPython.SetupRecoBundlesX();
+            
+            mat_file = GiveValueForName(varargin,'mat_file');
+            if(isempty(mat_file))
+                error('Missing mandatory argument mat_file');
+            end
+            
+            tract_file = GiveValueForName(varargin,'tract_file');
+            if(isempty(tract_file))
+                error('Missing mandatory argument tract_file');
+            end
+            
+            WMA_Folder = GiveValueForName(varargin,'output');
+            if(isempty(WMA_Folder))
+                error('Missing mandatory argument output');
+            end
+            
+            % Registration to template
+            temp_fold = MRT_Library.CreateTemporaryDir();
+            IM = load(mat_file,'FA','VDims');
+            img.img = IM.FA/sqrt(3);
+            img.VD = IM.VDims;
+            MRTQuant.WriteNifti(img,fullfile(temp_fold,'FA.nii'));
+            cmd = ['antsRegistrationSyNQuick.sh -d 3 -f ' fullfile(temp_fold,'FA.nii') ...
+                ' -m ' fullfile(MRIToolkit.RootFolder,'ThirdParty','RecoBundlesX','mni_masked.nii.gz') ...
+                ' -t a -n 4'];
+            out = ShellAndPython.ExecuteSH(cmd);
+            disp(out);
+            
+            cmd = ['scil_recognize_multi_bundles.py ' tract_file ' ' ...
+                which('rbx_config_fss_custom.json') ' ' ...
+                fullfile(MRIToolkit.RootFolder,'ThirdParty','RecoBundlesX','atlas') ...
+                ' output0GenericAffine.mat --out_dir ' WMA_Folder ...  
+                ' --log_level DEBUG --minimal_vote 0.4 --processes 8 --seed 0 --inverse -f '];
+            out = ShellAndPython.ExecuteCommandInCondaEnv('MRIToolkit',cmd);
+            disp(out);
+            rmdir(temp_fold,'s');
+        end
         
         function PerformDTIBased_FiberTracking(varargin)
             % This function performs whole volume deterministic fiber
@@ -3455,6 +3506,140 @@ classdef MRTTrack < handle
             
             NiftiIO_basic.WriteJSONDescription('output',filename_out(1:end-4),'props',json);
         end
+
+        function PerformFODBased_ProbFiberTracking_wScilPy(varargin)
+            % This function performs whole volume probabilistic fiber
+            % tractography of an FOD in spherical harmonics using ScilPy. Possible
+            % input arguments are:
+            % mat_file: The ExpoloreDTI-like .mat file (for reference)
+            % fod_file: The ExpoloreDTI-like FOD .nii file (in SH basis)
+            % basis_in: Which SH basis is used. One of "edti" (Default),
+            % "dipy", "mrtrix"
+            % output: The output tracts (can be .trk or .mat)
+            % NPV: Number of seed points per voxel (1 default)
+            % StepSize: the step size in mm, as 0.5 (default)
+            % FODThresh: The FOD thredshold to stop tracking, as 0.1000 	(default)
+            % AngleThresh: The angle threshold to stop tracking, as 20 (default)
+            % FiberLengthRange: The mininum - maximum allowed fiber length in mm: [30 500]
+            % SeedMask: A mask to perform the seeding. If empty, the whole
+            %   volume is used
+            % Default parameters:
+            %  SeedPointRes: 1 voxel
+            %             StepSize: 0.5mm
+            %          AngleThresh: 20deg
+            %     FiberLengthRange: [30 500]
+            %     FODThresh: 0.1
+            
+            if(isempty(varargin))
+                my_help('MRTTrack.PerformFODBased_ProbFiberTracking_wScilPy');
+                return;
+            end
+            
+            json.CallFunction = 'MRTTrack.PerformFODBased_ProbFiberTracking_wScilPy';
+            json.Description = my_help('MRTTrack.PerformFODBased_ProbFiberTracking_wScilPy');
+            
+            coptions = varargin;
+            file_in = GiveValueForName(coptions,'mat_file');
+            if(isempty(file_in))
+                error('Need to specify the input .mat file');
+            end
+            
+            basis_in = GiveValueForName(coptions,'basis_in');
+            if(isempty(basis_in))
+                basis_in = 'edti';
+            end
+
+            json.ReferenceFile = file_in;
+            json.ProcessingType = 'FiberTractography';
+            json.basis_in = basis_in;
+
+            fod_file = GiveValueForName(coptions,'fod_file');
+            if(isempty(fod_file))
+                error('Need to specify the input FOD file/variable');
+            end
+            json.fod_file = fod_file;
+            
+            filename_out = GiveValueForName(coptions,'output');
+            if(isempty(filename_out))
+                error('Need to specify the output .trk file');
+            end
+            
+            option = GiveValueForName(coptions,'NPV');
+            if(isempty(option))
+                parameters.SeedPointRes = 1;
+            else
+                parameters.SeedPointRes = option;
+            end
+            
+            option = GiveValueForName(coptions,'StepSize');
+            if(isempty(option))
+                parameters.StepSize = 0.5;
+            else
+                parameters.StepSize = option;
+            end
+            
+            option = GiveValueForName(coptions,'FODThresh');
+            if(isempty(option))
+                parameters.blob_T = 0.1;
+            elseif(isnumeric(option))
+                parameters.blob_T = option;
+            end
+            
+            option = GiveValueForName(coptions,'AngleThresh');
+            if(isempty(option))
+                parameters.AngleThresh = 20;
+            else
+                parameters.AngleThresh = option;
+            end
+            
+            option = GiveValueForName(coptions,'FiberLengthRange');
+            if(isempty(option))
+                parameters.FiberLengthRange = [30 500];
+            else
+                parameters.FiberLengthRange = option;
+            end
+            temp_files = false;
+            tf = MRT_Library.CreateTemporaryDir();
+            option = GiveValueForName(coptions,'SeedMask');
+            T = load(file_in,'FA','VDims');
+            t_img.img = isfinite(T.FA);
+            t_img.VD = T.VDims;
+            MRTQuant.WriteNifti(t_img,fullfile(tf,'mask.nii'),false,true);
+            parameters.TrackMask = fullfile(tf,'mask.nii');
+            temp_files = true;
+            if(isempty(option))
+                parameters.SeedMask = fullfile(tf,'mask.nii');
+            else
+                parameters.SeedMask = option;
+            end
+            
+            parameters.randp = 0;
+            
+            json.TrackingParameters = parameters;
+
+            if(strcmpi(basis_in,'dipy') == false)
+                % Convert
+                MRTTrack.SH_2_SH('basis_in',basis_in,'basis_out','dipy',...
+                    'SHcoeffs',fod_file,'output',fullfile(tf,'fod.nii'),...
+                    'Lmax',8);
+                fod_file = fullfile(tf,'fod.nii');
+                temp_files = true;
+            end
+            % Call scilpy tracking
+            cmd = ['scil_compute_local_tracking.py --step ' num2str(parameters.StepSize) ...
+                ' --min_length ' num2str(parameters.FiberLengthRange(1)) ' --max_length ' num2str(parameters.FiberLengthRange(2)) ...
+                ' --sfthres ' num2str(parameters.blob_T) ' --algo prob ' ...
+                ' --npv ' num2str(parameters.SeedPointRes) ' --theta ' num2str(parameters.AngleThresh) ' -v ' ...
+                ' --use_gpu -f ' ...
+                ' ' fod_file ' ' parameters.SeedMask ' ' parameters.TrackMask ' ' filename_out]; % compression?
+            out = ShellAndPython.ExecuteCommandInCondaEnv('MRIToolkit',cmd);
+            disp(out);  
+            if(temp_files)  
+                rmdir(tf,'s');
+            end
+%             EDTI_Library.WholeBrainFODTractography(file_in,fod_file,parameters,filename_out);
+            NiftiIO_basic.WriteJSONDescription('output',filename_out(1:end-4),'props',json);
+        end  
         
         function S = SimulateCrossingFibersSignalWithDKI(varargin)
             % This function generates a synthetic signal using a simplified

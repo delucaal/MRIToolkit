@@ -77,9 +77,9 @@ classdef ImageRegistrations < handle
             elseif(isunix)
                 download_url = 'https://github.com/SuperElastix/elastix/releases/download/5.1.0/elastix-5.1.0-linux.zip';
             end
-            dest_folder = userpath;
+            dest_folder = [];
             if(isempty(dest_folder))
-                dest_folder = MRIToolkit.RootFolder;
+                dest_folder = fullfile(MRIToolkit.RootFolder,'ThirdParty');
             end
             urlwrite (download_url, fullfile(dest_folder,'Elastix.zip'));
             unzip(fullfile(dest_folder,'Elastix.zip'),fullfile(dest_folder,'Elastix'));

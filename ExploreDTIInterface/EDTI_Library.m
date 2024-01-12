@@ -2,8 +2,6 @@
 %%% Alberto De Luca - alberto@isi.uu.nl $%%%
 %%% Distributed under the terms of LGPLv3  %%%
 
-
-
 % This class transforms the processing methods originally implemented in ExploreDTI
 % into a library, made consistent into a class enforcing its consistency,
 % ease of use and availability for scripting / command line tools without
@@ -2637,8 +2635,8 @@ classdef EDTI_Library < handle
             switch (dat.class)
                 case 'logical'
                     I = single(I);
-                    hdr.datatype = 16;
-                    hdr.bitpix = 32;
+                    hdr.datatype = 2;
+                    hdr.bitpix = 2;
                 case 'uint8'
                     hdr.datatype = 2;
                     hdr.bitpix = 8;

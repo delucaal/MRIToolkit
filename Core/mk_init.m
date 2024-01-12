@@ -8,9 +8,10 @@
 % Sub-toolbox specific initialization
 % 01/02/2020: creation - v1.0
 % 24/10/2020: creation - v1.1
-% 01/01/2921: update v1.2
+% 01/01/2021: update v1.2
+% 12/01/2024: update v1.3
 global MRIToolkit;
-MRIToolkit.core_version = 1.2;
+MRIToolkit.core_version = 1.3;
 
 addpath(get_executed_file_path())
 addpath(fullfile(get_executed_file_path(),'Trackers'))

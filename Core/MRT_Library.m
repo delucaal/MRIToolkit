@@ -2064,8 +2064,89 @@ classdef MRT_Library < handle
                 im = single(im);
             end
         end
+    
+        % To be completed
+        function fs_lut = FreeSurferLabelsInParcFile(parc_file)
+            fs_lut = [];
+            lines = {};
+            regions = {};
+            ids = [];
+            fs_regions_file = which('FreeSurferColorLUT.txt');
+            if(isempty(fs_regions_file))
+                warning('Cannot find FreeSurferColorLUT.txt in path. Aborting.')
+                return
+            end
+            f = fopen(fs_regions_file,'rt');
+            while(~feof(f))
+                lines = cat(1,lines,{fgetl(f)});
+                parts = strsplit(lines{end});
+                if(isempty(lines{end}) || strcmp(lines{end}(1),'#'))
+                    continue
+                end
+                regions = cat(1,regions,parts(2));
+                ids = cat(1,ids,str2double(parts{1}));
+            end
+            fclose(f);
 
-    function out = my_help(fname)
+            parcellation = MRTQuant.LoadNifti(parc_file);
+            parc_ids = unique(parcellation.img(:));
+            parc_found = true(length(ids),1);
+            for parc_id=1:length(ids)
+                if(isempty(find(parc_ids == ids(parc_id),1)))
+                    parc_found(parc_id) = false;
+                end
+            end
+            fs_lut.labels = regions(parc_found);
+            fs_lut.ids = ids(parc_found);
+        end
+
+        % To be completed
+        function parc = FreeSurferParcellationByIDs(parc_file,ids,output_file)
+            all_parc = MRTQuant.LoadNifti(parc_file);
+            parc = all_parc;
+            parc.img = zeros(size(parc.img));
+
+            for id=1:length(ids)
+                parc.img = parc.img | all_parc.img == ids(id);
+            end
+
+            if(nargin > 2 && ~isempty(output_file))
+                MRTQuant.WriteNifti(parc,output_file,true,true);
+            end
+        end
+
+        % To be completed
+        function parc = FreeSurferParcellationByNames(parc_file,Names,output_file)
+            fs_lut = MRT_Library.FreeSurferLabelsInParcFile(parc_file);
+
+            ids = [];
+            for ij=1:length(Names)
+                N = Names{ij};
+                ids =  cat(1,ids,MRT_Library.FindStringInCellArray(fs_lut.labels,N));                
+            end
+            if(isempty(ids))
+                warning('Region not found');
+                parc = [];
+                return;
+            end
+            fs_ids = fs_lut.ids(ids);
+            parc = MRT_Library.FreeSurferParcellationByIDs(parc_file,fs_ids);
+
+            if(nargin > 2 && ~isempty(output_file))
+                MRTQuant.WriteNifti(parc,output_file,true,true);
+            end
+        end
+
+        function idx = FindStringInCellArray(cell_array,string2find)
+            idx = [];
+            for ij=1:length(cell_array)
+                if(strcmp(cell_array{ij},string2find))
+                    idx = cat(1,idx,ij);
+                end
+            end
+        end
+
+        function out = my_help(fname)
             if(isdeployed)
                 out = fname;
             else

@@ -12,6 +12,7 @@
 % 01/02/2020: Added the MRT class and CommandLineTools
 % 05/05/2020: Added suppot for automatic version control
 % 13/08/2021: v1.5
+% 12/01/2024: v1.6
 function MRIToolkitInit(SelectedToolboxes)
     run_folder = mfilename('fullpath');
     if(~isempty(run_folder))
@@ -113,8 +114,8 @@ function git_version = read_git_version()
         git_version = fgetl(git_commit);
         fclose(git_commit);
     elseif(isdeployed)
-        git_version = 'v1.5-cmdline';
+        git_version = 'v1.6-cmdline';
     else
-        git_version = 'v1.5-nongit';
+        git_version = 'v1.6-nongit';
     end
 end
