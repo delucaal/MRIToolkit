@@ -1452,6 +1452,7 @@ classdef MRTQuant < handle
 
             if(isempty(txt_file) && isempty(mat_file))
                 bvals = load(bval_file);
+                bvecs = load(bvec_file);
                 copyfile(bval_file,fullfile(temp_direc,'bvals'));
                 copyfile(bvec_file,fullfile(temp_direc,'bvecs'));
             else
@@ -1564,9 +1565,9 @@ classdef MRTQuant < handle
                 R = nanmean(B0_1(:))/nanmean(B0_2(:)); % Ensure that the scaling is consistent
                 data.img = cat(4,data.img,data_rev.img*R);
 
-                bvals = [bvals' rev_bvals];
+                bvals = [bvals'; rev_bvals'];
                 save(fullfile(temp_direc,'bvals'),'bvals','-ascii');
-                bvecs = [bvecs' load(strrep(bval_reverse_file,'.bval','.bvec'))];
+                bvecs = [bvecs'; load(strrep(bval_reverse_file,'.bval','.bvec'))'];
                 save(fullfile(temp_direc,'bvecs'),'bvecs','-ascii');
                 
                 MRTQuant.WriteNifti(data,fullfile(temp_direc,'data.nii'),0);
@@ -1959,6 +1960,8 @@ classdef MRTQuant < handle
                 data = EDTI_Library.E_DTI_DWI_cell2mat(opt.DWI);
                 bmat = opt.b;
                 [bval,bvec] = MRTQuant.bval_bvec_from_b_Matrix(bmat);
+                bval = bval';
+                bvec = bvec';
                 clear opt
             end
             data = data(:,:,:,IX);

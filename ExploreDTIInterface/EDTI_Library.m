@@ -867,7 +867,7 @@ classdef EDTI_Library < handle
             
             try
                 save(f_out,'DWI','VDims','b','bval','g','info','FEFA','NrB0','MDims',...
-                    'FA','FE','SE','eigval','DT','outlier','DWIB0','chi_sq','chi_sq_iqr','par')
+                    'FA','FE','SE','eigval','DT','outlier','DWIB0','chi_sq','chi_sq_iqr','par','-v7.3')
             catch me
                 EDTI_Library.E_DTI_remove_temp_f(for_trafo.dir_temp);
                 disp(me.message)
