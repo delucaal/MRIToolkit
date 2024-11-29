@@ -1435,6 +1435,168 @@ classdef MRTTrack < handle
             save(out_file,'Tracts','TractsFOD','TractL','TractFA','TractFE','TractFE',...
                 'TractAng','TractGEO','TractLambdas','TractMD','FList','TractMask','VDims','-v7.3');
         end
+
+        function TerminateTractsWithMask(varargin)
+            % This function filters a .MAT fiber tractography result using a give mask. 
+            % Input arguments are:
+            % mat_file: the reference ExploreDTI-like .MAT file
+            % tract_file: the tractography file in ExploreDTI-like .MAT format
+            % out_file: the desired output (.MAT)
+            % mask_file: 'The tissue class fractions (.nii)'
+            % mask_mode: one between 'wm' (WM-GM interface) 'gm' (GM-CSF
+            % interface) 'gm_only' (only the GM part of a tract)
+            
+            if( isempty(varargin))
+                help('SphericalDeconvolution.TerminateTractsWithFraction');
+                return;
+            end
+            
+            coptions = varargin;
+            mat_file = GiveValueForName(coptions,'mat_file');
+            if(isempty(mat_file))
+                error('Need to specify the reference .MAT file');
+            end
+            tract_file = GiveValueForName(coptions,'tract_file');
+            if(isempty(tract_file))
+                error('Need to specify the tracts .MAT file');
+            end
+            out_file = GiveValueForName(coptions,'out_file');
+            if(isempty(out_file))
+                error('Need to specify the output .MAT file');
+            end
+            fraction_file = GiveValueForName(coptions,'mask_file');
+            if(isempty(fraction_file))
+                error('Need to specify the mask .nii file');
+            end
+            mask_mode = GiveValueForName(coptions,'mask_mode');
+            if(isempty(mask_mode))
+                error('Need to specify the mask_mode');
+            end
+            
+            load(tract_file);
+            load(mat_file,'FA','VDims');
+            
+            [sx,sy,sz] = size(FA);
+            
+            intersect_mask = MRTQuant.LoadNifti(fraction_file);
+            intersect_mask = intersect_mask.img > 0.9 & intersect_mask.img < 1.1; % confidence interval in case of interpolated masks
+            
+            new_tracts = {};
+            new_tracts_L = {};
+            new_tracts_FA = {};
+            new_tracts_MD = {};
+            new_tracts_FE = {};
+            new_tracts_GEO = {};
+            new_tracts_Lambdas = {};
+            new_tracts_Angle = {};
+            new_tracts_FOD = {};
+            
+            extra_tracts = 0;
+            
+            for tid=1:length(Tracts)
+                tract = Tracts{tid};
+                
+                points2keep = false(size(tract,1),1);
+                for l=1:size(tract,1)
+                    point = round(tract(l,:)./VDims);
+                    % Introducing a 1 voxel tolerance
+                    px = point(1);%max(1,point(1)-1):min(point(1)+1,size(intersect_mask,1));
+                    py = point(2);%max(1,point(2)-1):min(point(2)+1,size(intersect_mask,2));
+                    pz = point(3);%max(1,point(3)-1):min(point(3)+1,size(intersect_mask,3));
+                    neighbourhood = intersect_mask(px,py,pz);
+                    if(any(neighbourhood(:) > 0))
+                        % This is a good point
+                        points2keep(l) = true;
+                    end
+                end
+                
+                if(sum(points2keep) > 0)
+                    LabeledVector = LabelVector(points2keep);
+                    for ij=2:max(LabeledVector) % Create new streamlines for the subpieces
+                        points2keep_l = LabeledVector == ij;
+                        if(sum(points2keep_l > 0) < 2)
+                            continue
+                        end
+                        if(~strcmp(mask_mode,'gm_only'))
+                            TP = tract(points2keep_l,:);
+                            TL = 0;
+                            for tpid=2:size(TP,1)
+                                TL = TL + norm(TP(tpid,:)-TP(tpid-1,:));
+                            end
+                            if(TL < Parameters.Length_range(1))
+                                continue
+                            end
+                        end
+                        
+                        new_tracts{end+1} = TP;
+                        new_tracts_L{end+1} = size(new_tracts{end},1);
+                        new_tracts_FA{end+1} = TractFA{tid}(points2keep_l);
+                        new_tracts_MD{end+1} = TractMD{tid}(points2keep_l);
+                        new_tracts_GEO{end+1} = TractGEO{tid}(points2keep_l,:);
+                        new_tracts_FE{end+1} = TractFE{tid}(points2keep_l,:);
+                        new_tracts_Lambdas{end+1} = TractLambdas{tid}(points2keep_l,:);
+                        new_tracts_FOD{end+1} = TractsFOD{tid}(points2keep_l);
+                        new_tracts_Angle{end+1} = TractAng{tid}(points2keep_l);
+                        extra_tracts = extra_tracts+1;
+                        
+                    end
+                    points2keep(LabeledVector > 1) = false;
+                end
+                
+                if(sum(points2keep) < 2)
+                    points2keep = false(size(points2keep));
+                end
+                tract = tract(points2keep,:);
+                Tracts{tid} = tract;
+                TractL{tid} = size(tract,1);
+                TractFA{tid} = TractFA{tid}(points2keep);
+                TractMD{tid} = TractMD{tid}(points2keep);
+                TractGEO{tid} = TractGEO{tid}(points2keep,:);
+                TractFE{tid} = TractFE{tid}(points2keep,:);
+                TractLambdas{tid} = TractLambdas{tid}(points2keep,:);
+                TractsFOD{tid} = TractsFOD{tid}(points2keep);
+                TractAng{tid} = TractAng{tid}(points2keep);
+                
+            end
+            
+            good_tracts = true(size(Tracts));
+            for tract_id=1:length(Tracts)
+                if(TractL{tract_id} == 0)
+                    good_tracts(tract_id) = false;
+                end
+            end
+            
+            Tracts = Tracts(good_tracts);
+            TractsFOD = TractsFOD(good_tracts);
+            TractL = TractL(good_tracts);
+            TractFA = TractFA(good_tracts);
+            TractFE = TractFE(good_tracts);
+            TractAng = TractAng(good_tracts);
+            TractGEO = TractGEO(good_tracts);
+            TractLambdas = TractLambdas(good_tracts);
+            TractMD = TractMD(good_tracts);
+            
+            
+            Tracts(end+1:end+extra_tracts) = new_tracts;
+            TractL(end+1:end+extra_tracts) = new_tracts_L;
+            TractFA(end+1:end+extra_tracts) = new_tracts_FA;
+            TractMD(end+1:end+extra_tracts) = new_tracts_MD;
+            TractFE(end+1:end+extra_tracts) = new_tracts_FE;
+            TractGEO(end+1:end+extra_tracts) = new_tracts_GEO;
+            TractLambdas(end+1:end+extra_tracts) = new_tracts_Lambdas;
+            TractAng(end+1:end+extra_tracts) = new_tracts_Angle;
+            TractsFOD(end+1:end+extra_tracts) = new_tracts_FOD;
+            FList = (1:length(Tracts))';
+            
+            % clear new_tracts new_tracts_L new_tracts_FA new_tracts_MD new_tracts_FE new_tracts_GEO
+            % clear new_tracts_Lambdas new_tracts_Angle new_tracts_FOD points2keep tracts
+            
+            %             disp(['Gated ' num2str(sum(good_tracts == true)) ' out of ' num2str(length(good_tracts)) ' ' ...
+            %                 sprintf('%.2f',100*single(sum(good_tracts == true))/single(length(good_tracts))) '%']);
+            
+            save(out_file,'Tracts','TractsFOD','TractL','TractFA','TractFE','TractFE',...
+                'TractAng','TractGEO','TractLambdas','TractMD','FList','TractMask','VDims','-v7.3');
+        end        
         
         function [init_lambdas,init_K, init_offset] = Eigenval_IsoK_WM_FromData(data,mask,fit_dki,fit_offset)
             % Estimate the tensor eigenvalues and isotropic kurtosis from the data, in a mask where FA >= 0.7
@@ -2645,28 +2807,51 @@ classdef MRTTrack < handle
             % system(cmd);
             temp_folders = {};
             
+
+            [mx,my,mz] = E_DTI_Convert_tracts_mat_2_vtk_lines(tract_file, 'tracts.vtk');
+
             if(exist([WMA_Folder '/TractRegistration/'],'dir') < 1)
                 if(ispc)
                     [a,cmd_loc] = system([base_cmd ' where wm_register_to_atlas_new.py']);
                     cmd = [base_cmd ' python ' cmd_loc ...
-                        ' -mode rigid_affine_fast ' ...
+                        ' -mode affine ' ...
                         'tracts.vtk ' ...
+                        [AtlasFolder '/ORG-RegAtlas-100HCP/registration_atlas.vtk '] ...
+                        [WMA_Folder '/TractRegistration_aff']];
+                    cmd = strrep(cmd,newline,' ');
+                else
+                        % ' -mode rigid_affine_fast ' ...
+                    cmd = [base_cmd ';wm_register_to_atlas_new.py ' ...
+                        ' -mode affine ' ...
+                        'tracts.vtk ' ...
+                        AtlasFolder '/ORG-RegAtlas-100HCP/registration_atlas.vtk ' ...
+                        WMA_Folder '/TractRegistration_aff/'];
+                end
+                system(cmd);
+                
+                if(ispc)
+                    [a,cmd_loc] = system([base_cmd ' where wm_register_to_atlas_new.py']);
+                    cmd = [base_cmd ' python ' cmd_loc ...
+                        ' -mode nonrigid_neonate ' ...
+                        WMA_Folder '/TractRegistration_aff/tracts/output_tractography/tracts_reg.vtk ' ...
                         [AtlasFolder '/ORG-RegAtlas-100HCP/registration_atlas.vtk '] ...
                         [WMA_Folder '/TractRegistration']];
                     cmd = strrep(cmd,newline,' ');
                 else
+                        % ' -mode rigid_affine_fast ' ...
                     cmd = [base_cmd ';wm_register_to_atlas_new.py ' ...
-                        ' -mode rigid_affine_fast ' ...
-                        'tracts.vtk ' ...
+                        ' -mode nonrigid_neonate ' ...
+                        WMA_Folder '/TractRegistration_aff/tracts/output_tractography/tracts_reg.vtk ' ...
                         AtlasFolder '/ORG-RegAtlas-100HCP/registration_atlas.vtk ' ...
                         WMA_Folder '/TractRegistration/'];
                 end
                 system(cmd);
+
             end
             
             if(exist([WMA_Folder '/AnatomicalTracts/'],'file') < 1)
                 
-                reg_file = dir(fullfile(WMA_Folder,'TractRegistration','*','output_tractography','*.vtk'));
+                reg_file = dir(fullfile(WMA_Folder,'TractRegistration','*','output_tractography','*reg_reg.vtk'));
                 prop_name = reg_file.name;
                 reg_file = fullfile(reg_file.folder,reg_file.name);
                 
@@ -2722,21 +2907,62 @@ classdef MRTTrack < handle
                 
                 tfm_file = dir(fullfile(WMA_Folder,'TractRegistration','*','output_tractography','*.tfm'));
                 tfm_file = fullfile(tfm_file.folder,tfm_file.name);
+                tfm_file_aff = dir(fullfile(WMA_Folder,'TractRegistration_aff','*','output_tractography','*.tfm'));
+                tfm_file_aff = fullfile(tfm_file_aff.folder,tfm_file_aff.name);
                 
+                % First revert the nonlinear transform
                 if(ispc)
                     [a,cmd_loc] = system([base_cmd ' where wm_harden_transform.py']);
                     cmd = [base_cmd ' python ' cmd_loc ' -i -t ' ...
                         tfm_file ' ' cluster_folder '/ '...
+                        WMA_Folder '/FiberClustering/TransformedClusters/clustered_data_aff/ ' ...
+                        SlicerLocation '"'];
+                    cmd = strrep(cmd,newline,' ');
+                else
+                    cmd = [base_cmd ';export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:' SlicerPath ';wm_harden_transform.py -i -t ' ...
+                        tfm_file ' ' cluster_folder '/ ' ...
+                        WMA_Folder '/FiberClustering/TransformedClusters/clustered_data_aff/ ' ...
+                        SlicerLocation];
+                end
+                % New workaround - Otherwise Slicer keeps hanging
+                system([cmd '&']);
+                start_moment = cputime;
+                while(true)
+                    finished = isempty(dir(fullfile(WMA_Folder,'/FiberClustering/TransformedClusters/clustered_data_aff/','cluster_00800.vtp'))) == false;
+                    overtime = cputime - start_moment > 1800; % 30 minutes max wait
+                    if(finished == false && overtime == false) 
+                        pause(5);
+                    else
+                        break;
+                    end
+                end
+
+                % Then revert the affine transform
+                if(ispc)
+                    [a,cmd_loc] = system([base_cmd ' where wm_harden_transform.py']);
+                    cmd = [base_cmd ' python ' cmd_loc ' -i -t ' ...
+                        tfm_file_aff ' ' WMA_folder '/FiberClustering/TransformedClusters/clustered_data_aff/' ' '...
                         WMA_Folder '/FiberClustering/TransformedClusters/clustered_data/ ' ...
                         SlicerLocation '"'];
                     cmd = strrep(cmd,newline,' ');
                 else
                     cmd = [base_cmd ';export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:' SlicerPath ';wm_harden_transform.py -i -t ' ...
-                        tfm_file ' ' cluster_folder '/ '...
+                        tfm_file_aff ' ' WMA_Folder '/FiberClustering/TransformedClusters/clustered_data_aff/' ' '...
                         WMA_Folder '/FiberClustering/TransformedClusters/clustered_data/ ' ...
                         SlicerLocation];
+                end                
+                % New workaround - Otherwise Slicer keeps hanging
+                system([cmd '&']);
+                start_moment = cputime;
+                while(true)
+                    finished = isempty(dir(fullfile(WMA_Folder,'/FiberClustering/TransformedClusters/clustered_data/','cluster_00800.vtp'))) == false;
+                    overtime = cputime - start_moment > 1800; % 30 minutes max wait
+                    if(finished == false && overtime == false) 
+                        pause(5);
+                    else
+                        break;
+                    end
                 end
-                system(cmd);
                 
                 if(ispc)
                     [a,cmd_loc] = system([base_cmd ' where wm_separate_clusters_by_hemisphere.py']);
@@ -3799,7 +4025,7 @@ for ij=1:2:length(coptions)
 end
 end
 
-% Helper function
+% Helper function to identify discontinuities in labelling
 function LabeledVector = LabelVector(LabeledVector)
 LabeledVector = uint32(LabeledVector);
 CLabel = 1;
@@ -4600,7 +4826,7 @@ end
 
 mx = mean(Points(:,1));
 my = mean(Points(:,2))+40;
-mz = mean(Points(:,3))-10;
+mz = mean(Points(:,3));%-10;
 
 Points(:,1) = Points(:,1) - mx;
 Points(:,2) = Points(:,2) - my;
