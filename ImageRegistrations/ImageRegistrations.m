@@ -10,11 +10,20 @@ classdef ImageRegistrations < handle
                 elastix_path = MRIToolkit.Elastix.Location;
                 elastix_cmd = MRIToolkit.Elastix.ElastixCMD;
                 if(~ispc)
+                    N_THREADS = 8;
+                    try
+                        defaultProfile = parallel.defaultProfile();
+                        myCluster = parcluster(defaultProfile);
+                        N_THREADS = myCluster.numWorkers;
+                    catch
+                    end
+
                     if(~ismac)
                         elastix_cmd = ['LD_LIBRARY_PATH=' elastix_path ' ' elastix_cmd];
                     else
                         elastix_cmd = ['DYLD_LIBRARY_PATH=' elastix_path ' ' elastix_cmd];
                     end
+                    elastix_cmd = ['OMP_NUM_THREADS=' num2str(N_THREADS) ' '  elastix_cmd];
                 end
             end
         end
@@ -25,11 +34,20 @@ classdef ImageRegistrations < handle
                 elastix_path = MRIToolkit.Elastix.Location;
                 transformix_cmd = MRIToolkit.Elastix.TransformixCMD;
                 if(~ispc)
+                    N_THREADS = 8;
+                    try
+                        defaultProfile = parallel.defaultProfile();
+                        myCluster = parcluster(defaultProfile);
+                        N_THREADS = myCluster.numWorkers;
+                    catch
+                    end
+
                     if(~ismac)
                         transformix_cmd = ['LD_LIBRARY_PATH=' elastix_path ' ' transformix_cmd];
                     else
                         transformix_cmd = ['DYLD_LIBRARY_PATH=' elastix_path ' ' transformix_cmd];
                     end
+                    transformix_cmd = ['OMP_NUM_THREADS=' num2str(N_THREADS) ' '  transformix_cmd];
                 end
             end
         end
