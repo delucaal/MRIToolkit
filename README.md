@@ -4,8 +4,13 @@
  </a> 
  </p>
  
- # [MRIToolkit](https://github.com/delucaal/MRIToolkit) [update 17-02-2023] 
-New in this version [1.6]: 
+# [MRIToolkit](https://github.com/delucaal/MRIToolkit) [Update 11-12-2024]
+New in this version [1.6b]:
+- Bug fixes 
+- Updated compatibility to the latest version of WhiteMatterAnalysis
+- Initial support for tractography with Scilpy tools
+
+Update 17-02-2023:
 - This is the last stable release before a major change in structure. From the next release, all main functionalities will be come available as standalone commands and be designed to fully rely on Niftis only.
 - Fixes to the handling of Nifti headers
 - Automated brain extraction using image registration
