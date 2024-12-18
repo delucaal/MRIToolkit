@@ -4615,6 +4615,8 @@ classdef EDTI_Library < handle
             try
                 hdr = load_untouch_header_only(f_DWI);
             catch
+                pf = dir([strrep(strrep(f_DWI,'.nii',''),'.gz','') '.nii*']);
+                hdr = load_untouch_header_only(fullfile(pf.folder,pf.name));
             end
             
             b = textread(f_BM);
@@ -8429,6 +8431,882 @@ classdef EDTI_Library < handle
             seedPoint = seedPoint(:,1:i);
         end
         
+        % From ExploreDTI: network connectivity analysis based on tractography and
+        % brain parcellations in native space
+        function E_DTI_Network_analysis_from_ROI_L(files,tract_files,label_files,labels_descriptor,export_tracts,pass_or_end_or_both,out_folder,parallel_computing)
+            d = pwd;
+            try
+                [Lab_B, Lab] = textread(labels_descriptor,'%f%s','delimiter','\n');
+            catch
+                disp(['Error reading label names file: ' full_L_n3])
+                cd(d)
+                return;
+            end
+            
+            if ~all(any([Lab_B==1 Lab_B==0],2))
+                error(['Error reading label names file: ' labels_descriptor])
+            end
+            
+            if sum(Lab_B)<3
+                error(['There should be at least 3 non-zero labels in file: ' labels_descriptor])
+            end
+            
+            if (export_tracts == false)
+                selected_labels = [];
+            else
+                selected_labels = EDTI_Library.E_DTI_Get_NA_Tract_selection(Lab(Lab_B==1));
+            end
+            
+            if(strcmpi(pass_or_end_or_both,'pass'))
+                ACh = 1;
+            elseif (strcmpi(pass_or_end_or_both,'end'))
+                ACh = 2;
+            elseif(strcmpi(pass_or_end_or_both,'both'))
+                ACh = 3;
+            end
+                        
+            %ADL
+            % files = files(complete_files);
+            % label_files = label_files(complete_files);
+            vol_files = cell(size(files)); %this could be used to extract values of map from another modality for a specific connection %vol_files(complete_files);
+            vol_ext = 'nii';
+
+            if(parallel_computing==0)
+                
+                disp(' ')
+                tc = 0;                
+                
+                for i=1:length(files)
+                    
+                    tic;
+                    
+                    disp('Processing file: ')
+                    disp(files{i})
+                    
+                    try
+                        suc = EDTI_Library.E_DTI_Network_analysis_from_ROI_L_exe(files{i},tract_files{i},...
+                            vol_files{i}, label_files{i}, out_folder, selected_labels, ACh, Lab, Lab_B, vol_ext);
+                    catch me
+                        disp('Unexpected error for file:')
+                        disp(files{i})
+                        disp(me.message)
+                    end
+                    
+                    if suc==0
+                        disp('Processing not successful.')
+                    else
+                        disp('Processing successful.')
+                    end
+                    
+                    t=toc;
+                    m=t/60;
+                    disp(['Computation time was ' num2str(m) ' min.'])
+                    
+                    tc = tc + m;
+                    
+                    disp(' ')
+                                        
+                end
+                
+                disp('Network analysis completed.')
+                
+                disp(['Total computation time was ' num2str(tc) ' min.'])
+                
+                cd(d)
+                
+                
+            else
+                
+                disp(' ')
+                
+                tic;
+                
+                parfor i=1:length(files)
+                    
+                    disp('Processing file: ')
+                    disp(files{i})
+                    
+                    try
+                        EDTI_Library.E_DTI_Network_analysis_from_ROI_L_exe(files{i},tract_files{i},...
+                            vol_files{i}, label_files{i}, out_folder, selected_labels, ACh, Lab, Lab_B, vol_ext);
+                    catch me
+                        disp('Unexpected error for file:')
+                        disp(files{i})
+                        disp(me.message)
+                    end
+                    
+            %         if suc==0
+            %             disp('Processing not successful.')
+            %         else
+            %             disp('Processing successful.')
+            %         end
+                    
+                end
+                
+                t=toc;
+                m=t/60;
+                disp(['Computation time was ' num2str(m) ' min.'])
+                
+                disp('Network analysis completed.')
+                
+                cd(d)
+                                
+            end
+        end
+
+        % From ExploreDTI: helper function for connectivity analysis
+        function s = E_DTI_Get_NA_Tract_selection(L)
+        
+            [L_s,ind] = sortrows(L);
+            
+            cn=0;
+            
+              for i=1:length(L_s)
+                    for j=1:length(L_s)
+                        if i==j
+                            nL = L_s{i};
+                        else
+                            nL = [L_s{i} '_conn_' L_s{j}];
+                        end
+                        
+                        cn = cn+1;
+                        Lab{cn} = nL;
+                        
+                    end
+              end
+
+              s = 1:length(Lab);
+            [I, J] = ind2sub([length(L) length(L)],s);
+            
+            s = [J(:) I(:)];
+            
+            for i=1:size(s,1) 
+                s(i,:) = [ind(s(i,1)) ind(s(i,2))];
+            end
+        end
+
+        % From ExploreDTI: Helper function for connectivity analysis
+        function suc = E_DTI_Network_analysis_from_ROI_L_exe(dti_f,tract_f,...
+            vol_f, label_f, out_f, selected_labels, ACh, Lab, Lab_B, vol_ext)
+        
+            L = Lab(Lab_B==1);
+            
+            fiL = find(Lab_B);
+            
+            suc = 1;
+            
+            if isempty(selected_labels)
+                save_o = 0;
+            else
+                save_o = 1;
+            end
+            
+            if exist(tract_f,'file')~=2
+                suc = 0;
+                disp(['File: ' tract_f ' does not exist.'])
+                return;
+            end
+            
+            try
+                [A_L_trafo, VDims] = EDTI_Library.E_DTI_read_nifti_file(label_f);
+            catch
+                suc = 0;
+                disp(['Problems reading file: ' label_f ' ...'])
+                return; 
+            end
+            
+            for i=1:length(L)
+                
+                mask{i} = repmat(0>1,size(A_L_trafo));
+                mask{i}(A_L_trafo==fiL(i))=1;
+                
+            end
+            
+            disp('Analyzing labels...')
+            if ACh==1 || ACh==2
+                F_List = EDTI_Library.E_DTI_Get_F_List_from_tracts_and_masks(tract_f,mask,ACh);
+            else
+                F_List_1 = EDTI_Library.E_DTI_Get_F_List_from_tracts_and_masks(tract_f,mask,1);
+                disp(' ')
+                F_List_2 = EDTI_Library.E_DTI_Get_F_List_from_tracts_and_masks(tract_f,mask,2);
+            end
+            disp('Done analyzing labels.')
+            
+            disp(' ')
+            
+            if save_o==1
+                disp('Saving fiber bundles...')
+                if ACh==1 || ACh==2
+                    EDTI_Library.E_DTI_save_Network_analysis_temp_tracts(tract_f,F_List,out_f,L,selected_labels,ACh);
+                else
+                    EDTI_Library.E_DTI_save_Network_analysis_temp_tracts(tract_f,F_List_1,out_f,L,selected_labels,1);
+                    disp(' ')
+                    EDTI_Library.E_DTI_save_Network_analysis_temp_tracts(tract_f,F_List_2,out_f,L,selected_labels,2);
+                end
+                disp('Done saving fiber bundles.')
+            end
+                
+            disp(' ')
+            
+            disp('Calculating metrics...')
+            if ACh==1 || ACh==2
+                [Conn_matrices, Conn_Lab] = ...
+                    EDTI_Library.E_DTI_Get_Network_analysis_conn_mat_1(tract_f,F_List,L,vol_f,dti_f,vol_ext,ACh,mask);
+            else
+                [Conn_matrices_1, Conn_Lab_1] = ...
+                    EDTI_Library.E_DTI_Get_Network_analysis_conn_mat_1(tract_f,F_List_1,L,vol_f,dti_f,vol_ext,1,mask);
+                disp(' ')
+                [Conn_matrices_2, Conn_Lab_2] = ...
+                    EDTI_Library.E_DTI_Get_Network_analysis_conn_mat_1(tract_f,F_List_2,L,vol_f,dti_f,vol_ext,2,mask);
+            end
+            disp('Done calculating metrics.')
+            
+            disp(' ')
+            
+            if ACh==1 || ACh==2
+                Out_names = EDTI_Library.E_DTI_get_NA_final_output_names(out_f,tract_f,Conn_Lab);
+            else
+                Out_names_1 = EDTI_Library.E_DTI_get_NA_final_output_names(out_f,tract_f,Conn_Lab_1);
+                Out_names_2 = EDTI_Library.E_DTI_get_NA_final_output_names(out_f,tract_f,Conn_Lab_2);
+            end
+                
+            if ACh==1 || ACh==2 
+                for i=1:length(Out_names)
+                    CM = Conn_matrices{i};
+                    save(Out_names{i},'CM')
+                end
+            else
+                for i=1:length(Out_names_1)
+                    CM = Conn_matrices_1{i};
+                    save(Out_names_1{i},'CM')
+                    CM = Conn_matrices_2{i};
+                    save(Out_names_2{i},'CM')
+                end    
+            end
+            
+            CM = repmat(nan,[length(mask) length(mask)]);
+            CM = EDTI_Library.E_DTI_Get_IL_dist(mask);
+            
+            for i=1:length(mask)
+                for j=i:length(mask)
+                    CM(j,i) = CM(i,j);
+                end
+            end
+            
+            CM_ext{1} = '_inter_label_distances';
+            Out_name = EDTI_Library.E_DTI_get_NA_final_output_names(out_f,tract_f,CM_ext);    
+            save(Out_name{1},'CM')
+        end        
+
+        % From ExploreDTI: Helper function for connectivity analysis
+        function ndx = E_DTI_sub2ind(siz,a,b,c)
+            %Compute linear indices
+            k = [1 cumprod(siz(1:end-1))];
+            ndx = 1;
+            
+            ndx = ndx + (a-1)*k(1);
+            ndx = ndx + (b-1)*k(2);
+            ndx = ndx + (c-1)*k(3);
+
+        end
+
+        % From ExploreDTI: Helper function for connectivity analysis
+        function Fin_List = E_DTI_Get_F_List_from_tracts_and_masks(tract_f,AND_mask,ACh)
+
+            load(tract_f,'Tracts','VDims','TractMask');
+            MDims = size(TractMask);
+            
+            Lt = length(Tracts);
+            Lts = zeros(Lt,1);
+            
+            if ACh==2
+                for i = 1:Lt
+                    Tracts{i} = Tracts{i}([1 end],:);
+                end 
+            end
+            
+            for i = 1:Lt
+                Lts(i,1)=size(Tracts{i},1);
+            end
+            CLts = [0 ;cumsum(Lts)];
+            
+            Tmatx = repmat(single(0),[sum(Lts) 1]);
+            Tmaty = repmat(single(0),[sum(Lts) 1]);
+            Tmatz = repmat(single(0),[sum(Lts) 1]);
+            
+            for i=1:Lt
+                Tmatx(CLts(i)+1:CLts(i+1),1) = Tracts{i}(:,1);
+                Tmaty(CLts(i)+1:CLts(i+1),1) = Tracts{i}(:,2);
+                Tmatz(CLts(i)+1:CLts(i+1),1) = Tracts{i}(:,3);
+            end
+            
+            Tmatx = Tmatx/VDims(1);
+            Tmatx = round(Tmatx);
+            Tmaty = Tmaty/VDims(2);
+            Tmaty = round(Tmaty);
+            Tmatz = Tmatz/VDims(3);
+            Tmatz = round(Tmatz);
+            
+            TInd = EDTI_Library.E_DTI_sub2ind(MDims,Tmatx,Tmaty,Tmatz);
+            clear Tmatx Tmaty Tmatz;
+            
+            
+            for i=1:length(AND_mask)
+                if ACh==1
+            %         disp(['Analyzing label ' num2str(i) ' of ' num2str(length(AND_mask)) ' (PASS)...'])
+                else
+            %         disp(['Analyzing label ' num2str(i) ' of ' num2str(length(AND_mask)) ' (END)...'])
+                end
+                for j=i:length(AND_mask)
+                    if i==j && ACh==2
+                        Fin_List{i}{j} = EDTI_Library.E_DTI_Net_An_dual_AND_analyze_ii(AND_mask([i j]),TInd, Lt, CLts);
+                    else
+                        Fin_List{i}{j} = EDTI_Library.E_DTI_Net_An_dual_AND_analyze(AND_mask([i j]),TInd, Lt, CLts);
+                    end
+                end
+            end
+        end
+
+        % From ExploreDTI: Helper function for connectivity analysis
+        function C = E_DTI_Get_IL_dist(mask)
+            CM = zeros(length(mask),3);
+            
+            L = length(mask);
+            
+            for i=1:L
+                
+                ind = find(mask{i});
+                
+                [I,J,K] = ind2sub(size(mask{1}),ind);
+                
+                CM(i,1) = round(mean(I));
+                CM(i,2) = round(mean(J));
+                CM(i,3) = round(mean(K));
+                
+            end
+            
+            C = repmat(nan,[L L]);
+            
+            for i=1:L
+                for j=i:L
+                    
+                    C(i,j) = sqrt(sum((CM(i,:)-CM(j,:)).^2));
+                    
+                end
+            end
+           
+        end
+
+        % From ExploreDTI: Helper function for connectivity analysis
+        function FList = E_DTI_Net_An_dual_AND_analyze(AND_mask,TInd, Lt, CLts)
+            AND_IND = repmat(0>1,[length(TInd) length(AND_mask)]);
+            
+            for i=1:length(AND_mask)
+                AND_IND(:,i) = AND_mask{i}(TInd);
+            end
+            clear AND_mask TInd;
+            
+            FList = repmat(0>1,[Lt 1]);
+            
+            for i=1:Lt
+                FList(i) = all(any(AND_IND(CLts(i)+1:CLts(i+1),:),1),2);
+            end
+            clear AND_IND;
+            
+            FList_d = (1:Lt)';
+            FList = FList_d(FList);
+        end
+
+        % From ExploreDTI: Helper function for connectivity analysis
+        function FList = E_DTI_Net_An_dual_AND_analyze_ii(AND_mask,TInd, Lt, CLts)
+            AND_IND = repmat(0>1,[length(TInd) length(AND_mask)]);
+            
+            for i=1:length(AND_mask)
+                AND_IND(:,i) = AND_mask{i}(TInd);
+            end
+            clear AND_mask TInd;
+            
+            FList = repmat(0>1,[Lt 1]);
+            
+            for i=1:Lt
+                FList(i) = all(all(AND_IND(CLts(i)+1:CLts(i+1),:),1),2);
+            end
+            clear AND_IND;
+            
+            FList_d = (1:Lt)';
+            FList = FList_d(FList);
+        end
+
+        % From ExploreDTI: Helper function for connectivity analysis
+        function E_DTI_save_Network_analysis_temp_tracts(tract_f,F_List,out_f,L,sel_L,ACh)        
+            [apf, anf, exte] = fileparts(tract_f);
+            if ACh==1
+                fds = 'PASS';
+            else
+                fds = 'END';
+            end
+            
+            dir_temp = [out_f filesep 'temp_' fds '_' anf];
+            
+            [suct, m1, m2] = mkdir(dir_temp);
+            
+            flag=0;
+            vlag=0;
+            
+            if suct==1
+                
+                load(tract_f,'Tracts','VDims',...
+                    'TractMask','TractL','TractFE','TractFA','TractAng',...
+                    'TractGEO','TractMD','TractLambdas');
+                
+                warning off all
+                load(tract_f,'TractAK','TractKA','TractRK','TractMK');
+                warning on all
+                
+                if exist('TractAK','var') && exist('TractRK','var') ...
+                        && exist('TractMK','var') && exist('TractKA','var')
+                    flag=1;
+                    TAK = TractAK;
+                    TKA = TractKA;
+                    TRK = TractRK;
+                    TMK = TractMK;
+                    clear TractAK TractKA TractRK TractMK;
+                end
+                
+                warning off all
+                load(tract_f,'TractsFOD');
+                warning on all    
+            
+                if exist('TractsFOD','var')
+                    vlag=1;
+                    TFOD = TractsFOD;
+                    clear TractsFOD;
+                end
+                
+                
+                MDims = size(TractMask);
+                
+                for k=1:size(sel_L,1)
+                    
+                    i = sel_L(k,1);
+                    j = sel_L(k,2);
+                    
+                    if i==j
+                        nL = [L{i} '_tracts.mat'];
+                    else
+                        nL = [L{i} '_conn_' L{j} '_tracts.mat'];
+                    end
+                    
+                    if i>j
+                        i = sel_L(k,2);
+                        j = sel_L(k,1);
+                    end
+                    
+                    fname = [dir_temp filesep nL];
+                    
+                    if ~isempty(F_List{i}{j})
+                        
+            %             disp(['Saving fiber bundle ' num2str(k) ' of ' num2str(size(sel_L,1)) ' (' fds ') ...'])
+                        
+                        EDTI_Library.E_DTI_sve_NA_final(fname,Tracts(F_List{i}{j}),...
+                            VDims,MDims,TractL(F_List{i}{j}),TractFE(F_List{i}{j}),...
+                            TractFA(F_List{i}{j}),TractAng(F_List{i}{j}),...
+                            TractGEO(F_List{i}{j}),TractMD(F_List{i}{j}),...
+                            TractLambdas(F_List{i}{j}))
+                        
+                        if flag==1
+                            
+                            TractAK = TAK(F_List{i}{j});
+                            TractRK = TRK(F_List{i}{j});
+                            TractMK = TMK(F_List{i}{j});
+                            TractKA = TKA(F_List{i}{j});
+                            
+                            save(fname,'TractAK','TractKA','TractRK','TractMK','-append');
+                            
+                        end
+                        
+                        if vlag==1
+                            
+                            TractsFOD = TFOD(F_List{i}{j});
+                            save(fname,'TractsFOD','-append');
+                            
+                        end
+                        
+                        
+                    end
+                end
+                
+            end
+        end
+
+        % From ExploreDTI: Helper function for connectivity analysis
+        function E_DTI_sve_NA_final(fname,Tracts,VDims,MDims,...
+            TractL,TractFE,TractFA,TractAng,TractGEO,TractMD,TractLambdas)
+            FList = (1:length(Tracts))';
+            
+            TractMask = repmat(uint16(0),MDims);
+            
+            for i=1:length(FList)
+            
+                IND = unique(sub2ind(MDims,...
+                    round(double(Tracts{FList(i)}(:,1))./VDims(1)),...
+                    round(double(Tracts{FList(i)}(:,2))./VDims(2)),...
+                    round(double(Tracts{FList(i)}(:,3))./VDims(3))));
+            
+                TractMask(IND) = uint16(double(TractMask(IND)) + 1);
+            
+            end
+            
+            save(fname,'FList','Tracts','VDims','MDims',...
+                'TractL','TractFE','TractFA','TractAng',...
+                'TractGEO','TractMD','TractLambdas','TractMask')        
+        end
+
+        % From ExploreDTI: Helper function for connectivity analysis
+        function Out_names = E_DTI_get_NA_final_output_names(out_f,tract_f,Conn_Lab)
+            [apf, anf, exte] = fileparts(tract_f);
+            
+            for i=1:length(Conn_Lab)
+                Out_names{i} = [out_f filesep anf Conn_Lab{i} '.mat'];
+            end
+        end
+
+        % From ExploreDTI: Helper function for connectivity analysis
+        function SA = E_DTI_Get_surface_estimate_of_mask(mask, Voxs)
+            sx = size(mask,1);
+            sy = size(mask,2);
+            sz = size(mask,3);
+            
+            Xdims = [1 sx];
+            Ydims = [1 sy];
+            Zdims = [1 sz];
+            
+            x = single(Voxs(1):Voxs(1):Voxs(1)*Xdims(1,2));
+            lx = length(x);
+            y = single(Voxs(2):Voxs(2):Voxs(2)*Ydims(1,2));
+            ly = length(y);
+            z = single(Voxs(3):Voxs(3):Voxs(3)*Zdims(1,2));
+            lz = length(z);
+            
+            ThreeD_X = single(repmat(x',[1 ly lz]));
+            ThreeD_Y = single(repmat(y,[lx 1 lz]));
+            p = single(zeros(1,1,lz));
+            p(:,:,:) = z;
+            ThreeD_Z = single(repmat(p,[lx ly 1]));
+            
+            i_v = 0.5;
+            
+            [faces,verts] = isosurface(ThreeD_X,ThreeD_Y,ThreeD_Z,mask,i_v);
+            
+            a = verts(faces(:, 2), :) - verts(faces(:, 1), :);
+            b = verts(faces(:, 3), :) - verts(faces(:, 1), :);
+            c = cross(a, b, 2);
+            SA = 1/2 * sum(sqrt(sum(c.^2, 2)));
+        end
+
+        % From ExploreDTI: Helper function for connectivity analysis
+        function M = E_DTI_NA_on_Vol(vol,T,VDims,MDims)
+            M = EDTI_Library.E_DTI_Get_Tracts_from_V(VDims,MDims,vol,T);
+        end        
+
+        % From ExploreDTI: Helper function for connectivity analysis
+        function TractVol = E_DTI_Get_Tracts_from_V(VDims,MDims,V,Tracts)
+            
+            V = double(V);
+            
+            res_method = 'cubic';% 'linear'; % or 'cubic'
+            
+            S = MDims;
+            
+            x = single(VDims(1):VDims(1):VDims(1)*S(1));
+            lx = length(x);
+            y = single(VDims(2):VDims(2):VDims(2)*S(2));
+            ly = length(y);
+            z = single(VDims(3):VDims(3):VDims(3)*S(3));
+            lz = length(z);
+            
+            X = repmat(x',[1 ly lz]);
+            Y = repmat(y,[lx 1 lz]);
+            p = repmat(single(0),[1 1 lz]);
+            p(:,:,:) = z;
+            Z = repmat(p,[lx ly 1]);
+            clear x y z p lx ly lz;
+            
+            Lt = length(Tracts);
+            Lts = zeros(Lt,1);
+            
+            for i = 1:Lt
+                Lts(i,1)=size(Tracts{i},1);
+            end
+            CLts = [0 ;cumsum(Lts)];
+            
+            Tmatx = repmat(single(0),[sum(Lts) 1]);
+            Tmaty = repmat(single(0),[sum(Lts) 1]);
+            Tmatz = repmat(single(0),[sum(Lts) 1]);
+            
+            for i=1:Lt
+                Tmatx(CLts(i)+1:CLts(i+1),1) = Tracts{i}(:,1);
+                Tmaty(CLts(i)+1:CLts(i+1),1) = Tracts{i}(:,2);
+                Tmatz(CLts(i)+1:CLts(i+1),1) = Tracts{i}(:,3);
+            end
+            
+            clear Tracts;
+            
+            Result = interpn(X,Y,Z,V,Tmatx,Tmaty,Tmatz,res_method);
+            
+            TractVol = cell(1,Lt);
+            for i=1:Lt
+                TractVol{i} = Result(CLts(i)+1:CLts(i+1),1);
+            end
+        end
+
+        % From ExploreDTI: Helper function for connectivity analysis
+        function Vol = E_DTI_volume_NA(Tracts,VDims,MDims)
+            FList = (1:length(Tracts))';
+            
+            TractMask = repmat(uint16(0),MDims);
+            
+            for i=1:length(FList)
+            
+                IND = unique(sub2ind(MDims,...
+                    round(double(Tracts{FList(i)}(:,1))./VDims(1)),...
+                    round(double(Tracts{FList(i)}(:,2))./VDims(2)),...
+                    round(double(Tracts{FList(i)}(:,3))./VDims(3))));
+            
+                TractMask(IND) = uint16(double(TractMask(IND)) + 1);
+            
+            end
+            
+            
+            Vol = TractMask>0;
+            Vol = sum(Vol(:))*prod(VDims);
+        end
+
+        % From ExploreDTI: Helper function for connectivity analysis
+        function [Conn_matrices_1, CM1_ext] = E_DTI_Get_Network_analysis_conn_mat_1(tract_f,...
+            F_List,L,vol_f,dti_f, vol_ext,ACh,mask)
+        
+            if ACh==1
+                suf_C = 'PASS';
+            else
+                suf_C = 'END';
+            end
+            
+            flag=0;
+            vlag=0;
+            
+            load(tract_f,'Tracts','VDims',...
+                'TractMask','TractL','TractFE','TractFA','TractAng',...
+                'TractGEO','TractMD','TractLambdas');
+            
+            AT = length(Tracts);
+            
+            
+            warning off all
+            load(tract_f,'TractAK','TractKA','TractRK','TractMK');
+            warning on all
+            
+            if exist('TractAK','var') && exist('TractRK','var') ...
+                    && exist('TractMK','var') && exist('TractKA','var')
+                flag=1;
+            end
+            
+            warning off all
+            load(tract_f,'TractsFOD');
+            warning on all
+            
+            if exist('TractsFOD','var')
+                vlag=1;
+            end
+            
+            Surf_A = zeros(length(mask),1);
+            
+            for i=1:length(mask)
+                if sum(mask{i}(:))>=1
+                    Surf_A(i,1) = EDTI_Library.E_DTI_Get_surface_estimate_of_mask(mask{i}, VDims);
+                else
+                    Surf_A(i,1) = 1;
+                end
+            end
+            
+            MDims = size(TractMask);
+            
+            for i=1:15
+                Conn_matrices_1{i} = repmat(nan,[length(L) length(L)]);
+            end
+            
+            CM1_ext{1} = ['_percentage_of_tracts_' suf_C];
+            CM1_ext{2} = ['_average_tract_length_' suf_C];
+            CM1_ext{3} = ['_tract_volume_' suf_C];
+            CM1_ext{4} = ['_FA_' suf_C];
+            CM1_ext{5} = ['_MD_' suf_C];
+            CM1_ext{6} = ['_AD_' suf_C];
+            CM1_ext{7} = ['_L2_' suf_C];
+            CM1_ext{8} = ['_L3_' suf_C];
+            CM1_ext{9} = ['_RD_' suf_C];
+            CM1_ext{10} = ['_CL_' suf_C];
+            CM1_ext{11} = ['_CP_' suf_C];
+            CM1_ext{12} = ['_CS_' suf_C];
+            CM1_ext{13} = ['_number_of_tracts_' suf_C];
+            CM1_ext{14} = ['_density_weight_' suf_C];
+            CM1_ext{15} = ['_binary_' suf_C];
+            
+            
+            if flag==1
+                
+                for i=1:4
+                    Conn_matrices_1{end+1} = repmat(nan,[length(L) length(L)]);
+                end
+                
+                CM1_ext{end+1} = ['_MK_' suf_C];
+                CM1_ext{end+1} = ['_RK_' suf_C];
+                CM1_ext{end+1} = ['_AK_' suf_C];
+                CM1_ext{end+1} = ['_KA_' suf_C];
+                
+            end
+            
+            if vlag==1
+                
+                for i=1
+                    Conn_matrices_1{end+1} = repmat(nan,[length(L) length(L)]);
+                end
+                
+                CM1_ext{end+1} = ['_FOD_' suf_C];
+                
+            end
+            
+            
+            Get_U_L = [];
+            
+            for i=1:length(L)
+                
+            %     disp(['Calculating metrics for label ' num2str(i) ' of ' num2str(length(L)) ' (' suf_C ') ...'])
+                
+                for j=i:length(L)
+                    
+                    if ~isempty(F_List{i}{j})
+                        
+                        Get_U_L = union(Get_U_L,F_List{i}{j});
+                        
+                        Conn_matrices_1{1}(i,j) = length(F_List{i}{j});
+                        Conn_matrices_1{2}(i,j) = mean(cell2mat(TractL(F_List{i}{j})));
+                        Conn_matrices_1{3}(i,j) = EDTI_Library.E_DTI_volume_NA(Tracts(F_List{i}{j}),VDims,MDims);
+                        Conn_matrices_1{4}(i,j) = mean(cell2mat(TractFA(F_List{i}{j})'))/sqrt(3);
+                        Conn_matrices_1{5}(i,j) = mean(cell2mat(TractMD(F_List{i}{j})'));
+                        eigv = cell2mat(TractLambdas(F_List{i}{j})');
+                        Conn_matrices_1{6}(i,j) = mean(eigv(:,1));
+                        Conn_matrices_1{7}(i,j) = mean(eigv(:,2));
+                        Conn_matrices_1{8}(i,j) = mean(eigv(:,3));
+                        Conn_matrices_1{9}(i,j) = (Conn_matrices_1{7}(i,j) + Conn_matrices_1{8}(i,j))/2;
+                        GEO = cell2mat(TractGEO(F_List{i}{j})');
+                        Conn_matrices_1{10}(i,j) = mean(GEO(:,1));
+                        Conn_matrices_1{11}(i,j) = mean(GEO(:,2));
+                        Conn_matrices_1{12}(i,j) = mean(GEO(:,3));
+                        Conn_matrices_1{13}(i,j) = length(F_List{i}{j});
+                        Conn_matrices_1{14}(i,j) = (2/(Surf_A(i,1)+Surf_A(j,1)))*...
+                                                    mean(1./cell2mat(TractL(F_List{i}{j})));
+                        Conn_matrices_1{15}(i,j) = 1;
+                        
+                        if flag==1
+                            
+                            Conn_matrices_1{end-3}(i,j) = mean(cell2mat(TractMK(F_List{i}{j})'));
+                            Conn_matrices_1{end-2}(i,j) = mean(cell2mat(TractRK(F_List{i}{j})'));
+                            Conn_matrices_1{end-1}(i,j) = mean(cell2mat(TractAK(F_List{i}{j})'));
+                            Conn_matrices_1{end}(i,j) = mean(cell2mat(TractKA(F_List{i}{j})'));
+                            
+                        end
+            
+                        if vlag==1
+                            
+                            Conn_matrices_1{end}(i,j) = mean(cell2mat(TractsFOD(F_List{i}{j})'));
+                            
+                        end
+                        
+                    end
+                end
+            end
+            
+            Conn_matrices_1{1} = Conn_matrices_1{1}/length(Get_U_L);
+            Conn_matrices_1{15} = ~isnan(Conn_matrices_1{15});
+            
+            if ~isempty(vol_f)
+                
+                flag_ = 1;
+                
+                if exist(vol_f,'file')~=2
+                    disp('Warning: it seems that the following file cannot be read:')
+                    disp(vol_f)
+                    flag_ = 0;
+                end
+                
+                try
+                    [vol, VDims_vol] = EDTI_Library.E_DTI_read_nifti_file(vol_f);
+                catch me
+                    disp('Error:')
+                    disp(me.message)
+                    flag_ = 0;
+                end
+                
+                if ndims(vol)<3 || ndims(vol)>4
+                    flag_ = 0;
+                end
+                
+                load(dti_f,'MDims','VDims')
+                
+                if ~all(MDims==size(vol(:,:,:,1)))
+                    flag_ = 0;
+                end
+                
+                if ~all(VDims==VDims_vol)
+                    flag_ = 0;
+                end
+                
+                if flag_==1
+                    
+                    vol = double(vol);
+                    
+                    for v=1:size(vol,4)
+                        
+            %             disp(['Calculating ''volume'' metrics for volume ' num2str(v) ' of ' num2str(size(vol,4)) ' (' suf_C ') ...'])
+                        
+                        Conn_matrices_1{end+1} = repmat(nan,[length(L) length(L)]);
+                        
+                        if size(vol,4)==1
+                            CM1_ext{end+1} = [vol_ext(1:end-4) '_' suf_C];
+                        else
+                            CM1_ext{end+1} = [vol_ext(1:end-4) '_' num2str(v) '_' suf_C];
+                        end
+                        
+                        for i=1:length(L)
+                            for j=i:length(L)
+                                
+                                if ~isempty(F_List{i}{j})
+                                    
+                                    TV = EDTI_Library.E_DTI_NA_on_Vol(vol(:,:,:,v),...
+                                        Tracts(F_List{i}{j}),VDims,MDims);
+                                    
+                                    Conn_matrices_1{end}(i,j) = ...
+                                        mean(cell2mat(TV(1:end)'));
+                                    
+                                end
+                            end
+                        end
+                        
+                    end
+                end
+            end
+            
+            for p=1:length(Conn_matrices_1)
+                for i=1:size(Conn_matrices_1{p},1)
+                    for j=i:size(Conn_matrices_1{p},2)
+                        
+                        Conn_matrices_1{p}(j,i) = Conn_matrices_1{p}(i,j);
+                        
+                    end
+                end
+            end
+        end
+        
         % This function is used to track multiple FODs (mFOD). Written by A. De
         % Luca
         function WholeBrainTracking_mDRL_fast_exe(f_in, suffix, f_out, p, use_linear_or_majority)
@@ -8549,7 +9427,7 @@ classdef EDTI_Library < handle
             
         end
         
-        % Wraooer around the Gibbs ringing correction
+        % Wrapper around the Gibbs ringing correction
         function GibbsRingingCorrection(fnp_in,fnp_out)
             
             try

@@ -187,6 +187,38 @@ classdef Neuro < handle
             MRTQuant.WriteNifti(in_file,output);
             rmdir(temp_direc,'s');
        end
+
+       % Reconstruct structural connectivity given whole brain tractography
+       % and corresponding brain parcellations in native space.
+       function StructuralConnectivityAnalysis(varargin)
+            coptions = varargin;
+            mat_file = GiveValueForName(coptions,'mat_file');
+            if(isempty(mat_file))
+                error('Missing mandatory argument mat_file');
+            end
+            tract_file = GiveValueForName(coptions,'tract_file');
+            if(isempty(tract_file))
+                error('Missing mandatory argument tract_file');
+            end
+            label_file = GiveValueForName(coptions,'label_file');
+            if(isempty(label_file))
+                error('Missing mandatory argument label_file');
+            end
+            labels_txt = GiveValueForName(coptions,'labels_txt');
+            if(isempty(labels_txt))
+                error('Missing mandatory argument labels_txt');
+            end
+            output = GiveValueForName(coptions,'output');
+            if(isempty(output))
+                error('Missing mandatory argument output');
+            end
+            if(exist(output,'dir') < 1)
+                mkdir(output);
+            end
+            EDTI_Library.E_DTI_Network_analysis_from_ROI_L({mat_file},{tract_file},{label_file},labels_txt,1,...
+                'pass',output,0);
+        
+       end
    end
 end
 
