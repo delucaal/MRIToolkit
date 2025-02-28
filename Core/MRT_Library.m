@@ -1915,7 +1915,7 @@ classdef MRT_Library < handle
                 line = params{ix}(sp+1:ep-1);
                 parts = strsplit(line);
                 if(strcmp(parts{1},parameter_name))
-                    parval = line;
+                    parval = line(length(parameter_name)+1:end);
                     return
                 end
             end
