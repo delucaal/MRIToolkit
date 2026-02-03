@@ -663,7 +663,7 @@ classdef MRT_Library < handle
                 tgt_diffusivity = 0.7e-3;
             end
             S = exp(-bvalue*tgt_diffusivity)*ones(size(bh,1),1);
-            K = RichardsonLucy(S,bh,200);
+            K = MRT_Library.RichardsonLucy(S,bh,200);
             nn_val = max(K)*2;
         end
         

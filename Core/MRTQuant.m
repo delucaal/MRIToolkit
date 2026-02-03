@@ -120,7 +120,7 @@ classdef MRTQuant < handle
             NiftiIO_basic.WriteJSONDescription('output',output(1:end-4),'props',json);
         end
 
-        function ConformSpatialDimensions(varargin)
+        function [permute_order,sign_order] = ConformSpatialDimensions(varargin)
             % Ensures consistency with the coordinate systems of MRIToolkit and
             % ExploreDTI. Input arguments:
             % nii_file: the input file
@@ -1007,12 +1007,13 @@ classdef MRTQuant < handle
                 DWI(outlier) = EST_DWI(outlier);
             end
 
+            [bvals,bvecs] = MRTQuant.bval_bvec_from_b_Matrix(b);
             if(no_preproc == 1)
-                bvals = sum(b(:,[1 4 6]),2);
+                % bvals = sum(b(:,[1 4 6]),2);
             else
-                bvals = round(sum(b(:,[1 4 6]),2)/100)*100;
+                bvals = round(bvals/100)*100;
             end
-            bvecs = [zeros(NrB0,3);g];
+            % bvecs = [zeros(NrB0,3);g];
 
             mrt_data.img = single(DWI);
             mrt_data.bvals = bvals;
@@ -1949,6 +1950,8 @@ classdef MRTQuant < handle
                     use_txt = 1;
                     bmat = load([file_in(1:end-4) '.txt']);
                     [bval,bvec] = MRTQuant.bval_bvec_from_b_Matrix(bmat);
+                    bval = bval';
+                    bvec = bvec';
                 end
             end
             IX = indices_list;
@@ -2198,6 +2201,7 @@ classdef MRTQuant < handle
                 normalize = 1;
             end
             load(mat_file,'DWI','DWIB0','DT','b','VDims','KT');
+            [bval,g] = MRTQuant.bval_bvec_from_b_Matrix(b);
             DWI = single(EDTI_Library.E_DTI_DWI_cell2mat(DWI));
             if(normalize == 1)
                 for iz=1:size(DWI,4)
@@ -2211,6 +2215,25 @@ classdef MRTQuant < handle
             if(exist('KT','var') < 1 || isempty(KT))
                 DT = reshape(DT,siz(1)*siz(2)*siz(3),size(DT,4));
                 pred = exp(DT*(-b'));
+            else
+                DT = reshape(DT,siz(1)*siz(2)*siz(3),size(DT,4));
+                KT = EDTI_Library.E_DTI_DWI_cell2mat(KT);
+                KT = reshape(KT,siz(1)*siz(2)*siz(3),size(KT,4));
+                b_kurt = [g(:,1).^4 g(:,2).^4 g(:,3).^4 ...
+                    4*(g(:,1).^3).*g(:,2) 4*(g(:,1).^3).*g(:,3) ...
+                    4*(g(:,2).^3).*g(:,1) 4*(g(:,2).^3).*g(:,3) ...
+                    4*(g(:,3).^3).*g(:,1) 4*(g(:,3).^3).*g(:,2) ...
+                    6*(g(:,1).^2).*(g(:,2).^2) ...
+                    6*(g(:,1).^2).*(g(:,3).^2) ...
+                    6*(g(:,2).^2).*(g(:,3).^2) ...
+                    12*g(:,2).*g(:,3).*(g(:,1).^2) ...
+                    12*g(:,1).*g(:,3).*(g(:,2).^2) ...
+                    12*g(:,1).*g(:,2).*(g(:,3).^2)];
+                
+                b_kurt = repmat((1/54)*(b(:,1)+b(:,4)+b(:,6)).^2,[1 15]).*b_kurt;
+                MD2 = (DT(:,1)+DT(:,4)+DT(:,6)).^2;
+                % b_final = [ones(length(DWI),1) -b b_kurt];
+                pred = exp(DT*(-b')+KT*b_kurt'.*MD2);
             end
             pred = reshape(pred,[siz(1:3) size(b,1)]);
             if(normalize == 0)
