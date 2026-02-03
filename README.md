@@ -4,7 +4,7 @@
  </a> 
  </p>
  
-# [MRIToolkit](https://github.com/delucaal/MRIToolkit) [Update 11-12-2024 v1.7] 
+# [MRIToolkit](https://github.com/delucaal/MRIToolkit) [Last update: 03-02-2026 v1.7] 
 
  ## What is it?
 MRIToolkit is a set of [command line tools](https://github.com/delucaal/MRIToolkit/tree/master/CommandLine) and a MATLAB (R) toolbox to process (diffusion) magnetic resonance imaging (MRI) data. Binaries of the command line version will be provided at some point!
@@ -26,7 +26,9 @@ The toolbox is referenced for the first time in [Guo et al.](https://arxiv.org/a
 - [Diffusion Tensor Imaging (DTI)](https://pubmed.ncbi.nlm.nih.gov/8130344/) and [Diffusion Kurtosis Imaging (DKI)](https://pubmed.ncbi.nlm.nih.gov/15906300/) fit including the [MK-curve method](https://www.ncbi.nlm.nih.gov/pubmed/30978492);
 - Spherical deconvolution using the Constrained Spherical Deconvolution [(CSD)](https://www.ncbi.nlm.nih.gov/pubmed/18583153), [Multi-shell CSD](https://www.sciencedirect.com/science/article/pii/S1053811914006442?via%3Dihub), [damped Richardson Lucy](https://www.ncbi.nlm.nih.gov/pubmed/19781650), the [Generalized Richardson Lucy](https://arxiv.org/abs/1910.05372) and [mFOD](https://www.biorxiv.org/content/10.1101/739136v1);
 - Robust deconvolution of multiple water pools (NNLS/L2NNLS/PL2NNLS) as in [De Luca et al. 2018](https://onlinelibrary.wiley.com/doi/full/10.1002/nbm.3965)
-- [NEW!] Automatic fiber clustering thanks to [WMA pipeline](https://github.com/SlicerDMRI/whitematteranalysis/tree/master/whitematteranalysis)
+- Automatic fiber clustering thanks to [WMA pipeline](https://github.com/SlicerDMRI/whitematteranalysis/tree/master/whitematteranalysis)
+- Initial support for interfacing with Python. This is used to link to Scilpy [https://scil-documentation.readthedocs.io/en/latest/tools/recobundles.html](https://scilpy.readthedocs.io/en/latest/).
+- Support for bundle clustering using BundlesSeg/RecoBundlesX [https://scil-documentation.readthedocs.io/en/latest/tools/recobundles.html](https://scil-documentation.readthedocs.io/en/latest/tools/recobundles.html)
 
 ## Quick installation 
 Please, see [this guide](img/MRIToolkitInstallationNotes.pdf)

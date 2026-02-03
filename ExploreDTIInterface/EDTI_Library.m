@@ -4624,12 +4624,14 @@ classdef EDTI_Library < handle
             bval = sum(b(:,[1 4 6]),2);
             
             % Sort the acquisition on the fly
-            bval = round(bval);
-            [bval,IX] = sort(bval,'ascend');
-            b = b(IX,:);
-            DWI = DWI(:,:,:,IX);
-            
-            % The concept of b = 0 s/mm2 is a bit acquisition dependent.
+            if(isfield(MRIToolkit,'mat_conversion_nosort') < 1 || MRIToolkit.mat_conversion_nosort == 0)
+                bval = round(bval);            
+                [bval,IX] = sort(bval,'ascend');
+                b = b(IX,:);
+                DWI = DWI(:,:,:,IX);
+            end
+
+            % The concept of non-weighted image can be acquisition dependent.
             if(isfield(MRIToolkit,'min_bval_as_b0'))
                 b0_indices = find(bval <= MRIToolkit.min_bval_as_b0);
             else

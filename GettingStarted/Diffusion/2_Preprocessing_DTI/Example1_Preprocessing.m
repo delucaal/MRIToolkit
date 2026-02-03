@@ -14,6 +14,7 @@ MRTQuant.b_Matrix_from_bval_bvec('bval_file','sub-MRI_ses-1/dwi/sub-MRI_ses-1_dM
 % T1 first
 MRTQuant.FlipPermuteSpatialDimensions('nii_file','sub-MRI_ses-1/anat/sub-MRI_ses-1_sT1W_3D_TFE_1_brain.nii',...
     'output','sub-MRI_ses-1/anat/sub-MRI_ses-1_sT1W_3D_TFE_1_brain_FP.nii');
+MRTQuant.ConformSpatialDimensions();
 % Downsample the T1 at 2mm resolution to save memory (not needed if your
 % workstation has 16+GB ram)
 MRTQuant.ResampleDataSpatially('nii_file','sub-MRI_ses-1/anat/sub-MRI_ses-1_sT1W_3D_TFE_1_brain_FP.nii'...
@@ -30,7 +31,7 @@ MRTQuant.FlipPermuteSpatialDimensions('nii_file','sub-MRI_ses-1/dwi/sub-MRI_ses-
 %     'output','sub-MRI_ses-1/dwi/sub-MRI_ses-1_dMRI_B2500_S15_MB2_v2_1_sdc.nii');
 
 % Optional pre-processing steps - denoising with MP-PCA
-MRTD.MPPCADenoising('nii_file','sub-MRI_ses-1/dwi/sub-MRI_ses-1_dMRI_B2500_S15_MB2_v2_1_FP.nii',...
+MRTQuant.MPPCADenoising('nii_file','sub-MRI_ses-1/dwi/sub-MRI_ses-1_dMRI_B2500_S15_MB2_v2_1_FP.nii',...
     'output','sub-MRI_ses-1/dwi/sub-MRI_ses-1_dMRI_B2500_S15_MB2_v2_1_FP');
 
 % % Optional pre-processing steps - Gibbs Ringing correction
