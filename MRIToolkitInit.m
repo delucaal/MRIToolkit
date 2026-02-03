@@ -13,6 +13,7 @@
 % 05/05/2020: Added suppot for automatic version control
 % 13/08/2021: v1.5
 % 12/01/2024: v1.6
+% 18/12/2024: v1.7
 function MRIToolkitInit(SelectedToolboxes)
     run_folder = mfilename('fullpath');
     if(~isempty(run_folder))
@@ -114,8 +115,8 @@ function git_version = read_git_version()
         git_version = fgetl(git_commit);
         fclose(git_commit);
     elseif(isdeployed)
-        git_version = 'v1.6-cmdline';
+        git_version = 'v1.7-cmdline';
     else
-        git_version = 'v1.6-nongit';
+        git_version = 'v1.7-nongit';
     end
 end

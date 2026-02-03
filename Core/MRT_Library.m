@@ -663,7 +663,7 @@ classdef MRT_Library < handle
                 tgt_diffusivity = 0.7e-3;
             end
             S = exp(-bvalue*tgt_diffusivity)*ones(size(bh,1),1);
-            K = RichardsonLucy(S,bh,200);
+            K = MRT_Library.RichardsonLucy(S,bh,200);
             nn_val = max(K)*2;
         end
         
@@ -1915,7 +1915,7 @@ classdef MRT_Library < handle
                 line = params{ix}(sp+1:ep-1);
                 parts = strsplit(line);
                 if(strcmp(parts{1},parameter_name))
-                    parval = line;
+                    parval = line(length(parameter_name)+1:end);
                     return
                 end
             end
@@ -2065,6 +2065,20 @@ classdef MRT_Library < handle
             end
         end
     
+        % Make an atlas file EDTI compatible
+        function AdaptAtlasEDTIStyle(parc_file,labels,ids,output)
+            pf = MRTQuant.LoadNifti(parc_file);
+            pf_new = pf;
+            pf_new.img = zeros(size(pf_new.img));
+            labels_txt = fopen([output '_labels.txt'],'wt');
+            for ij=1:length(ids)
+                pf_new.img(pf.img == ids(ij)) = ij;
+                fprintf(labels_txt,'1 %s%s',strrep(labels{ij},' ','_'),newline);
+            end
+            fclose(labels_txt);
+            MRTQuant.WriteNifti(pf_new,[output '_atlas.nii']);
+        end
+
         % To be completed
         function fs_lut = FreeSurferLabelsInParcFile(parc_file)
             fs_lut = [];

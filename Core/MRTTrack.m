@@ -347,7 +347,7 @@ classdef MRTTrack < handle
                     l_RSS = zeros([Nindices 1],'single');
                     
                     parfor (x=1:Nindices,nof_workers)
-%                                             for x=1:N
+                                            % for x=1:N
                         YLR = [ULRKernel(:,1) ULRKernelIso];
                         YHR = [UHRKernel(:,1) UHRKernelIso];
                         %                     fODFC = [];
@@ -3088,11 +3088,11 @@ classdef MRTTrack < handle
             out = ShellAndPython.ExecuteSH(cmd);
             disp(out);
             
-            cmd = ['scil_recognize_multi_bundles.py ' tract_file ' ' ...
+            cmd = ['scil_tractogram_segment_with_bundleseg.py ' tract_file ' ' ...
                 which('rbx_config_fss_custom.json') ' ' ...
                 fullfile(MRIToolkit.RootFolder,'ThirdParty','RecoBundlesX','atlas') ...
                 ' output0GenericAffine.mat --out_dir ' WMA_Folder ...  
-                ' --log_level DEBUG --minimal_vote 0.4 --processes 8 --seed 0 --inverse -f '];
+                ' -v DEBUG --minimal_vote_ratio 0.4 --processes 8 --seed 0 --inverse -f '];
             out = ShellAndPython.ExecuteCommandInCondaEnv('MRIToolkit',cmd);
             disp(out);
             rmdir(temp_fold,'s');
@@ -3750,7 +3750,7 @@ classdef MRTTrack < handle
             % SeedMask: A mask to perform the seeding. If empty, the whole
             %   volume is used
             % Default parameters:
-            %  SeedPointRes: 1 voxel
+            %  NPV: 1
             %             StepSize: 0.5mm
             %          AngleThresh: 20deg
             %     FiberLengthRange: [30 500]
@@ -3852,13 +3852,24 @@ classdef MRTTrack < handle
                 temp_files = true;
             end
             % Call scilpy tracking
-            cmd = ['scil_compute_local_tracking.py --step ' num2str(parameters.StepSize) ...
+            cmd = ['scil_tracking_local.py --step ' num2str(parameters.StepSize) ...
                 ' --min_length ' num2str(parameters.FiberLengthRange(1)) ' --max_length ' num2str(parameters.FiberLengthRange(2)) ...
                 ' --sfthres ' num2str(parameters.blob_T) ' --algo prob ' ...
                 ' --npv ' num2str(parameters.SeedPointRes) ' --theta ' num2str(parameters.AngleThresh) ' -v ' ...
                 ' --use_gpu -f ' ...
                 ' ' fod_file ' ' parameters.SeedMask ' ' parameters.TrackMask ' ' filename_out]; % compression?
             out = ShellAndPython.ExecuteCommandInCondaEnv('MRIToolkit',cmd);
+            
+            if(contains(out,'PLATFORM_NOT_FOUND_KHR'))
+                % Call scilpy tracking without opencl acc.
+                cmd = ['scil_compute_local_tracking.py --step ' num2str(parameters.StepSize) ...
+                    ' --min_length ' num2str(parameters.FiberLengthRange(1)) ' --max_length ' num2str(parameters.FiberLengthRange(2)) ...
+                    ' --sfthres ' num2str(parameters.blob_T) ' --algo prob ' ...
+                    ' --npv ' num2str(parameters.SeedPointRes) ' --theta ' num2str(parameters.AngleThresh) ' -v ' ...
+                    ' -f ' ...
+                    ' ' fod_file ' ' parameters.SeedMask ' ' parameters.TrackMask ' ' filename_out]; % compression?
+                out = ShellAndPython.ExecuteCommandInCondaEnv('MRIToolkit',cmd);
+            end
             disp(out);  
             if(temp_files)  
                 rmdir(tf,'s');
@@ -4473,7 +4484,7 @@ A = diag(Eigenvalues);
 S = 0;
 Nfibers = length(f);
 f = f/sum(f);
-b2D2K = 1/6*b.^2.*mean(Eigenvalues.^2)*K;
+b2D2K = 1/6*b.^2.*(mean(Eigenvalues)).^2*K; % potentially disruptive change
 for i = 1:Nfibers
     phi(i) = ang(i, 1);
     theta(i) = ang(i, 2);
@@ -4825,7 +4836,7 @@ for i=1:num_tracts
 end
 
 mx = mean(Points(:,1));
-my = mean(Points(:,2))+40;
+my = mean(Points(:,2));%+40;
 mz = mean(Points(:,3));%-10;
 
 Points(:,1) = Points(:,1) - mx;

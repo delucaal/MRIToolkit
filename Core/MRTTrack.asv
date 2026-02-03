@@ -347,7 +347,7 @@ classdef MRTTrack < handle
                     l_RSS = zeros([Nindices 1],'single');
                     
                     parfor (x=1:Nindices,nof_workers)
-%                                             for x=1:N
+                                            % for x=1:N
                         YLR = [ULRKernel(:,1) ULRKernelIso];
                         YHR = [UHRKernel(:,1) UHRKernelIso];
                         %                     fODFC = [];
@@ -2649,14 +2649,14 @@ classdef MRTTrack < handle
                 if(ispc)
                     [a,cmd_loc] = system([base_cmd ' where wm_register_to_atlas_new.py']);
                     cmd = [base_cmd ' python ' cmd_loc ...
-                        ' -mode rigid_affine_fast ' ...
+                        ' -mode affine ' ... rigid_affine_fast
                         'tracts.vtk ' ...
                         [AtlasFolder '/ORG-RegAtlas-100HCP/registration_atlas.vtk '] ...
                         [WMA_Folder '/TractRegistration']];
                     cmd = strrep(cmd,newline,' ');
                 else
                     cmd = [base_cmd ';wm_register_to_atlas_new.py ' ...
-                        ' -mode rigid_affine_fast ' ...
+                        ' -mode affine ' ...
                         'tracts.vtk ' ...
                         AtlasFolder '/ORG-RegAtlas-100HCP/registration_atlas.vtk ' ...
                         WMA_Folder '/TractRegistration/'];
@@ -2833,6 +2833,7 @@ classdef MRTTrack < handle
             % (default false)
             
             global MRIToolkit;
+            ShellAndPython.SetupRecoBundlesX();
             
             mat_file = GiveValueForName(varargin,'mat_file');
             if(isempty(mat_file))
@@ -2843,7 +2844,6 @@ classdef MRTTrack < handle
             if(isempty(tract_file))
                 error('Missing mandatory argument tract_file');
             end
-            TractsName = tract_file(1:end-4);
             
             WMA_Folder = GiveValueForName(varargin,'output');
             if(isempty(WMA_Folder))
@@ -2855,10 +2855,21 @@ classdef MRTTrack < handle
             IM = load(mat_file,'FA','VDims');
             img.img = IM.FA/sqrt(3);
             img.VD = IM.VDims;
-            MRTQuant.WriteNifti(fullfile())
-            cmd = ['antsRegistrationSyNQuick.sh -d 3 -f ${T1} -m mni_masked.nii.gz -t a -n 4'];
-            %cmd = 'scil_recognize_multi_bundles.py '
+            MRTQuant.WriteNifti(img,fullfile(temp_fold,'FA.nii'));
+            cmd = ['antsRegistrationSyNQuick.sh -d 3 -f ' fullfile(temp_fold,'FA.nii') ...
+                ' -m ' fullfile(MRIToolkit.RootFolder,'ThirdParty','RecoBundlesX','mni_masked.nii.gz') ...
+                ' -t a -n 4'];
+            out = ShellAndPython.ExecuteSH(cmd);
+            disp(out);
             
+            cmd = ['scil_tractogram_segment_with_bundl.py ' tract_file ' ' ...
+                which('rbx_config_fss_custom.json') ' ' ...
+                fullfile(MRIToolkit.RootFolder,'ThirdParty','RecoBundlesX','atlas') ...
+                ' output0GenericAffine.mat --out_dir ' WMA_Folder ...  
+                ' -v DEBUG --minimal_vote 0.4 --processes 8 --seed 0 --inverse -f '];
+            out = ShellAndPython.ExecuteCommandInCondaEnv('MRIToolkit',cmd);
+            disp(out);
+            rmdir(temp_fold,'s');
         end
         
         function PerformDTIBased_FiberTracking(varargin)
@@ -3622,6 +3633,17 @@ classdef MRTTrack < handle
                 ' --use_gpu -f ' ...
                 ' ' fod_file ' ' parameters.SeedMask ' ' parameters.TrackMask ' ' filename_out]; % compression?
             out = ShellAndPython.ExecuteCommandInCondaEnv('MRIToolkit',cmd);
+            
+            if(contains(out,'PLATFORM_NOT_FOUND_KHR'))
+                % Call scilpy tracking without opencl acc.
+                cmd = ['scil_compute_local_tracking.py --step ' num2str(parameters.StepSize) ...
+                    ' --min_length ' num2str(parameters.FiberLengthRange(1)) ' --max_length ' num2str(parameters.FiberLengthRange(2)) ...
+                    ' --sfthres ' num2str(parameters.blob_T) ' --algo prob ' ...
+                    ' --npv ' num2str(parameters.SeedPointRes) ' --theta ' num2str(parameters.AngleThresh) ' -v ' ...
+                    ' -f ' ...
+                    ' ' fod_file ' ' parameters.SeedMask ' ' parameters.TrackMask ' ' filename_out]; % compression?
+                out = ShellAndPython.ExecuteCommandInCondaEnv('MRIToolkit',cmd);
+            end
             disp(out);  
             if(temp_files)  
                 rmdir(tf,'s');
@@ -4236,7 +4258,7 @@ A = diag(Eigenvalues);
 S = 0;
 Nfibers = length(f);
 f = f/sum(f);
-b2D2K = 1/6*b.^2.*mean(Eigenvalues.^2)*K;
+b2D2K = 1/6*b.^2.*(mean(Eigenvalues)).^2*K; % potentially disruptive change
 for i = 1:Nfibers
     phi(i) = ang(i, 1);
     theta(i) = ang(i, 2);
@@ -4588,8 +4610,8 @@ for i=1:num_tracts
 end
 
 mx = mean(Points(:,1));
-my = mean(Points(:,2))+40;
-mz = mean(Points(:,3))-10;
+my = mean(Points(:,2));%+40;
+mz = mean(Points(:,3));%-10;
 
 Points(:,1) = Points(:,1) - mx;
 Points(:,2) = Points(:,2) - my;

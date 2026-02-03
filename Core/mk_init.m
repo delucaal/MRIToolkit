@@ -10,8 +10,9 @@
 % 24/10/2020: creation - v1.1
 % 01/01/2021: update v1.2
 % 12/01/2024: update v1.3
+% 18/12/2024: update v1.4
 global MRIToolkit;
-MRIToolkit.core_version = 1.3;
+MRIToolkit.core_version = 1.4;
 
 addpath(get_executed_file_path())
 addpath(fullfile(get_executed_file_path(),'Trackers'))

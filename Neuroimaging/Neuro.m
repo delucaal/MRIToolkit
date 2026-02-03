@@ -187,6 +187,38 @@ classdef Neuro < handle
             MRTQuant.WriteNifti(in_file,output);
             rmdir(temp_direc,'s');
        end
+
+       % Reconstruct structural connectivity given whole brain tractography
+       % and corresponding brain parcellations in native space.
+       function StructuralConnectivityAnalysis(varargin)
+            coptions = varargin;
+            mat_file = GiveValueForName(coptions,'mat_file');
+            if(isempty(mat_file))
+                error('Missing mandatory argument mat_file');
+            end
+            tract_file = GiveValueForName(coptions,'tract_file');
+            if(isempty(tract_file))
+                error('Missing mandatory argument tract_file');
+            end
+            label_file = GiveValueForName(coptions,'label_file');
+            if(isempty(label_file))
+                error('Missing mandatory argument label_file');
+            end
+            labels_txt = GiveValueForName(coptions,'labels_txt');
+            if(isempty(labels_txt))
+                error('Missing mandatory argument labels_txt');
+            end
+            output = GiveValueForName(coptions,'output');
+            if(isempty(output))
+                error('Missing mandatory argument output');
+            end
+            if(exist(output,'dir') < 1)
+                mkdir(output);
+            end
+            EDTI_Library.E_DTI_Network_analysis_from_ROI_L({mat_file},{tract_file},{label_file},labels_txt,1,...
+                'pass',output,0);
+        
+       end
    end
 end
 
@@ -268,7 +300,7 @@ matlabbatch{1}.spm.tools.cat.estwrite.extopts.admin.ignoreErrors = 1;
 matlabbatch{1}.spm.tools.cat.estwrite.extopts.admin.verb = 2;
 matlabbatch{1}.spm.tools.cat.estwrite.extopts.admin.print = 2;
 matlabbatch{1}.spm.tools.cat.estwrite.output.BIDS.BIDSno = 1;
-matlabbatch{1}.spm.tools.cat.estwrite.output.surface = 1;
+matlabbatch{1}.spm.tools.cat.estwrite.output.surface = 1; % Changed on 31-10-2024 before processing HARMY
 matlabbatch{1}.spm.tools.cat.estwrite.output.surf_measures = 1;
 matlabbatch{1}.spm.tools.cat.estwrite.output.ROImenu.atlases.neuromorphometrics = 1;
 matlabbatch{1}.spm.tools.cat.estwrite.output.ROImenu.atlases.lpba40 = 0;
@@ -297,7 +329,7 @@ matlabbatch{1}.spm.tools.cat.estwrite.output.CSF.native = 1;
 matlabbatch{1}.spm.tools.cat.estwrite.output.CSF.warped = 0;
 matlabbatch{1}.spm.tools.cat.estwrite.output.CSF.mod = 0;
 matlabbatch{1}.spm.tools.cat.estwrite.output.CSF.dartel = 0;
-matlabbatch{1}.spm.tools.cat.estwrite.output.ct.native = 0;
+matlabbatch{1}.spm.tools.cat.estwrite.output.ct.native = 1;
 matlabbatch{1}.spm.tools.cat.estwrite.output.ct.warped = 0;
 matlabbatch{1}.spm.tools.cat.estwrite.output.ct.dartel = 0;
 matlabbatch{1}.spm.tools.cat.estwrite.output.pp.native = 0;
