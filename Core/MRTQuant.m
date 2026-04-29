@@ -34,15 +34,24 @@ classdef MRTQuant < handle
             end
         end
 
-        function WriteNifti(data, file_name, use_original_header, is_mask)
+        function WriteNifti(data, file_name, use_original_header, restore_spatial, is_mask)
             % Writes a data matrix to nifti as specified in file_name. data
             % must be a struct with fields img (the matrix) and VD (voxel
             % dimension)
+            % use_original_header -> 1/0. If 1, will use the original header also on
+            %       the output image (disabled by default)
+            % restore_spatial -> 1/0. If 1, will invert the execution of
+            %       ConformSpatialDimensions if previously executed
+            %       (disabled by default). Requires "use_original_header"
+            %       to be 1.
             global MRIToolkit;
             if(nargin < 3)
                 use_original_header = 1;
             end
             if(nargin < 4)
+                restore_spatial = 0;
+            end
+            if(nargin < 5)
                 is_mask = 0;
             end
 
@@ -55,30 +64,34 @@ classdef MRTQuant < handle
                 end
                 EDTI_Library.E_DTI_write_nifti_file(data.img, data.VD, file_name);
             else
-                data.img = flip(data.img,1);
-                data.img = flip(data.img,2);
-                if ndims(data.img)==4
-                    data.img = permute(data.img,[2 1 3 4]);
-                elseif ndims(data.img)==3
-                    data.img = permute(data.img,[2 1 3]);
-                end
-                data.untouch = 1;
-                data.hdr.dime.dim(2:4) = size(data.img(:,:,:,1));
-                if(ndims(data.img) == 4)
-                    data.hdr.dime.dim(5) = size(data.img,4);
+                if(restore_spatial < 1)
+                    data.img = flip(data.img,1);
+                    data.img = flip(data.img,2);
+                    if ndims(data.img)==4
+                        data.img = permute(data.img,[2 1 3 4]);
+                    elseif ndims(data.img)==3
+                        data.img = permute(data.img,[2 1 3]);
+                    end
+                    data.untouch = 1;
+                    data.hdr.dime.dim(2:4) = size(data.img(:,:,:,1));
+                    if(ndims(data.img) == 4)
+                        data.hdr.dime.dim(5) = size(data.img,4);
+                    else
+                        data.hdr.dime.dim([1 5]) = [3 1];
+                    end
+                    data.img = single(data.img);
+                    data.hdr.dime.datatype = 16;
+                    data.hdr.dime.bitpix = 32;
+                    if(is_mask)
+                        data.img = logical(data.img);
+                        data.hdr.dime.datatype = 2;
+                        data.hdr.dime.bitpix = 2;                 
+                    end
+    
+                    data.hdr.dime.pixdim(2:4) = data.VD([2 1 3]);
                 else
-                    data.hdr.dime.dim([1 5]) = [3 1];
+                    data = MRT_Library.RestoreImageHeaderOrientation(data,data.hdr);
                 end
-                data.img = single(data.img);
-                data.hdr.dime.datatype = 16;
-                data.hdr.dime.bitpix = 32;
-                if(is_mask)
-                    data.img = logical(data.img);
-                    data.hdr.dime.datatype = 2;
-                    data.hdr.dime.bitpix = 2;                 
-                end
-
-                data.hdr.dime.pixdim(2:4) = data.VD([2 1 3]);
 
                 if(MRIToolkit.EnforceNiiGz > 0 && ~contains(file_name,'nii.gz'))
                     file_name = strrep(file_name,'nii','nii.gz');
@@ -144,96 +157,12 @@ classdef MRTQuant < handle
             data_out = output;
 
             try
-                hdr = load_untouch_nii(data_in);
+                nii = load_untouch_nii(data_in);
             catch
                 data_in = [data_in '.gz'];
-                hdr = load_untouch_nii(data_in);
+                nii = load_untouch_nii(data_in);
             end
-            smat = [hdr.hdr.hist.srow_x(1:3);
-                hdr.hdr.hist.srow_y(1:3);
-                hdr.hdr.hist.srow_z(1:3)];
-
-            b = hdr.hdr.hist.quatern_b;
-            c = hdr.hdr.hist.quatern_c;
-            d = hdr.hdr.hist.quatern_d;
-            a = (1.0-(b*b+c*c+d*d));
-            if(a < 1e-7)
-                a = 1.0 / sqrt(b*b+c*c+d*d) ;
-                b = b*a;
-                c = c*a;
-                d = d*a;
-                a = 0;
-            else
-                a = sqrt(a);
-            end
-            qfac = hdr.hdr.dime.pixdim(1);
-            dx = abs(hdr.hdr.dime.pixdim(2));
-            dy = abs(hdr.hdr.dime.pixdim(3));
-            dz = abs(hdr.hdr.dime.pixdim(4));
-            if(qfac < 1)
-                dz = -dz;
-            end
-            qmat = [(a*a+b*b-c*c-d*d)*dx (2*b*c-2*a*d)*dy (2*b*d+2*a*c)*dz;
-                (2*b*c+2*a*d)*dx (a*a+c*c-b*b-d*d)*dy (2*c*d-2*a*b)*dz;
-                (2*b*d-2*a*c)*dx (2*c*d+2*a*b)*dy (a*a+d*d-c*c-b*b)*dz];
-            if(hdr.hdr.hist.sform_code > 0)
-                if(hdr.hdr.hist.sform_code > 0)
-                    disp('Using the s-form' );
-                    qmat = smat;
-                end
-            else
-                if(hdr.hdr.hist.sform_code == 0)
-                    disp('No s-form');
-                    if(hdr.hdr.hist.qform_code > 0)
-                        disp('Using q-form');
-                        smat = qmat;
-                    else
-                        disp('Using identity orientation')
-                        smat = eye(3);
-                    end
-                end
-            end
-
-            permute_order = [1 2 3];
-            sign_order = [1 1 1];
-            for ij=1:size(smat,2)
-%                 [~,IX] = max(abs(smat(:,ij)));
-                [~,IX] = max(abs(smat(ij,:)));
-                permute_order(ij) = IX;
-                if(smat(ij,IX) < 0)
-                    sign_order(ij) = -1;
-                end
-            end
-            
-            if(length(unique(permute_order)) < length(permute_order))
-                disp('Please visually check the resulting image.');
-                % temp workaround
-                permute_order = [1 2 3];
-                sign_order = [1 1 1];
-                for ij=1:size(smat,2)
-                    [~,IX] = max(abs(smat(:,ij)));
-%                     [~,IX] = max(abs(smat(ij,:)));
-                    permute_order(ij) = IX;
-                    if(smat(ij,IX) < 0)
-                        sign_order(ij) = -1;
-                    end
-                end                
-            end
-
-            out_data.img = single(hdr.img);
-            out_data.img = permute(out_data.img,[permute_order 4]);
-            for ij=1:length(sign_order)
-                if(sign_order(ij) == -1)
-                    out_data.img = flip(out_data.img,ij);
-                end
-            end
-
-            out_data.VD = hdr.hdr.dime.pixdim(2:4);
-            out_data.VD = out_data.VD(permute_order(1:3));
-            out_data.VD = out_data.VD([2 1 3]);
-            out_data.img = permute(out_data.img,[2 1 3 4]);
-            out_data.img = flip(out_data.img,1);
-            out_data.img = flip(out_data.img,2);
+            [out_data,permute_order,sign_order] = MRT_Library.ConformImageAndHeaderOrientation(nii);
 
             MRTQuant.WriteNifti(out_data,data_out,0);
 
@@ -244,7 +173,7 @@ classdef MRTQuant < handle
 
             json.permute_order = permute_order;
             json.sign_order = sign_order;
-            json.original_header = hdr.hdr;
+            json.original_header = nii.hdr;
             fn = strrep(strrep(data_out,'.nii',''),'.gz','');
             NiftiIO_basic.WriteJSONDescription('output',fn,'props',json);
 
@@ -285,24 +214,8 @@ classdef MRTQuant < handle
                 hdr = MRTQuant.LoadNifti(data_in);
             end
 
-            out_data.img = single(hdr.img);
-            
-            out_data.img = flip(out_data.img,1);
-            out_data.img = flip(out_data.img,2);
-            out_data.img = permute(out_data.img,[2 1 3 4]);
-            for ij=1:length(json_def.sign_order)
-                if(json_def.sign_order(ij) == -1)
-                    out_data.img = flip(out_data.img,ij);
-                end
-            end
-
-            out_data.img = permute(out_data.img,[json_def.permute_order; 4]);
-            out_data.hdr = json_def.original_header;
-            out_data.hdr.dime.scl_inter = 0;
-            out_data.hdr.dime.scl_slope = 1;
-            out_data.hdr.dime.datatype = 16;
-            out_data.hdr.dime.bitpix = 32;
-            out_data.untouch = 1;
+            out_data = MRT_Library.RestoreImageHeaderOrientation(hdr,json_def.original_header,...
+                json_def.permute_order,json_def.sign_order);
             save_untouch_nii(out_data,data_out);
 
             json.CallFunction = 'MRTQuant.ConformSpatialDimensions';
@@ -554,7 +467,7 @@ classdef MRTQuant < handle
         end
 
         function ResampleDataSpatially(varargin)
-            % Inteface to resample 3D/4D volumes to a given resolution (Ensures
+            % Function to resample 3D/4D volumes to a given resolution (Ensures
             % compliance of the .nii files with the ExploreDTI convention)
             % Accordingly, the header is discarded and only the rotation matrix
             % retained. Arguments:
@@ -612,7 +525,7 @@ classdef MRTQuant < handle
         end
 
         function PerformDTI_DKIFit(varargin)
-            % Interface to perform the DTI/DKI fit. This will create a .mat
+            % Function to perform the DTI/DKI fit. This will create a .mat
             % file in the ExploreDTI format with the same name of the provided
             % .nii file. Arguments:
             % nii_file: the diffusion MRI 4D .nii data
@@ -625,14 +538,19 @@ classdef MRTQuant < handle
             %            4[x z y] 5[y z x] 6[z x y]
             % grad_flip: sign flipping of the gradients to ensure consistency
             %            1[x y z] 2[-x y z] 3[x -y z] 4[x y -z]
+            % grad_header: This is experimental. 0 by default. If set to 1,
+            %   it overrides grad_perm/grad_flip and uses the nifti header
+            %   to determine how the gradients should be transformed.
+            % grad_conform: This is experimental. 0 by default. If set to
+            %   1, it will apply the same conformation performed on the data.
             % fit_mode: ols, nls, wls, rekindle
             % dki_constraints: [min max] for the DKI diagonal values
             % mask_file: a .nii for masking
             % output: the output .mat file. If not specified a file with the
-            % same name of the .nii but extension .mat is created
+            %   same name of the .nii but extension .mat is created
             % mk_curve: 1 or 0. Repeat the DKI fit with the "M-K curve technique"
             % rekindle_kappa: 6 (default) determines the threshold for
-            % outlier rejection when using rekindle
+            %   outlier rejection when using rekindle
             if(isempty(varargin))
                 my_help('MRTQuant.PerformDTI_DKIFit');
                 return;
@@ -715,6 +633,20 @@ classdef MRTQuant < handle
                 flip = [];
             end
 
+            option_value = GiveValueForName(coptions,'grad_header');
+            if(~isempty(option_value))
+                grad_header = option_value;
+            else
+                grad_header = 0;
+            end
+
+            option_value = GiveValueForName(coptions,'grad_conform');
+            if(~isempty(option_value))
+                grad_conform = option_value;
+            else
+                grad_conform = 0;
+            end
+
             option_value = GiveValueForName(coptions,'fit_mode');
             if(~isempty(option_value))
                 fit_mode = option_value;
@@ -770,52 +702,72 @@ classdef MRTQuant < handle
                 end
             end
 
-            if(isempty(perm) || isempty(flip))
-                disp('Trying to automatically determine the coordinate systems. Warning: this works only with brain data!');
-                while(true)
-                    temp_file = fullfile(tempdir,['MRT_EDTI_' num2str(randi(500000)) '.mat']);
-                    if(exist(temp_file,'file') < 1)
-                        break
-                    end
-                end
-                EDTI_Library.E_DTI_model_fit(file_in,txtfile,temp_file,Mask_par,1,1, 'ols',0,[],rekindle_kappa);
-
-                [flips, perms, correct, consistent] = EDTI_Library.E_DTI_Check_for_flip_perm_grads(temp_file);
-                delete(temp_file)
-                perm_list = [1 2 3;
-                    2 1 3;
-                    3 2 1;
-                    1 3 2;
-                    2 3 1;
-                    3 1 2];
-                sign_list = [1 1 1; -1 1 1; 1 -1 1; 1 1 -1];
-                if(isempty(flips))
-                    if(~isdeployed)
-                        warning('Failed to determine the coordinate systems. Please check your results / specify it manually.');
-                    end
-                    perm = 2;
-                    flip = 2;
-                else
-                    for p=1:size(perm_list,1)
-                        if(all(perm_list(p,:) == perms))
+            if(grad_header == 0 && grad_conform == 0)
+                % First, make sure the image conforms to our internal
+                % reference  
+                disp('Conforming data to reference space');
+                file_in_temp = strrep(file_in,'.nii','_FPtemp.nii');
+                [cp,cs] = MRTQuant.ConformSpatialDimensions('nii_file',file_in,...
+                    'output',file_in_temp);    
+                file_in = file_in_temp;
+                    
+                if(isempty(perm) || isempty(flip))
+                    disp('Trying to automatically determine the coordinate systems. Warning: this works only with brain data!');
+                    while(true)
+                        temp_file = fullfile(tempdir,['MRT_EDTI_' num2str(randi(500000)) '.mat']);
+                        if(exist(temp_file,'file') < 1)
                             break
                         end
                     end
-                    for f=1:size(sign_list,1)
-                        if(all(sign_list(f,:) == flips))
-                            break
+                    EDTI_Library.E_DTI_model_fit(file_in,txtfile,temp_file,Mask_par,1,1,'ols',0,[],rekindle_kappa);
+    
+                    [flips, perms, correct, consistent] = EDTI_Library.E_DTI_Check_for_flip_perm_grads(temp_file);
+                    delete(temp_file)
+                    perm_list = [1 2 3;
+                        2 1 3;
+                        3 2 1;
+                        1 3 2;
+                        2 3 1;
+                        3 1 2];
+                    sign_list = [1 1 1; -1 1 1; 1 -1 1; 1 1 -1];
+                    if(isempty(flips))
+                        if(~isdeployed)
+                            warning('Failed to determine the coordinate systems. Please check your results / specify it manually.');
                         end
+                        perm = 2;
+                        flip = 2;
+                    else
+                        for p=1:size(perm_list,1)
+                            if(all(perm_list(p,:) == perms))
+                                break
+                            end
+                        end
+                        for f=1:size(sign_list,1)
+                            if(all(sign_list(f,:) == flips))
+                                break
+                            end
+                        end
+                        perm = p;
+                        flip = f;
                     end
-                    perm = p;
-                    flip = f;
                 end
+            elseif(grad_header == 1)
+                % With these values, the header will be used as a full
+                % transformation matrix
+                perm = -1;
+                flip = -1;
+            elseif(grad_conform == 1)
+                % With these values, the gradients will be conformed in the
+                % same way as the imaging data
+                perm = -2;
+                flip = -2;
             end
 
             json.grad_flip = flip;
             json.grad_perm = perm;
             json.rekindle_kappa = rekindle_kappa;
 
-            EDTI_Library.E_DTI_model_fit(file_in,txtfile,out_name,Mask_par,perm,flip, fit_mode,dki_fit, dki_constraints, rekindle_kappa);
+            MRT_Library.E_DTI_model_fit(file_in,txtfile,out_name,Mask_par,perm,flip, fit_mode,dki_fit, dki_constraints, rekindle_kappa);
 
             if(mk_curve_fit == 1)
                 disp('Performing M-K curve fit');
@@ -884,7 +836,7 @@ classdef MRTQuant < handle
             warning('% This function is deprecated. Please use MRTTrack.Perform_mFOD_FiberTracking');
         end
 
-        function MatMetrics2Nii(mat_file_in,dki_export)
+        function MatMetrics2Nii(mat_file_in,dki_export,orig_header)
             % This function exports the DTI/DKI metrics contained in a .mat
             % file to Nifti format. This will export fractional anisotropy (FA),
             % mean diffusivity (MD), axial diffusivity (L1), radial diffusivity
@@ -893,14 +845,21 @@ classdef MRTQuant < handle
             % (KA) will also be exported. Input arguments are:
             % mat_file_in: the target .mat file in ExploreDTI-like format
             % dki_export: whether to export kurtosis metrics, as 0 (default) or 1
+            % orig_header: whether to export NIFTIs with a normalized
+            %           Explore-DTI like header (0) or use the original
+            %           NIFTI header (1) [if stored in the .mat file]
 
             json.CallFunction = 'MRTQuant.MatMetrics2Nii';
             json.Description = my_help('MRTQuant.MatMetrics2Nii');
 
-            list2export = [1 2 3 6 13 19];
+            list2export = [1 2 3 6 13 19 9];
             if(nargin > 1 && dki_export == 1)
                 list2export = [list2export 46 47 48 49];
             end
+            if(nargin < 3)
+                orig_header = 0;
+            end
+
             CLL = EDTI_Library.E_DTI_Complete_List_var;
             [fp,fn] = fileparts(mat_file_in);
             if(isempty(fp))
@@ -912,10 +871,47 @@ classdef MRTQuant < handle
                 has_dki = 1;
             end
 
-            DTI_extensions = {'FA','MD','L1','RD','FE','FEFA'};
+            DTI_extensions = {'FA','MD','L1','RD','FE','FEFA','DT'};
             DKI_extensions = {'MK','AK','RK','KA'};
 
-            EDTI_Library.E_DTI_Convert_mat_2_nii(mat_file_in,fp,CLL(list2export));
+            if(orig_header == 0)
+                % The original function saves "normalized headers"
+                EDTI_Library.E_DTI_Convert_mat_2_nii(mat_file_in,fp,CLL(list2export));
+            else
+                % Recover the original NIFTI header
+                try
+                    orig_hdr = load(mat_file_in,'orig_hdr','VDims');
+                    [data_v, fns] = EDTI_Library.E_DTI_Convert_mat_2_nii(mat_file_in,fp,CLL(list2export));     
+                    for ix=1:length(data_v)
+                        out.img = data_v{ix};
+                        out.hdr = orig_hdr.orig_hdr;
+                        out = MRT_Library.RestoreImageHeaderOrientation(out,out.hdr);
+                        out.VD = orig_hdr.VDims;
+                        % MRTQuant.WriteNifti(out,[strrep(mat_file_in,'.mat','') fns{ix}],true);
+                        save_untouch_nii(out,[strrep(mat_file_in,'.mat','') fns{ix}]);
+                    end
+
+                    % Also output the tensor in MRtrix format
+                    tensor_mrtrix = MRTQuant.LoadNifti(strrep(mat_file_in,'.mat','_DT.nii'));
+                    tensor_mrtrix.img = tensor_mrtrix.img(:,:,:,[4 1 6 2 5 3]);
+                    tensor_mrtrix.img(:,:,:,5) = -tensor_mrtrix.img(:,:,:,5);
+                    tensor_mrtrix.img(:,:,:,6) = -tensor_mrtrix.img(:,:,:,6);
+                    % tensor_mrtrix.img(:,:,:,4) = -tensor_mrtrix.img(:,:,:,4);
+                    MRTQuant.WriteNifti(tensor_mrtrix,strrep(mat_file_in,'.mat','_DTmrtrix.nii'),1);                    
+                catch err
+                    disp('The original header was not stored in the mat file. Exporting normalized headers instead.');
+                    orig_header = 0;
+                    EDTI_Library.E_DTI_Convert_mat_2_nii(mat_file_in,fp,CLL(list2export));
+                    
+                    % Also output the tensor in MRtrix format
+                    tensor_mrtrix = MRTQuant.LoadNifti(strrep(mat_file_in,'.mat','_DT.nii'));
+                    tensor_mrtrix.img = tensor_mrtrix.img(:,:,:,[4 1 6 2 5 3]);
+                    tensor_mrtrix.img(:,:,:,6) = -tensor_mrtrix.img(:,:,:,6);
+                    tensor_mrtrix.img(:,:,:,4) = -tensor_mrtrix.img(:,:,:,4);
+                    MRTQuant.WriteNifti(tensor_mrtrix,strrep(mat_file_in,'.mat','_DTmrtrix.nii'),1);
+
+                end
+            end
 
             json.ReferenceFile = mat_file_in;
             json.ProcessingType = 'Metric';
@@ -963,6 +959,8 @@ classdef MRTQuant < handle
             % no_preproc: 0 (default) or 1. Disables rounding of b-values and
             % removal of PIS (physically implausible signals)
             % repol: 0 (default) or 1. Replace outliers with fitted datapoints using DTI/DKI
+            % orig_hdr: 0 (default) or 1 (preserve original NIFTI header,
+            %           if available)
 
             if(isempty(varargin))
                 my_help('MRTQuant.EDTI_Data_2_MRIToolkit');
@@ -981,6 +979,10 @@ classdef MRTQuant < handle
             repol = GiveValueForName(coptions,'repol');
             if(isempty(repol))
                 repol = 0;
+            end
+            orig_hdr = GiveValueForName(coptions,'orig_hdr');
+            if(isempty(orig_hdr))
+                orig_hdr = 0;
             end
 
             load(file_in,'DWI','NrB0','b','g','FA','VDims','eigval','outlier','DT','DWIB0'); %,'bval','MDims','DT');
@@ -1020,6 +1022,14 @@ classdef MRTQuant < handle
             mrt_data.bvecs = bvecs;
             mrt_data.mask = mask;
             mrt_data.VD = VDims;
+            if(orig_hdr == 1)
+                try
+                    load(file_in,'orig_hdr');
+                    mrt_data.hdr = orig_hdr;
+                catch
+                    warning('EDTI_Data_2_MRIToolkit: original header not available.');
+                end
+            end
         end
 
         function EDTI_Data_2_Nii(varargin)

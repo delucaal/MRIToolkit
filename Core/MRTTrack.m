@@ -1,9 +1,9 @@
 %%%$ Included in MRIToolkit (https://github.com/delucaal/MRIToolkit) %%%
-%%% Alberto De Luca - alberto@isi.uu.nl $%%%
+%%% Alberto De Luca - a.deluca-2@umcutrecht.nl $%%%
 %%% Distributed under the terms of LGPLv3  %%%
 
 % MRTTrack (former Spherical deconvolution) class - including GRL and mFOD
-% A. De Luca - UMC Utrecht - 28/10/2019 - alberto@isi.uu.nl -
+% A. De Luca - UMC Utrecht - 28/10/2019 - a.deluca-2@umcutrecht.nl -
 % alberto.deluca.06@gmail.com
 % First version: 28/10/2019
 
@@ -34,6 +34,8 @@ classdef MRTTrack < handle
         drl_iters = 200;
         stdReconDirections;
         normalize_fods_wfrac = false;
+        sh_basis = 0; % if SH are used, which basis to use (0=EDTI, 1=DIPY, 2=MRTRIX)
+        preserve_header = false; % whether to preserve the original NIFTI header
     end
     
     methods
@@ -112,7 +114,7 @@ classdef MRTTrack < handle
             end
         end
         
-        function obj = AddIsotropicRF(obj,D)
+        function obj = AddIsotropicRF(obj,D,K,Off)
             % Add an isotropic response function (i.e. CSF) to the
             % deconvolution matrix. These should be add only after all
             % anisotropic RFs have been added.
@@ -121,10 +123,14 @@ classdef MRTTrack < handle
                 warning('Cannot initialize RFs if data has not been set. Bailing out.');
                 return
             end
+            if(exist('K','var') < 1)
+                K = 0;
+                Off = 0;
+            end
             obj.n_isotropic = obj.n_isotropic+1;
             IndexHR = size(obj.HRKernel,2)+1;
             IndexLR = size(obj.LRKernel,2)+1;
-            [~,lLRKernel,lHRKernel] = mDRLMT_MakeDKIKernel_multicomp(obj.data,10,[1.7e-3 0.5e-3 0.5e-3],0,0,D,1);
+            [~,lLRKernel,lHRKernel] = mDRLMT_MakeDKIKernel_multicomp(obj.data,10,[1.7e-3 0.5e-3 0.5e-3],K,Off,D,1);
             if(~isempty(obj.LRKernel))
                 obj.LRKernel(:,IndexLR) = single(lLRKernel(:,end));
                 obj.HRKernel(:,IndexHR) = single(lHRKernel(:,end));
@@ -231,13 +237,7 @@ classdef MRTTrack < handle
             if(nargin < 2)
                 TGT_ADC = 0.7e-3;
             end
-            %             if(~isempty(obj.rf_models))
-            %                for rf_id=1:length(obj.rf_models)
-            %                   if(strcmp(obj.rf_models{rf_id},'ADC') > 0)
-            %                       TGT_ADC =
-            %                   end
-            %                end
-            %             end
+
             obj.NN_L = get_drl_nn_heuristic(obj.LRKernel,max(obj.data.bvals),TGT_ADC);
             obj.NN_H = get_drl_nn_heuristic(obj.HRKernel,max(obj.data.bvals),TGT_ADC);
         end
@@ -392,7 +392,7 @@ classdef MRTTrack < handle
                             elseif(DeconvMethodCode == 6)
                                 fODFC = sph_deconv_tv_motor_all(DS, LLRKernel(fit_data,:), zeros(size(obj_copy.weighted_LRKernel,2)-NC,1), obj_copy.drl_iters, 1, 'SMF-SENSE-based');
                             elseif(DeconvMethodCode == 7)
-                                fODFC = lasso(LLRKernel(fit_data,:),DS,'Alpha',0.5,'Lambda',obj_copy.L2LSQ_reg);
+                                fODFC = lasso(LLRKernel(fit_data,:),DS,'Alpha',0.9,'Lambda',obj_copy.L2LSQ_reg);
                             elseif(DeconvMethodCode == 8)
                                 fODFC = MRT_Library.ConstrainedDeconvolution(LLRKernel(fit_data,:),DS,obj_copy.L2LSQ_reg);
                             end
@@ -444,7 +444,7 @@ classdef MRTTrack < handle
                         elseif(DeconvMethodCode == 6)
                             fODF = sph_deconv_tv_motor_all(DS, LHRKernel(fit_data,:), zeros(size(obj_copy.weighted_HRKernel,2)-NC,1), obj_copy.drl_iters, 1, 'SMF-SENSE-based');
                         elseif(DeconvMethodCode == 7)
-                            fODF = lasso(LHRKernel(fit_data,:),DS,'Alpha',0.5,'Lambda',obj_copy.L2LSQ_reg);
+                            fODF = lasso(LHRKernel(fit_data,:),DS,'Alpha',0.9,'Lambda',obj_copy.L2LSQ_reg);
                         elseif(DeconvMethodCode == 8)
                             fODF = MRT_Library.ConstrainedDeconvolution(LHRKernel(fit_data,:),DS,obj_copy.L2LSQ_reg);
                         end
@@ -615,7 +615,7 @@ classdef MRTTrack < handle
                     elseif(DeconvMethodCode == 6)
                         fODFC = sph_deconv_tv_motor_all(DS, obj.weighted_LRKernel(fit_data,1:end-NC), zeros(size(obj.weighted_LRKernel,2)-NC,1), obj.drl_iters, 1, 'SMF-SENSE-based');
                     elseif(DeconvMethodCode == 7)
-                        fODFC = lasso(obj.weighted_LRKernel(fit_data,1:end-NC),DS,'Alpha',1,'Lambda',obj.L2LSQ_reg);
+                        fODFC = lasso(obj.weighted_LRKernel(fit_data,1:end-NC),DS,'Alpha',0.9,'Lambda',obj.L2LSQ_reg);
                     end
                     % This line is quite tricky. It comes out of some trial and error
                     % but actually has the intent of eliminating 1) small contributions
@@ -663,7 +663,7 @@ classdef MRTTrack < handle
                 elseif(DeconvMethodCode == 5)
                     fODF = ADT_deconv_RLdamp_1D_noEP_white(DS, obj.weighted_HRKernel(fit_data,1:end-NC), obj.drl_iters);
                 elseif(DeconvMethodCode == 7)
-                    fODF = lasso(obj.weighted_HRKernel(fit_data,1:end-NC),DS,'Alpha',1,'Lambda',obj.L2LSQ_reg);
+                    fODF = lasso(obj.weighted_HRKernel(fit_data,1:end-NC),DS,'Alpha',0.9,'Lambda',obj.L2LSQ_reg);
                 end
                 fODFC = fODF;
                 fODFC(fODFC < median(fODFC)) = 0;
@@ -843,7 +843,7 @@ classdef MRTTrack < handle
         end
         
         function output = OneVoxelDeconvTest3(obj, Stot,LRKernel, HRKernel,min_bval)
-            % Actually perform the deconvolution. All parameters must be set
+            % Performs deconvolution for one single voxel. All parameters must be set
             % before hand using the dedicated functions. Output is a structure
             % with fields FOD and FOD_norm. FOD_norm is a rescaled version of the FOD
             % meant to be compatible with ExploreDTI-based fiber tractography.
@@ -951,10 +951,8 @@ classdef MRTTrack < handle
             % the desired outputs.
             lmax = SpherDec.Lmax_FOD;
             super_scheme = gen_scheme(SpherDec.nDirections,lmax); % the reconstruction scheme. Change 300 to any number
-            %             super_scheme.vert = super_scheme.vert(:,[2 1 3]);
-            %             super_scheme.vert(:,3) = -super_scheme.vert(:,3);
             
-            sh = SH(lmax,super_scheme.vert);
+            sh = SH_v2(lmax,super_scheme.vert,SpherDec.sh_basis);
             max_bv = max(round(SpherDec.data.bvals));
             shell = abs(SpherDec.data.bvals - max_bv) <= 0.01*max_bv;
             
@@ -964,59 +962,46 @@ classdef MRTTrack < handle
                 fod = zeros([size(output.FOD(:,:,:,1)) length(test_coef)],'single');
                 S = sum(SpherDec.HRKernel(shell,1))*SpherDec.nDirections/300;
                 output.FOD = output.FOD * S;
-                %                 for ij=1:size(F,4)
-                %                     F(:,:,:,ij) = F(:,:,:,ij).*output.fractions(:,:,:,1);
-                % %                     fod(:,:,:,ij) = fod(:,:,:,ij);
-                %                 end
+
                 for sl=1:10:size(output.FOD,3)
                     indices = sl:min(sl+9,size(output.FOD,3));
                     fod(:,:,indices,:) = sh.coef(output.FOD(:,:,indices,:));
                 end
-                %             FOD_max = max(output.FOD,[],4);
-                %             FOD_scaled = output.FOD;
-                %             FOD_val = mean(FOD_max(output.fractions(:,:,:,1) > 0.7*max(FOD_max(:)))); % 20/12/2017
-                %             for ij=1:size(FOD_scaled,4)
-                %                 FOD_scaled(:,:,:,ij) = FOD_scaled(:,:,:,ij) / FOD_val;% .* fractions(:,:,:,1); % 20/12/2017
-                %             end
-                
-                
+
                 if(isfield(SpherDec.data,'hdr'))
-                    DW_SaveVolumeLikeNii(fod,SpherDec.data,[file_prefix '_CSD_FOD'],0);
-                    DW_SaveVolumeLikeNii(output.fractions,SpherDec.data,[file_prefix '_fractions'],0);
+                    orig_hdr = true;
                 else
-                    data_struct.img = fod;
-                    data_struct.VD = SpherDec.data.VD;
-                    MRTQuant.WriteNifti(data_struct,[file_prefix '_CSD_FOD.nii']);
-                    data_struct.img = output.fractions;
-                    MRTQuant.WriteNifti(data_struct,[file_prefix '_fractions.nii']);
+                    orig_hdr = false;
                 end
+                data_struct.img = fod;
+                data_struct.VD = SpherDec.data.VD;
+                MRTQuant.WriteNifti(data_struct,[file_prefix '_CSD_FOD.nii'],orig_hdr,SpherDec.preserve_header);
+                data_struct.img = output.fractions;
+                MRTQuant.WriteNifti(data_struct,[file_prefix '_fractions.nii'],orig_hdr,SpherDec.preserve_header);
+                data_struct.img = output.RSS;
+                MRTQuant.WriteNifti(data_struct,[file_prefix '_RSS.nii'],orig_hdr,SpherDec.preserve_header);
             else
                 % multi-FOD case
+                if(isfield(SpherDec.data,'hdr'))
+                    orig_hdr = true;
+                else
+                    orig_hdr = false;
+                end
+
                 for fod_id=1:SpherDec.n_anisotropic
                     idx = 1+(fod_id-1)*SpherDec.nDirections:fod_id*SpherDec.nDirections;
                     fod = sh.coef(output.FOD(:,:,:,idx));
                     S = sum(SpherDec.HRKernel(shell,idx(1)))*SpherDec.nDirections/300;
                     fod = fod*S;
-                    %                     for ij=1:size(fod,4)
-                    %                         fod(:,:,:,ij) = fod(:,:,:,ij).*output.fractions(:,:,:,fod_id);
-                    %                     end
                     
-                    if(isfield(SpherDec.data,'hdr'))
-                        DW_SaveVolumeLikeNii(fod,SpherDec.data,[file_prefix '_CSD_FOD_' num2str(fod_id)],0);
-                    else
-                        data_struct.img = fod;
-                        data_struct.VD = SpherDec.data.VD;
-                        MRTQuant.WriteNifti(data_struct,[file_prefix '_CSD_FOD_' num2str(fod_id) '.nii']);
-                    end
+                    data_struct.img = fod;
+                    data_struct.VD = SpherDec.data.VD;
+                    MRTQuant.WriteNifti(data_struct,[file_prefix '_CSD_FOD_' num2str(fod_id) '.nii'],orig_hdr);
                 end
-                if(isfield(SpherDec.data,'hdr'))
-                    DW_SaveVolumeLikeNii(output.fractions,SpherDec.data,[file_prefix '_fractions'],0);
-                else
-                    data_struct.img = output.fractions;
-                    MRTQuant.WriteNifti(data_struct,[file_prefix '_fractions.nii']);
-                end
+                data_struct.img = output.fractions;
+                MRTQuant.WriteNifti(data_struct,[file_prefix '_fractions.nii'],orig_hdr);
                 
-                json.CallFunction = 'SphericalDeconvolution.PerformDeconv';
+                json.CallFunction = 'MRTTrack.PerformDeconv';
                 json.Description = 'GRL/mFOD spherical deconvolution';
                 json.parameters.n_anisotropic = SpherDec.n_anisotropic;
                 json.parameters.n_isotropic = SpherDec.n_isotropic;
@@ -1436,8 +1421,11 @@ classdef MRTTrack < handle
                 'TractAng','TractGEO','TractLambdas','TractMD','FList','TractMask','VDims','-v7.3');
         end
         
-        function [init_lambdas,init_K, init_offset] = Eigenval_IsoK_WM_FromData(data,mask,fit_dki,fit_offset)
+        function [init_lambdas,init_K, init_offset] = Eigenval_IsoK_WM_FromData(data,mask,fit_dki,fit_offset,min_FA)
             % Estimate the tensor eigenvalues and isotropic kurtosis from the data, in a mask where FA >= 0.7
+            if(nargin < 5)
+                min_FA = 0.7;
+            end
             data.img = single(data.img);
             [sx,sy,sz,st] = size(data.img);
             signal_stack = reshape(data.img,sx*sy*sz,st);
@@ -1490,7 +1478,7 @@ classdef MRTTrack < handle
             K = real(K);
             m_FA = m_FA / sqrt(3);
             
-            U = m_FA(:) > 0.7 & mask(:) > 0;
+            U = m_FA(:) > min_FA & mask(:) > 0;
             
             if(fit_offset == 0)
                 m_lambdas = reshape(m_lambdas,sx*sy*sz,3);
@@ -1516,26 +1504,32 @@ classdef MRTTrack < handle
                 params.bvals = data.bvals;
                 %                 params.bvecs = data.bvecs;
                 params.Gt = Gt(:,1:6);
-                x0 = [exp(mean(pt(high_fa_voxels,end))) zeros(1,6) 0 0];
-                lb = [x0(1)/2 -3e-3*ones(1,6) 0 0];
-                ub = [x0(1)*10 3e3*ones(1,6) 3*3e3 x0(1)*10];
+                % x0 = [exp(mean(pt(high_fa_voxels,end))) zeros(1,6) 0 0];
+                % lb = [x0(1)/2 -3e-3*ones(1,6) 0 0];
+                % ub = [x0(1)*10 3e3*ones(1,6) 3*3e3 x0(1)*10];
+                x0 = [1 zeros(1,6) 0 0];
+                lb = [0.5 -3e-3*ones(1,6) 0 0];
+                ub = [1.5 3e3*ones(1,6) 3*3e3 x0(1)*10];
                 signal_stack = signal_stack(high_fa_voxels,:);
                 for x=1:size(est,1)
                     params.S = signal_stack(x,:)';
+                    params.S = params.S / max(params.S);
                     est(x,:) = lsqnonlin(@dki_offset,x0,lb,ub,optimset('display','off'),params);
+                    [~,pred] = dki_offset(est(x,:),params);
                 end
                 DT = EDTI_Library.E_DTI_DWI_mat2cell(reshape(est(:,2:7),[1 1 size(est,1) 6]));
                 [~,m_FA,~,~,m_lambdas] = EDTI_Library.E_DTI_eigensystem_analytic(DT);
                 init_lambdas = mean(squeeze(m_lambdas));
-                MD = mean(squeeze(m_lambdas),2);
-                init_K = mean(est(:,8)./MD.^2);
+                % MD = mean(squeeze(m_lambdas),2);
+                init_K = mean(est(:,8));%./MD.^2);
                 init_offset = mean(est(:,9));
                 % init_lambdas to be added
             end
             
-            function out = dki_offset(x0,params)
+            function [out,Sg] = dki_offset(x0,params)
                 s0 = x0(1);
                 D = x0(2:7)';%[x0(2) x0(3) x0(4)
+                Dm = mean(D([1 4 6]));
                 %x0(3) x0(5) x0(6)
                 %x0(4) x0(6) x0(7)];
                 %                     [eigvec,eigval] = eig(D);
@@ -1544,7 +1538,8 @@ classdef MRTTrack < handle
                 offset = x0(9);
                 %                     Sg = s0*exp(-params.bvals.*diag(params.bvecs*...
                 %                         D*params.bvecs')+1/6*params.bvals.^2*MD^2*MK)+offset;
-                Sg = s0*(exp(params.Gt*D+1/6*params.bvals.^2*MK)+offset);
+                % Sg = s0*(exp(params.Gt*D+1/6*params.bvals.^2*MK)+offset);
+                Sg = s0*(exp(params.Gt*D+1/6*params.bvals.^2*Dm^2*MK)+offset);
                 
                 out = double(params.S - Sg);
             end
@@ -3019,16 +3014,34 @@ classdef MRTTrack < handle
             dti_rf = GiveValueForName(coptions,'rf_dti');
             json.dti_rf = dti_rf;
             
+            test_mode = GiveValueForName(coptions,'test_mode');
+            if(isempty(test_mode))
+                test_mode = false;
+            end
+
             mscsd = GiveValueForName(coptions,'mscsd');
             if(isempty(mscsd) || mscsd == 0)
-                if(isempty(dti_rf))
-                    CSD_FOD = EDTI_Library.E_DTI_Get_HARDI_CSD_FOD_RC(file_in,Lmax,rc_mask_file,filename_out,save_sh);
+                if(test_mode)
+                    test_basis = 2; % mrtrix
+                    warning('CSD with new basis: this is still experimental!!!');
+                    if(isempty(dti_rf))
+                        CSD_FOD = MRT_Library.Calculate_CSD_FOD_RecursiveCalibration(file_in,Lmax,rc_mask_file,filename_out,save_sh,test_basis);
+                    else
+                        pieces = strsplit(dti_rf);
+                        sim_fa = str2double(pieces{1});
+                        sim_adc = str2double(pieces{2})*1e-3;
+                        CSD_FOD = MRT_Library.Calculate_CSD_FOD_TensorBased(file_in, 1, Lmax,sim_adc, sim_fa,filename_out,save_sh,test_basis);
+                    end
                 else
-                    pieces = strsplit(dti_rf);
-                    sim_fa = str2double(pieces{1});
-                    sim_adc = str2double(pieces{2})*1e-3;
-                    CSD_FOD = EDTI_Library.E_DTI_Get_HARDI_CSD_FOD(file_in, 1, Lmax,sim_adc, sim_fa,filename_out,save_sh);
-                end
+                    if(isempty(dti_rf))
+                        CSD_FOD = EDTI_Library.E_DTI_Get_HARDI_CSD_FOD_RC(file_in,Lmax,rc_mask_file,filename_out,save_sh);
+                    else
+                        pieces = strsplit(dti_rf);
+                        sim_fa = str2double(pieces{1});
+                        sim_adc = str2double(pieces{2})*1e-3;
+                        CSD_FOD = EDTI_Library.E_DTI_Get_HARDI_CSD_FOD(file_in, 1, Lmax,sim_adc, sim_fa,filename_out,save_sh);
+                    end
+                end                    
             else
                 disp('Running MS-CSD (beta mode)...')
                 CSD_FOD = EDTI_Library.E_DTI_Get_HARDI_CSD_FOD_RC_MuSh(file_in,Lmax,rc_mask_file,filename_out,t1_seg);
@@ -3884,7 +3897,7 @@ function [G,WG,GoodIndexes] = DW_BuildDTMat(data,bvalues,fit_S0)
 if(nargin < 2)
     bvalues_range = [min(data.bvals(data.bvals>=1)) max(data.bvals)];
 end
-GoodIndexes = DW_GetFittedIndexes(data,bvalues);
+GoodIndexes = 1:length(data.bvals);%DW_GetFittedIndexes(data,bvalues);
 G = [data.bvecs(GoodIndexes,1).^2 data.bvecs(GoodIndexes,1).*data.bvecs(GoodIndexes,2) data.bvecs(GoodIndexes,1).*data.bvecs(GoodIndexes,3) ...
     data.bvecs(GoodIndexes,2).^2 data.bvecs(GoodIndexes,2).*data.bvecs(GoodIndexes,3) data.bvecs(GoodIndexes,3).^2];
 %     G = [data.bvecs(GoodIndexes,1).^2 2*data.bvecs(GoodIndexes,1).*data.bvecs(GoodIndexes,2) 2*data.bvecs(GoodIndexes,1).*data.bvecs(GoodIndexes,3) ...

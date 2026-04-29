@@ -4643,16 +4643,12 @@ classdef EDTI_Library < handle
                     end
                 end                
             end
-%             if(~isempty(b0_indices) && isempty(intersect(b0_indices,1)))
-%                warning('Found a b=0s/mm2, but this is not at the beginning. Please sort your data');               
-%             end
-%             order = diff(b0_indices);
-%             discontinuity = find(order > 1,1);
-%             if(~isempty(discontinuity))
-%                 b0_indices = b0_indices(1:discontinuity);
-%             end            
-            NrB0 = length(b0_indices);
-                        
+
+            % This was the default in ExploreDTI, but it then forces all
+            % b0s to the same value? 
+            % NrB0 = length(b0_indices); 
+            NrB0 = 1; % Changed on 5-02-2026 
+
             [bval, g] =  EDTI_Library.E_DTI_GetGradientsandBval_SC(b, NrB0);
             [g, b] = EDTI_Library.E_DTI_flip_g_b(g,b,perm,flip);
             
@@ -7468,7 +7464,7 @@ classdef EDTI_Library < handle
         
         % From ExploreDTI: Export the metrics stored in the MAT file to various
         % formats
-        function E_DTI_Convert_mat_2_nii(fin,folout,LS)
+        function [data_v, fns] = E_DTI_Convert_mat_2_nii(fin,folout,LS)
             
             disp(['Converting stuff from ''' fin ''' to *.nii files ...'])
             
@@ -7623,7 +7619,7 @@ classdef EDTI_Library < handle
                         continue;
                     end
                     
-                    DT = EDTI_Library.E_DTI_DT_mat2cell(DT);
+                    % DT = EDTI_Library.E_DTI_DT_mat2cell(DT);
                     data_v{i} = cat(4,DT{1},DT{2},DT{3},DT{4},DT{5},DT{6});
                     clear DT;
                     fns{i} = LE{9};
@@ -8352,19 +8348,21 @@ classdef EDTI_Library < handle
             
             warning on all
             
-            for j=1:length(LS)
-                if ~isempty(data_v{j})
-                    if strcmp(fns{j}(end-2:end),'nii')
-                        data_v{j}(isnan(data_v{j}))=0;
-                        EDTI_Library.E_DTI_write_nifti_file(data_v{j},VDims,[folout filesep NAME fns{j}])
-                        data_v{j}=[];
-                    else
-                        EDTI_Library.E_DTI_Write_text(data_v{j},[folout filesep NAME fns{j}])
+            if(nargout == 0)
+                for j=1:length(LS)
+                    if ~isempty(data_v{j})
+                        if strcmp(fns{j}(end-2:end),'nii')
+                            data_v{j}(isnan(data_v{j}))=0;
+                            EDTI_Library.E_DTI_write_nifti_file(data_v{j},VDims,[folout filesep NAME fns{j}])
+                            data_v{j}=[];
+                        else
+                            EDTI_Library.E_DTI_Write_text(data_v{j},[folout filesep NAME fns{j}])
+                        end
                     end
                 end
-            end
             
-            disp('Done!')
+                disp('Done!')
+            end
             
         end
         

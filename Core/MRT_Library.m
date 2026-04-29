@@ -1574,6 +1574,32 @@ classdef MRT_Library < handle
             end
         end
 
+        % Helper function for Motion/Eddy/EPI correction
+        % Performs the b-matrix rotation using a given rotation matrix
+        function [b, g] = Reorient_grad_and_b_matrix_rigid_rotation_generic(b,g,R)
+
+            b_old = b;
+            g_old = g;
+            
+            for i=1:size(b,1)
+                
+                B = [b_old(i,1) b_old(i,2)/2 b_old(i,3)/2;...
+                    b_old(i,2)/2 b_old(i,4) b_old(i,5)/2;...
+                    b_old(i,3)/2 b_old(i,5)/2 b_old(i,6)];
+                B_rot = R*B*(R');
+                
+                b(i,:) = [B_rot(1,1) 2*B_rot(1,2) 2*B_rot(1,3)...
+                    B_rot(2,2) 2*B_rot(2,3) B_rot(3,3)];
+                
+            end            
+            
+            for i=1:size(g,1)
+                
+                g(i,:) = g_old(i,:)*R';
+                
+            end
+        end        
+
         % From ExploreDTI: helper function for Motion/Eddy/EPI correction
         % This actually performs the EPI correction
         function tmp_dir = CreateTemporaryDir()
@@ -1589,7 +1615,7 @@ classdef MRT_Library < handle
         end
         
         % To be completed
-        function data = TransformDataWithElastixParams(mat_file,out_name,ref_file,trafo_final_params)
+        function data = TransformDataWithElastixParams(mat_file,out_name,trafo_final_params)
             f_in = mat_file;
             
             [FOLD,FFO] = fileparts(f_in);
@@ -1633,6 +1659,7 @@ classdef MRT_Library < handle
             for tpid=1:length(linked_files)
                 params = MRT_Library.ReadElastixParameters(linked_files{tpid});
                 ttype = MRT_Library.GetElastixParameter(params,'Transform');
+                % if(contains(ttype,'EulerTransform') || contains(ttype,'AffineTransform') || contains(ttype,'AffineDTITransform'))
                 if(contains(ttype,'AffineDTITransform'))
                     Trafo_rig_result(end+1) = linked_files(tpid);
                 end
@@ -1640,7 +1667,9 @@ classdef MRT_Library < handle
             
             Rig = cell(length(Trafo_rig_result));
             for ix=1:length(Rig)
-                Q = textread(Trafo_rig_result{ix},'%s');
+                % Q = textread(Trafo_rig_result{ix},'%s');
+                Transformation = MRT_Library.ReadElastixParameters(Trafo_rig_result{ix});
+                Q = strsplit(MRT_Library.GetElastixParameter(Transformation,'TransformParameters'));
                 Rig{ix}{1} = str2num(Q{7});
                 Rig{ix}{2} = str2num(Q{6});
                 Rig{ix}{3} = str2num(Q{8});
@@ -1652,6 +1681,9 @@ classdef MRT_Library < handle
 %             if(~isempty(hdr))
 %                 out.hdr = hdr;
 %             end
+
+            [b, g] = MRT_Library.Reorient_grad_and_b_matrix_rigid_rotation(b,g,Rig);
+
             out=[];
             for ix=1:length(DWI)
                 out.VD = VDims;
@@ -1666,8 +1698,6 @@ classdef MRT_Library < handle
                 VDims_E = I.VD;
                 DWI(ix) = {I.img};
             end
-
-            [b, g] = MRT_Library.Reorient_grad_and_b_matrix_rigid_rotation(b,g,Rig);
             
             if isnan(bval)
                 diff_model=2;
@@ -1794,6 +1824,211 @@ classdef MRT_Library < handle
                 data = MRTQuant.EDTI_Data_2_MRIToolkit('mat_file',f_out,'do_preproc',0);
             end
         end
+
+        % To be completed
+        function data = TransformDataWithFSLParams(mat_file,out_name,ref_img,flirt_rigid_params)
+            global MRIToolkit;
+            if(isempty(MRIToolkit.FSL))
+                error('This function requires FSL. Please configure the environment variable accordingly.')
+            end
+            setenv('FSLDIR',MRIToolkit.FSL);
+            [a,b] = system('flirt');
+            if(a > 1)
+                setenv('PATH',[getenv('PATH') ':' fullfile(MRIToolkit.FSL,'bin')]);
+            end
+            setenv('FSLOUTPUTTYPE','NIFTI_GZ');
+
+            f_in = mat_file;
+            
+            [FOLD,FFO] = fileparts(f_in);
+            
+            par.temp_folder = fullfile(tempdir,['MRT_' num2str(randi(150)) '_' num2str(randi(150)) '_' num2str(randi(150))]);
+            if(strcmp(par.temp_folder(end),'/'))
+                par.temp_folder = par.temp_folder(1:end-1);
+            end
+            [FOL_FI,F] = fileparts(f_in);
+            dir_temp = [par.temp_folder filesep 'Temp_' F];
+            mkdir(dir_temp)
+
+            par.dir_temp = dir_temp;
+%             par.R2D.FN = ref_file;
+            par.R2D.type = 1;
+%             [suc, FN_nii] = EDTI_Library.E_DTI_SMECEPI_check_data_stuff(f_in,par);
+            for_trafo = par;
+
+%             if suc==0
+%                 return;
+%             end
+            
+%             fn_fixed = [for_trafo.dir_temp filesep 'Trafo_fixed.nii'];
+%             fn_fixed_mask = [for_trafo.dir_temp filesep 'Trafo_fixed_mask.nii'];
+%             [Fixed,VDims] = EDTI_Library.E_DTI_read_nifti_file(FN_nii);
+%             VDims_E = VDims;
+%             Fixed = single(Fixed);
+%             Fixed = 10000*(Fixed/max(Fixed(:)));
+%             EDTI_Library.E_DTI_write_nifti_file(Fixed,VDims,fn_fixed);
+            
+%             mask = single(Fixed>0);
+%             EDTI_Library.E_DTI_write_nifti_file(mask,VDims,fn_fixed_mask);
+            
+            fn_moving = [for_trafo.dir_temp filesep 'Trafo_moving.nii'];
+            
+            LoadF = mat_file;
+            
+            RotMat = load(flirt_rigid_params,'-ascii');           
+            RotMat = RotMat(1:3,1:3);
+
+            hdr = [];
+            load(LoadF,'b','bval','info','g','NrB0','DWI','VDims','hdr','par','Mask_par')
+        
+%             if(~isempty(hdr))
+%                 out.hdr = hdr;
+%             end
+            out=[];
+
+            for ix=1:length(DWI)
+                out.VD = VDims;
+                out.img = DWI{ix};
+                f2s = [dir_temp filesep 'Vol_' sprintf('%05d.nii',ix)];
+                f2s_t = [dir_temp filesep 'Vol_' sprintf('%05d_trafo.nii',ix)];
+                f2s_tp = [dir_temp filesep 'Vol_' sprintf('%05d_trafo_FP.nii',ix)]; 
+                MRTQuant.WriteNifti(out,f2s);
+                cmd = ['flirt -in ' f2s ' -out ' f2s_t ' -ref ' ref_img  ' -init ' flirt_rigid_params ,...
+                    ' -applyxfm -interp trilinear'];
+                system(cmd);                
+                MRTQuant.ConformSpatialDimensions('nii_file',f2s_t,'output',f2s_tp)
+                I = MRTQuant.LoadNifti(f2s_tp);
+                VDims_E = I.VD;
+                DWI(ix) = {I.img};
+            end
+
+            [b, g] = MRT_Library.Reorient_grad_and_b_matrix_rigid_rotation_generic(b,g,RotMat);
+            
+            if isnan(bval)
+                diff_model=2;
+            else
+                diff_model=1;
+            end
+            
+            [dummy, g] =  EDTI_Library.E_DTI_Get_Gradients_and_Bvalue(b, NrB0, diff_model);
+            
+            for i=1:length(DWI)
+                if isempty(DWI{i})
+                    disp('Errors encountered...')
+                    EDTI_Library.E_DTI_remove_temp_f(for_trafo.dir_temp);
+                    suc = 0;
+                    return;
+                end
+            end
+            
+            for i=1:length(DWI)
+                DWI{i} = single(DWI{i});
+                DWI{i}(DWI{i}==-1000)=nan;
+            end
+            
+            
+            dummy = false(size(DWI{1}));
+            for i=1:length(DWI)
+                dummy = or(dummy,isnan(DWI{i}));
+                DWI{i}(isnan(DWI{i}))=0;
+                DWI{i}(DWI{i}<0)=0;
+            end
+
+            par.cust_mask.NS = '';
+            par.cust_mask.TS = '';
+            par.mask_P = Mask_par;
+            par.mask_P.NS.mfs = 5;
+            par.mask_P.NS.NDWI = 0.7;
+            par.mask_P.NS.DWI = 0.7;
+            par.mask_P.TS.mfs = 5;
+            par.mask_P.TS.NDWI = 0.7;
+            par.mask_P.TS.DWI = 0.7;
+
+            if isempty(par.cust_mask.TS)
+                mask = EDTI_Library.E_DTI_Create_Mask_From_DWI_enhanced(DWI,NrB0,par.mask_P.TS.NDWI,par.mask_P.TS.DWI,par.mask_P.TS.mfs);
+            else
+                fn_cm = [FOLD filesep FFO par.cust_mask.TS];
+                [mask, VDims, suc] = EDTI_Library.E_DTI_read_nifti_file(fn_cm);
+                if suc==0
+                    EDTI_Library.E_DTI_remove_temp_f(for_trafo.dir_temp);
+                    return;
+                end
+                mask = mask>0;
+            end
+            
+            mask(dummy)=0;
+            
+            par_temp = par;
+            %par_temp.TE = par.TE.TS;
+            
+            if diff_model==1
+                [DT, DWIB0, outlier, chi_sq, chi_sq_iqr] = EDTI_Library.E_DTI_Get_DT_from_DWI_b_mask(DWI,b,mask,par_temp,NrB0);
+            elseif diff_model==2
+                [DT, DWIB0, KT, outlier, chi_sq, chi_sq_iqr] = EDTI_Library.E_DTI_Get_DT_KT_from_DWI_b_mask_with_constraints(DWI,b,mask,g,par_temp,NrB0,VDims);
+            end
+            
+            [FEFA, FA, FE, SE, eigval] = EDTI_Library.E_DTI_eigensystem_analytic(DT);
+            
+            g = g(NrB0+1:end,:);
+            
+            if ~isreal(FA)
+                FA = real(FA);
+            end
+            if ~isreal(FEFA)
+                FEFA = real(FEFA);
+            end
+            if ~isreal(FE)
+                FE = real(FE);
+            end
+            if ~isreal(SE)
+                SE = real(SE);
+            end
+            if ~isreal(eigval)
+                eigval = real(eigval);
+            end
+            MDims = size(mask);
+            VDims = VDims_E;
+            
+            f_out = out_name;
+            par.RotMat = RotMat;
+            
+            max_DWI = 0;
+            for i=1:length(DWI)
+                max_DWI = max(max_DWI,max(DWI{i}(:)));
+            end
+            
+            if max_DWI<=intmax('int16')
+                for i=1:length(DWI)
+                    DWI{i} = round(DWI{i});
+                    DWI{i} = int16(DWI{i});
+                end
+            elseif max_DWI<=intmax('uint16')
+                for i=1:length(DWI)
+                    DWI{i} = round(DWI{i});
+                    DWI{i}(DWI{i}<0)=0;
+                    DWI{i} = uint16(DWI{i});
+                end
+            end
+            
+            
+            try
+                save(f_out,'DWI','VDims','b','bval','g','info','FEFA','NrB0','MDims',...
+                    'FA','FE','SE','eigval','DT','outlier','DWIB0','chi_sq','chi_sq_iqr','par','hdr','Mask_par')
+            catch me
+                EDTI_Library.E_DTI_remove_temp_f(for_trafo.dir_temp);
+                disp(me.message)
+                return;
+            end
+            
+            if diff_model==2
+                save(f_out,'KT','-append')
+            end
+            
+            EDTI_Library.E_DTI_remove_temp_f(for_trafo.dir_temp);
+            if(nargout > 0)
+                data = MRTQuant.EDTI_Data_2_MRIToolkit('mat_file',f_out,'do_preproc',0);
+            end
+        end                
 
         % Concatenate multiple transformations of Elastix
         % Transformation_files should be in order: from first (initial step)
@@ -2167,7 +2402,949 @@ classdef MRT_Library < handle
                 out = help(fname);
             end
         end
+
+       
+        % From ExploreDTI: creates an RF given some initial parameters
+        function shcoef = E_DTI_create_initial_RF_RC(lmax,bval,FA,trD,basis)
+            
+            file=load('icosahedron5.mat');
+            g=file.Expression1;
+            b=repmat(bval,[length(g) 6]).*[g(:,1).^2 2*g(:,1).*g(:,2) 2*g(:,1).*g(:,3) g(:,2).^2 2*g(:,2).*g(:,3) g(:,3).^2];
+            [lambda1,lambda2,lambda3] = EDTI_Library.Calculate_lambdas(FA,trD,1);
+            Drot=(EDTI_Library.Rezgamma(0)*EDTI_Library.Reybeta(0))*([lambda2 0 0;0 lambda2 0;0 0 lambda1])*((EDTI_Library.Rezgamma(0)*EDTI_Library.Reybeta(0))');
+            s2=exp(-b*[Drot(1,1) Drot(1,2) Drot(1,3) Drot(2,2) Drot(2,3) Drot(3,3)]');
+            
+            sh = SH_v2(lmax,g,basis);
+            shcoef = sh.coef(s2);
+            j = 0;
+            for l_ = 0:2:lmax
+                for m = -l_:l_
+                    j = j + 1;
+                    if m ~= 0
+                        shcoef(j,:) = 0;
+                    end
+                end
+            end
+            shcoef=shcoef/shcoef(1);
+        end
+
+        % Original: creates an RF given a single fiber signal
+        function shcoef = E_DTI_create_initial_RF_RC_from_signal(lmax,s2,basis)
+
+            file=load('icosahedron5.mat');
+            g=file.Expression1;
+                        
+            sh = SH_v2(lmax,g,basis);
+            shcoef = sh.coef(s2);
+            j = 0;
+            for l_ = 0:2:lmax
+                for m = -l_:l_
+                    j = j + 1;
+                    if m ~= 0
+                        shcoef(j,:) = 0;
+                    end
+                end
+            end
+            shcoef=shcoef/shcoef(1);
+        end        
+
+        % From ExploreDTI: CSD with tensor based response function -
+        % extended with multi-basis support
+        function D = Calculate_CSD_FOD_TensorBased(fin, sim_rf, Lmax, sim_adc, sim_fa, filename_out, save_sh, basis)
+            
+            fn = [fin(1:end-4) '_CSD_FOD.nii'];
+            
+            if exist(fn,'file')==2
+                [D, VDims] = EDTI_Library.E_DTI_read_nifti_file(fn);
+                D = single(D);
+                D(D==0)=nan;
+                return;
+            end
+            
+            disp('CSD (MRIToolkit) with tensor based RF calibration (not recommended!)...')
+            
+            warning off all
+            load(fin,'DWI','NrB0','b','g','FA','bval','MDims','DT','VDims')
+            warning on all
+            
+            if ~exist('DWI','var') || ~exist('NrB0','var') || ~exist('b','var') || ...
+                    ~exist('FA','var') || ~exist('g','var') || ~exist('bval','var') || ~exist('DT','var')
+                disp(['Format of ''' fin ''' not correct, skipping data!'])
+                D = [];
+                return;
+            end
+            clear DT;
+            
+            mask = repmat(true,MDims);
+            
+            FA(~mask)=nan;
+            
+            bvals=round(sum(b(:,[1 4 6]),2)/100)*100;
+            ubvals = unique(bvals);
+            
+            % bvals = repmat(bval,[length(DWI)-NrB0 1]);
+            grad4 = [[zeros(NrB0,3);g] bvals];
+            
+            if length(ubvals)>2
+                disp(['Selecting a subset of the data: ' num2str(ubvals(1)) 's/mm2 and ' num2str(ubvals(end)) 's/mm2']);
+                IX = find(bvals <= ubvals(1) | bvals >= ubvals(end));
+                DWI = DWI(IX);
+                grad4 = grad4(IX,:);
+                b = b(IX,:);
+                bvals = bvals(IX);
+            end
+            
+            DWI = EDTI_Library.E_DTI_DWI_mat2cell(DWI);
+            
+            B0s = EDTI_Library.E_DTI_Clean_up_B0s_2(DWI, ~isnan(FA), NrB0);
+            DWI(1:NrB0)=B0s;
+            clear B0s;
+            
+            if(sim_rf == 1)
+                the_dirs = load('dir300.txt');
+                s_grad4 = [the_dirs ...
+                    repmat(bval,...
+                    [size(the_dirs,1) 1])];
+                s_grad4 = [0 0 0 0; s_grad4];
+                
+                dti = DTI(s_grad4);
+                dwi = dti.sim_dwi(sim_fa,...
+                    sim_adc,0,0,...
+                    bval);
+                r_sh = SD.response(dwi, s_grad4,...
+                    bval, 0, Lmax);
+            else
+                
+                dwi = EDTI_Library.E_DTI_get_dwi_4_resp_func_2(DWI,0.7,FA);
+                dwi(dwi<=0)=1;
+                
+                if numel(dwi)==0
+                    D = [];
+                    disp('Error calculating response function (DWIs)..., skipping data!')
+                    return;
+                end
+                
+                r_sh = CSD_v2.response(dwi, grad4,...
+                    bval, 0.7, Lmax, basis);
+                
+                if any(isnan(r_sh))
+                    D = [];
+                    disp('Error calculating response function..., skipping data!')
+                    return;
+                end
+            end
+            
+            try
+                sh = SH_v2(Lmax,grad4(bvals>=ubvals(end),1:3),basis);
+                csd = CSD_v2(r_sh,Lmax,basis);
+            catch
+                D = [];
+                disp('Error calculating CSD FOD..., skipping data!')
+                return;
+            end
+            
+            dwi = EDTI_Library.E_DTI_get_dwi_4_resp_func_2(DWI,0,FA);
+            dwi = dwi(NrB0+1:end,:);
+            dwi(dwi<=0)=1;
+            
+            dwi_sh = sh.coef(dwi);
+            
+            if(exist('save_sh','var') > 0 && save_sh == 1)
+                tmp_dwi_sh = unvec(dwi_sh,mask);
+                EDTI_Library.E_DTI_write_nifti_file(tmp_dwi_sh,VDims,[fin(1:end-4) '_SHcoeffs.nii']);
+                clear tmp_dwi_sh;
+            end
+            
+            try
+                D = zeros(size(dwi_sh),'single');
+                %     E_DTI_open_matlabpool;
+                parfor i=1:size(D,2)
+                    D(:,i) = csd.deconv(dwi_sh(:,i));
+                end
+                %     E_DTI_close_matlabpool;
+            catch
+                D = csd.deconv(dwi_sh);
+            end
+            
+            clear dwi_sh;
+            
+            D = unvec(D,~isnan(FA));
+            D = single(D);
+            
+            
+            DD = single(D);
+            DD(isnan(DD))=0;
+            
+            % fn = [fin(1:end-4) '_CSD_FOD.nii'];
+            
+            if(exist('filename_out','var') > 0 && ~isempty(filename_out))
+                fn = filename_out;
+            else
+                fn = [fin(1:end-4) '_CSD_FOD.nii'];
+            end
+            
+            EDTI_Library.E_DTI_write_nifti_file(DD,VDims,fn);
+        end
         
+        % From ExploreDTI: CSD with recursively calibrated response function (Tax
+        % et al.) - adapted
+        function D = Calculate_CSD_FOD_RecursiveCalibration(fin,Lmax,rc_mask_file,file_out,save_sh,basis)
+            
+            fn = file_out;%[fin(1:end-4) '_CSD_FOD.nii'];
+            
+            if exist(fn,'file')==2
+                % [D, VDims] = EDTI_Library.E_DTI_read_nifti_file(fn);
+                % D = single(D);
+                % D(D==0)=nan;
+                % return;
+                warning('Output file already exists and will be overwritten');
+            end
+            
+            disp('CSD with recursive RF calibration...')
+            disp(['Using basis: ' num2str(basis) ' and initializing SHPrecomp_v2 accordingly']);
+            SHPrecomp_v2.init(Lmax,512,basis);
+            
+            if(exist('rc_mask_file','var') && ~isempty(rc_mask_file))
+                disp(['Constraining within ' rc_mask_file]);
+                rc_mask = EDTI_Library.E_DTI_read_nifti_file(rc_mask_file);
+            end
+            
+            try
+                pctRunOnAll warning off all
+            catch
+                warning off all
+            end
+            
+            t = 0.01;
+            lmax = Lmax;
+            it=10;
+            
+            suf = 5;
+            
+            load(fin,'DWI','VDims','NrB0','b','g','FA','bval','MDims')
+            
+            if ~exist('DWI','var') || ~exist('NrB0','var') || ~exist('b','var') || ...
+                    ~exist('FA','var') || ~exist('g','var') || ~exist('bval','var')
+                disp(['Format of ''' fin ''' not correct, skipping data!'])
+                D = [];
+                return;
+            end
+            
+            DWI = EDTI_Library.E_DTI_DWI_mat2cell(DWI);
+            
+            B0s = EDTI_Library.E_DTI_Clean_up_B0s_2(DWI, ~isnan(FA), NrB0);
+            DWI(1:NrB0)=B0s;
+            B0m = mean(EDTI_Library.E_DTI_DWI_cell2mat(B0s),4);
+            for ix=1:length(DWI)
+                Ndata = DWI{ix};%./B0m;
+                Ndata(~isfinite(Ndata)) = 0;
+                DWI{ix} = Ndata;
+            end
+            clear B0s;
+            
+            mask = ~isnan(FA);
+            bvals=round(sum(b(:,[1 4 6]),2)/100)*100;
+            ubvals = unique(bvals);
+            
+            grad=[[zeros(NrB0,3);g],bvals];
+            
+            if length(ubvals)>2
+                disp(['Selecting a subset of the data: ' num2str(ubvals(1)) 's/mm2 and ' num2str(ubvals(end)) 's/mm2']);
+                IX = find(bvals <= ubvals(1) | bvals >= ubvals(end));
+                DWI = DWI(IX);
+                grad = grad(IX,:);
+                b = b(IX,:);
+                bvals = bvals(IX);
+            end
+            
+            dwi=vec(EDTI_Library.E_DTI_DWI_cell2mat(DWI),mask); clear DWI;
+            dwi = single(dwi);
+            
+            M=FA/sqrt(3);
+            M=vec(M,mask);
+            
+            % l=true(size(b,1),1);
+            % dwi = double(dwi(l,:));
+            % grad = grad(l,:);
+            
+            % Select voxels
+            sf_mask=(double(M)>0.01); clear M;
+            
+            fim = find(sf_mask==1);
+            
+            if suf>length(fim)/500
+                suf = round(length(fim)/500);
+                if suf==0
+                    suf=1;
+                end
+            end
+            
+            fim = fim(1:suf:end);
+            sf_mask(:)=0;
+            sf_mask(fim)=1;
+            
+            if(exist('rc_mask_file','var') && ~isempty(rc_mask_file))
+                fprintf('Before sf had %d candidates %s',length(find(sf_mask>0)),newline);
+                sf_mask = sf_mask & vec(rc_mask>0,mask);
+                fprintf('After sf has %d candidates %s',length(find(sf_mask>0)),newline);
+            end
+            
+            dwi = dwi(:,sf_mask);
+            
+            % select single shell without b0
+            dwi = dwi(NrB0+1:end,:);
+            grad = grad(NrB0+1:end,1:3);
+            
+            % dwi in SH
+            sh = SH_v2(lmax,grad,basis);
+            
+            dwi_sh = sh.coef(dwi);
+%             dwi_sh = sh.reg_coef(dwi,0.001);
+            
+            % axial symmetric RF in z direction for every voxel, FA tensor = 0.05,
+            % werkt voor lmax = 6 en 8
+            r_sh = zeros(SH.lmax2n(lmax),size(dwi,2));
+            
+            shcoef = MRT_Library.E_DTI_create_initial_RF_RC(lmax,bval,0.05,2.1*10^(-3),basis);
+            
+            for i=1:length(shcoef(:))
+                
+                r_sh(i,:) = shcoef(i,1);
+                
+            end
+            
+            SHPrecomp.init(lmax); % always perform this initialization first
+            
+            I=cell(1);
+            for i=1:it
+                %     disp(num2str(i))
+                % total RF
+                I{i}.nvox=size(r_sh,2); %amount of voxels
+                r_shtot = mean(r_sh,2);
+                r_shtot_sd = std(r_sh,0,2);
+                I{i}.r_shtot=r_shtot;
+                I{i}.r_shtot_sd = r_shtot_sd;
+                
+                % create CSD object
+                csd = CSD_v2(r_shtot,lmax,basis); clear r_shtot
+                
+                % perform constrained deconvolution on SH coefficients
+                csd_fod_sh = csd.deconv(dwi_sh);
+                
+                % peak extraction
+                [dirs_, vals_] = SHPrecomp_v2.all_peaks(csd_fod_sh, 0, 2);
+                
+                vals = zeros(2,length(vals_));
+                
+                for k=1:length(vals_)
+                    if isempty(vals_{k})
+                        vals_{k}(1) = nan;
+                    end
+                    vals(1,k) = vals_{k}(1);
+                    if length(vals_{k})>1
+                        vals(2,k) = vals_{k}(2);
+                    else
+                        vals(2,k) = nan;
+                    end
+                end
+                
+                dirs = zeros(3,length(vals_));
+                
+                for k=1:length(vals_)
+                    if isempty(dirs_{k})
+                        dirs_{k} = [nan nan nan]';
+                    end
+                    dirs(1,k) = dirs_{k}(1,1);
+                    dirs(2,k) = dirs_{k}(2,1);
+                    dirs(3,k) = dirs_{k}(3,1);
+                end
+                
+                I{i}.vals=vals;
+                peak_mask = ((vals(2,:)./vals(1,:)<t | isnan(vals(2,:))) & ~isnan(vals(1,:)));
+                I{i}.peak_mask = peak_mask;
+                dwi_sh = dwi_sh(:,peak_mask);
+                r_sh=zeros(SH_v2.lmax2n(lmax),size(dwi_sh,2));
+                dirs=dirs(:,peak_mask);
+                dwi=dwi(:,peak_mask);
+                
+                for j = 1:size(dwi_sh,2)
+                    fe=dirs(1:3,j);
+                    nullsp=null(fe');
+                    se=nullsp(:,1);
+                    te=nullsp(:,2);
+                    rot_grad = zeros(size(grad,1),3);
+                    rot = [te se fe];
+                    for k = 1:size(grad,1)
+                        rot_grad(k,:) = grad(k,:)*rot;
+                    end
+                    r_sh(:,j) = (SH_v2.eval(lmax,c2s(rot_grad),basis)\dwi(:,j));
+                end
+                
+                j = 0;
+                for l_ = 0:2:lmax
+                    for m = -l_:l_
+                        j = j + 1;
+                        if m ~= 0
+                            r_sh(j,:) = 0;
+                        end
+                    end
+                end
+                
+                if i>1
+                    change=abs(I{i}.r_shtot-I{i-1}.r_shtot)./I{i-1}.r_shtot;
+                    if  all(change(~isnan(change))<0.01)
+                        break
+                    end
+                end
+                
+                
+            end
+            
+            % Plot mean PR and nr of voxels over iteration
+            % nvox=[];
+            % ratiovals=[];
+            r_shtot=[];
+            r_shtot_sd = [];
+            for i=1:size(I,2)
+                %     nvox=[nvox,I{i}.nvox];
+                %     ratiovals=[ratiovals,mean([I{i}.vals(2,~isnan(I{i}.vals(2,:)))/I{i}.vals(1,~isnan(I{i}.vals(2,:))),zeros(1,length(I{i}.vals(2,isnan(I{i}.vals(2,:)))))])];
+                r_shtot=[r_shtot,I{i}.r_shtot];
+                r_shtot_sd=[r_shtot_sd,I{i}.r_shtot_sd];
+            end
+            
+            % Save the Response function per iteration (ADL)
+            save([file_out(1:end-4) '_r_sh.mat'],'r_shtot','r_shtot_sd','-v7.3');
+            
+            load(fin,'DWI','VDims','NrB0','b','g','FA','bval','MDims')
+            bvals=round(sum(b(:,[1 4 6]),2)/10)*10;
+
+            B0s = EDTI_Library.E_DTI_Clean_up_B0s_2(DWI, ~isnan(FA), NrB0);
+            DWI(1:NrB0)=B0s;
+            B0m = mean(EDTI_Library.E_DTI_DWI_cell2mat(B0s),4);
+            for ix=1:length(DWI)
+                Ndata = DWI{ix};%./B0m;
+                Ndata(~isfinite(Ndata)) = 0;
+                DWI{ix} = Ndata;
+            end
+            clear B0s;
+
+            if length(ubvals)>2
+                disp(['Selecting a subset of the data: ' num2str(ubvals(1)) 's/mm2 and ' num2str(ubvals(end)) 's/mm2']);
+                IX = find(bvals <= ubvals(1) | bvals >= ubvals(end));
+                DWI = DWI(IX);
+                %     grad = grad(IX,:);
+                b = b(IX,:);
+                bvals = bvals(IX);
+            end
+            %
+            % % bvals=sum(b(:,[1 4 6]),2);
+            % bvals=round(sum(b(:,[1 4 6]),2)/100)*100;
+            % grad=[[zeros(NrB0,3);g],bvals];
+            dwi=vec(EDTI_Library.E_DTI_DWI_cell2mat(DWI),mask); clear DWI;
+            dwi = single(dwi);
+            %
+            % % Do CSD for iteration(s) iter, mostly last iteration
+            iter=size(I,2);
+            % % select single shell
+            dwi = dwi(NrB0+1:end,:);
+            % b = b(NrB0+1:end,:);
+            % grad = grad(NrB0+1:end,1:3);
+            % % create SH object
+            % %%sh = SH(grad, lmax);
+            % sh = SH(lmax, grad);
+            %
+            % % estimate SH coefficients
+            dwi_sh = sh.coef(dwi);
+            
+            if(exist('save_sh','var') > 0 && save_sh == 1)
+                tmp_dwi_sh = unvec(dwi_sh,mask);
+                EDTI_Library.E_DTI_write_nifti_file(tmp_dwi_sh,VDims,[fin(1:end-4) '_SHcoeffs.nii']);
+                clear tmp_dwi_sh;
+            end
+            
+            for i=iter
+                %     disp(num2str(i))
+                r_sh = r_shtot(:,i);
+                r_sh_mrtrixformat = r_sh([1 4 11 22 37])';
+                save([file_out(1:end-4) '_rf.txt'],'r_sh_mrtrixformat','-ascii');
+
+                if any(isnan(r_sh))
+                    D=[];
+                    disp('Error during CSD. The estimated RF contains NaN values.');
+                    return;
+                end
+                
+                % create CSD object
+                csd = CSD_v2(r_sh,lmax,basis);
+                % perform constrained deconvolution on SH coefficients
+                csd_fod_sh = csd.deconv(dwi_sh);
+                D = unvec(csd_fod_sh,mask);
+                %     save([directory,tag,'_CSD_it',num2str(i),'_fod.mat'],'csd_fod_sh');
+                %     EDTI_Library.E_DTI_write_nifti_file(csd_fod_sh,VDims,[directory,tag,'_CSD_it',num2str(i),'_fod.nii'])
+            end
+            
+            % For quality check, compute the residuals (ADL)
+            residuals = mean(abs(sh.amp(csd.conv(csd_fod_sh))-dwi));
+            residuals = unvec(residuals,mask);
+            save([fin(1:end-4) '_csd_residuals.mat'],'residuals');
+            
+            DD = single(D);
+            DD(isnan(DD))=0;
+            
+            if(exist('file_out','var') > 0 && ~isempty(file_out))
+                fn = file_out;
+            else
+                if(exist('rc_mask_file','var') > 0 && ~isempty(rc_mask_file))
+                    fn = [fin(1:end-4) '_' rc_mask_file];
+                else
+                    fn = [fin(1:end-4) '_CSD_FOD.nii'];
+                end
+            end
+            
+            EDTI_Library.E_DTI_write_nifti_file(DD,VDims,fn);
+            
+            try
+                pctRunOnAll warning on all
+            catch
+                warning on all
+            end
+        end    
+
+        % Try to retrieve the original header, either from the original
+        % NIFTI or from the companion .json
+        % Also returns the flip/permute executed for conforming the data
+        function [header,cp,cs] = RetrieveOriginalNIFTIHeader(nii_file)
+            try
+                hdr = load_untouch_header_only(nii_file);
+            catch
+                hdr = load_untouch_header_only([nii_file '.gz']);
+            end
+            if(hdr.hist.qform_code == 0 && (contains(hdr.hist.descrip,'ExploreDTI') || ...
+                    contains(hdr.hist.descrip,'MRIToolkit')))
+                % This NIFTI has been conformed and does not contain the
+                % original header info. Try to recover those from the
+                % companion .json created from MRIToolkit (if available)
+                try
+                    desc = NiftiIO_basic.ReadJSONDescription('json_file',...
+                        strrep(strrep(nii_file,'.gz',''),'.nii','.json'));
+                    if(isfield(desc,'original_header'))
+                        header = desc.original_header;
+                        cp = desc.permute_order;
+                        cs = desc.sign_order;
+                    else
+                        disp('Could not retrieve the original header in the companion json. The result of this operation could be wrong.');
+                        header = hdr;
+                        cp = nan;
+                        cs = nan;
+                    end
+                catch
+                    disp('Could not find the companion json to retrieve the original header. The result of this operation could be wrong.');
+                    header = hdr;
+                    cp = nan;
+                    cs = nan;
+                end
+            else
+                header = hdr;
+                cp = nan;
+                cs = nan;
+            end
+        end
+
+        % Permute, Flip, Rotate the bvecs/b-matrix to conformed space
+        % Implementation not finished
+        function conformed = ConformBvecBmat(bvec_or_bmat,nifti_header_or_file)
+
+            g = load([bname '.bvec']);
+            R = MRT_Library.RotationMatrixFromNiftiHeader([bname '.nii']);
+            % R(:,2) = -R(:,2);
+            % Now I should apply the same modifications I do on the imaging to the
+            % bvecs
+            [cp,cs] = MRTQuant.ConformSpatialDimensions('nii_file',[bname '.nii'],...
+                'output',[bname '_FP.nii']);
+            % cp = cp([2 1 3]);
+            cs(2) = -cs(2);
+            R = R(:,[2 1 3]);
+            g_r = R'*g; % bvecs to "voxel space"
+            g_r = g_r .* repmat(cs',1,size(g_r,2)); % invert flips done on imaging
+        end
+
+        % From ExploreDTI: DTI/DKI fit - creates the .mat file - Modified
+        function E_DTI_model_fit(f_DWI_orig,f_BM,fnam,Mask_par,perm,flip,fit_mode, dki_fit, dki_constraints, rekindle_kappa)
+            global MRIToolkit;
+            
+            f_DWI = f_DWI_orig;%strrep(f_DWI_orig,'.nii','_FPtemp.nii');
+            if(flip == -1 || perm == -1 || flip == -2 || perm == -2)
+                if(perm == -1)
+                    disp('Testing header based rotation of gradients. This is still experimental.')
+                    disp('The image will be automatically conformed if necessary');
+                else
+                    disp('Testing header conformation based on the header. This is still experimental.')
+                    disp('The image will be automatically conformed if necessary');
+                end
+                % Try to recover the original header, either from the NIFTI
+                % or from the companion .json
+                [original_header,cp,cs] = MRT_Library.RetrieveOriginalNIFTIHeader(f_DWI_orig);
+                if(isnan(cp))
+                    % A conformation is likely needed
+                    disp('Conforming the provided image');
+                    f_DWI = strrep(f_DWI_orig,'.nii','_FPtemp.nii');
+                    [cp,cs] = MRTQuant.ConformSpatialDimensions('nii_file',f_DWI_orig,...
+                        'output',f_DWI);       
+                end
+            end
+
+            [DWI,VDims] = EDTI_Library.E_DTI_read_nifti_file(f_DWI);
+            hdr = [];
+            try
+                hdr = load_untouch_header_only(f_DWI_orig);
+            catch
+                pf = dir([strrep(strrep(f_DWI_orig,'.nii',''),'.gz','') '.nii*']);
+                hdr = load_untouch_header_only(fullfile(pf.folder,pf.name));
+            end
+            
+            b = textread(f_BM);
+            
+            bval = sum(b(:,[1 4 6]),2);
+            
+            % Sort the acquisition on the fly
+            if(isfield(MRIToolkit,'mat_conversion_nosort') < 1 || MRIToolkit.mat_conversion_nosort == 0)
+                bval = round(bval);            
+                [bval,IX] = sort(bval,'ascend');
+                b = b(IX,:);
+                DWI = DWI(:,:,:,IX);
+            end
+
+            % The concept of non-weighted image can be acquisition dependent.
+            if(isfield(MRIToolkit,'min_bval_as_b0'))
+                b0_indices = find(bval <= MRIToolkit.min_bval_as_b0);
+            else
+                b0_indices = find(bval <= 1);
+                if(isempty(b0_indices))
+                    min_bval = min(bval);
+                    if(min_bval < 55) % bval tolerance set to 55, if we do not have any b = 0s/mm2
+                       b0_indices = find(bval <= min_bval);
+                    end
+                end                
+            end
+
+            % This was the default in ExploreDTI, but it then forces all
+            % b0s to the same value? 
+            % NrB0 = length(b0_indices); 
+            NrB0 = 1; % Changed on 5-02-2026 
+
+            if(flip == -1 || perm == -1)
+                % Transform the gradients according to the header
+                % (including evt. a rotation)
+                [bval, g] =  EDTI_Library.E_DTI_GetGradientsandBval_SC(b, 0);
+
+                R = MRT_Library.RotationMatrixFromNiftiHeader(original_header);
+                cs(2) = -cs(2);
+                if(size(cs,1) > size(cs,2))
+                    cs = cs';
+                end
+                R = R(:,[2 1 3]);
+                g_r = R'*g'; % bvecs to "voxel space"
+                g_r = g_r .* repmat(cs',1,size(g_r,2)); % invert flips done on imaging                    
+                g_r = g_r';
+                % g(:,1) = -g(:,1);
+                b = MRTQuant.b_Matrix_from_bval_bvec('bval',bval,'bvec',g_r);
+                % perm = 2;
+                % flip = 2;
+            elseif(flip == -2 || perm == -2)
+                % Conform the gradients with the same flip/permute
+                % determined and performed for the imaging data
+                [bval, g] =  EDTI_Library.E_DTI_GetGradientsandBval_SC(b, 0);
+                cp = cp([2 1 3]);
+                g = g(:,cp);
+                % cs(3) = -cs(3);
+                % cs = -cs;
+                % cs = cs(cp);
+                % cs = cs([2 1 3]);
+                cs(cp == 2) = -1;
+                if(size(cs,1) > size(cs,2))
+                    cs = cs';
+                end
+                g = g .* repmat(cs,size(g,1),1); % invert flips done on imaging          
+                % g = g';
+                b = MRTQuant.b_Matrix_from_bval_bvec('bval',bval,'bvec',g);
+            else
+                [bval, g] =  EDTI_Library.E_DTI_GetGradientsandBval_SC(b, NrB0);
+                [g, b] = EDTI_Library.E_DTI_flip_g_b(g,b,perm,flip);
+            end
+
+            bval = max(bval);
+            
+            par.clean_up_PIS = 1;
+            par.ROBUST_option = 1;
+            par.RE.rel_convergence = 1e-3;
+            par.RE.max_iter = 20;
+            if(exist('rekindle_kappa','var') > 0)
+                par.RE.kappa = rekindle_kappa;
+            else
+                par.RE.kappa = 6;
+            end
+            par.DKI_constraints.do_it = 1;
+            if(exist('dki_constraints','var') > 0)
+                par.DKI_constraints.constr1 = dki_constraints;
+            else
+                par.DKI_constraints.constr1 = [-Inf Inf];
+            end
+            par.DKI_constraints.constr2 = [-Inf Inf];
+            
+            M = mean(DWI(:,:,:,NrB0+1:end),4);
+            DWI = EDTI_Library.E_DTI_DWI_mat2cell(DWI);
+            
+            if(isstruct(Mask_par))
+                mask1 = EDTI_Library.E_DTI_Create_Mask_From_DWI_enhanced_IND(DWI{1},Mask_par.tune_NDWI,Mask_par.mfs);
+                mask2 = EDTI_Library.E_DTI_Create_Mask_From_DWI_enhanced_IND(M,Mask_par.tune_DWI,Mask_par.mfs);
+                
+                mask = or(mask1,mask2);
+            else
+                mask = EDTI_Library.E_DTI_read_nifti_file(Mask_par);
+                mask = mask > 0;
+            end
+            
+            if(strcmpi(fit_mode,'ols'))
+                par.TE = 1;
+            elseif(strcmpi(fit_mode,'wls'))
+                par.TE = 2;
+            elseif(strcmpi(fit_mode,'rekindle'))
+                par.TE = 4;
+            elseif(strcmpi(fit_mode,'nls'))
+                par.TE = 3;
+            end
+            
+            g = [zeros(NrB0,3);g];
+            
+            tic;
+            if dki_fit==0
+                [DT, DWIB0, outlier, chi_sq, chi_sq_iqr] = EDTI_Library.E_DTI_Get_DT_from_DWI_b_mask(DWI,b,mask,par,NrB0);
+            elseif dki_fit==1
+                [DT, DWIB0, KT, outlier, chi_sq, chi_sq_iqr] = EDTI_Library.E_DTI_Get_DT_KT_from_DWI_b_mask_with_constraints(DWI,b,mask,g,par,NrB0,VDims);
+            end
+            
+            [FEFA, FA, FE, SE, eigval] = EDTI_Library.E_DTI_eigensystem_analytic(DT);
+            
+            g = g(NrB0+1:end,:);
+            
+            if ~isreal(FA)
+                FA = real(FA);
+            end
+            if ~isreal(FEFA)
+                FEFA = real(FEFA);
+            end
+            if ~isreal(FE)
+                FE = real(FE);
+            end
+            if ~isreal(SE)
+                SE = real(SE);
+            end
+            if ~isreal(eigval)
+                eigval = real(eigval);
+            end
+            
+            info = [];
+            MDims = size(FA);
+            
+            try
+                save(fnam,'DWI','VDims','b','bval','g','info','FEFA','NrB0','MDims',...
+                    'FA','FE','SE','eigval','DT','outlier','DWIB0','chi_sq','chi_sq_iqr','par','Mask_par','hdr','-v7.3')
+            catch
+                save(fnam,'DWI','VDims','b','bval','g','info','FEFA','NrB0','MDims',...
+                    'FA','FE','SE','eigval','DT','outlier','DWIB0','chi_sq','chi_sq_iqr','par','Mask_par','hdr')
+            end
+            
+            if exist('KT','var') > 0
+                save(fnam,'KT','-append')
+            end
+            
+            toc;
+        end
+
+        % Conforms an image to our internal reference system (EDTI-like)
+        function [out_data,permute_order,sign_order] = ConformImageAndHeaderOrientation(nii)
+            smat = [nii.hdr.hist.srow_x(1:3);
+                nii.hdr.hist.srow_y(1:3);
+                nii.hdr.hist.srow_z(1:3)];
+
+            b = nii.hdr.hist.quatern_b;
+            c = nii.hdr.hist.quatern_c;
+            d = nii.hdr.hist.quatern_d;
+            a = (1.0-(b*b+c*c+d*d));
+            if(a < 1e-7)
+                a = 1.0 / sqrt(b*b+c*c+d*d) ;
+                b = b*a;
+                c = c*a;
+                d = d*a;
+                a = 0;
+            else
+                a = sqrt(a);
+            end
+            qfac = nii.hdr.dime.pixdim(1);
+            dx = abs(nii.hdr.dime.pixdim(2));
+            dy = abs(nii.hdr.dime.pixdim(3));
+            dz = abs(nii.hdr.dime.pixdim(4));
+            if(qfac < 1)
+                dz = -dz;
+            end
+            qmat = [(a*a+b*b-c*c-d*d)*dx (2*b*c-2*a*d)*dy (2*b*d+2*a*c)*dz;
+                (2*b*c+2*a*d)*dx (a*a+c*c-b*b-d*d)*dy (2*c*d-2*a*b)*dz;
+                (2*b*d-2*a*c)*dx (2*c*d+2*a*b)*dy (a*a+d*d-c*c-b*b)*dz];
+            if(nii.hdr.hist.sform_code > 0)
+                if(nii.hdr.hist.sform_code > 0)
+                    disp('Using the s-form' );
+                    qmat = smat;
+                end
+            else
+                if(nii.hdr.hist.sform_code == 0)
+                    disp('No s-form');
+                    if(nii.hdr.hist.qform_code > 0)
+                        disp('Using q-form');
+                        smat = qmat;
+                    else
+                        disp('Using identity orientation')
+                        smat = eye(3);
+                    end
+                end
+            end
+
+            permute_order = [1 2 3];
+            sign_order = [1 1 1];
+            for ij=1:size(smat,2)
+%                 [~,IX] = max(abs(smat(:,ij)));
+                [~,IX] = max(abs(smat(ij,:)));
+                permute_order(ij) = IX;
+                if(smat(ij,IX) < 0)
+                    sign_order(ij) = -1;
+                end
+            end
+            
+            if(length(unique(permute_order)) < length(permute_order))
+                disp('Please visually check the resulting image.');
+                % temp workaround
+                permute_order = [1 2 3];
+                sign_order = [1 1 1];
+                for ij=1:size(smat,2)
+                    [~,IX] = max(abs(smat(:,ij)));
+                    permute_order(ij) = IX;
+                    if(smat(ij,IX) < 0)
+                        sign_order(ij) = -1;
+                    end
+                end                
+            end
+
+            out_data.img = single(nii.img);
+            out_data.img = permute(out_data.img,[permute_order 4]);
+            for ij=1:length(sign_order)
+                if(sign_order(ij) == -1)
+                    out_data.img = flip(out_data.img,ij);
+                end
+            end
+
+            out_data.VD = nii.hdr.dime.pixdim(2:4);
+            out_data.VD = out_data.VD(permute_order(1:3));
+            out_data.VD = out_data.VD([2 1 3]);
+            out_data.img = permute(out_data.img,[2 1 3 4]);
+            out_data.img = flip(out_data.img,1);
+            out_data.img = flip(out_data.img,2);
+        end
+
+        % Restores a conformed image to the original header and orientation
+        function out_data = RestoreImageHeaderOrientation(conf_nii,original_header,permute_order,sign_order)
+            out_data.img = single(conf_nii.img);
+            % if permute order and sign order are not given, try to infer
+            % them
+            if(nargin < 3)
+                dummy_nii = conf_nii;
+                dummy_nii.hdr = original_header;
+                [~,permute_order,sign_order] = MRT_Library.ConformImageAndHeaderOrientation(dummy_nii);
+            end
+            
+            out_data.img = flip(out_data.img,1);
+            out_data.img = flip(out_data.img,2);
+            out_data.img = permute(out_data.img,[2 1 3 4]);
+            for ij=1:length(sign_order)
+                if(sign_order(ij) == -1)
+                    out_data.img = flip(out_data.img,ij);
+                end
+            end
+
+            if(size(permute_order,2) > size(permute_order,1))
+                permute_order = permute_order';
+            end
+
+            out_data.img = permute(out_data.img,[permute_order; 4]);
+            out_data.hdr = original_header;
+            out_data.hdr.dime.scl_inter = 0;
+            out_data.hdr.dime.scl_slope = 1; % These should be the original values. Generally, this should be harmless. To be fixed at some point.
+            out_data.hdr.dime.datatype = 16;
+            out_data.hdr.dime.bitpix = 32;
+            out_data.hdr.dime.dim(1) = length(size(out_data.img));
+            out_data.hdr.dime.dim(5) = size(out_data.img,4);
+            out_data.untouch = 1;
+        end
+
+        % Returns a rotation matrix from q-form or s-form
+        function RotMat = RotationMatrixFromNiftiHeader(file_or_header)
+            if(ischar(file_or_header))
+                try
+                    hdr = load_untouch_nii(file_or_header);
+                catch
+                    file_or_header = [file_or_header '.gz'];
+                    hdr = load_untouch_nii(file_or_header);
+                end
+            else
+                hdr.hdr = file_or_header;
+            end
+            smat = [hdr.hdr.hist.srow_x(1:3);
+                hdr.hdr.hist.srow_y(1:3);
+                hdr.hdr.hist.srow_z(1:3)];
+
+            b = hdr.hdr.hist.quatern_b;
+            c = hdr.hdr.hist.quatern_c;
+            d = hdr.hdr.hist.quatern_d;
+            a = (1.0-(b*b+c*c+d*d));
+            if(a < 1e-7)
+                a = 1.0 / sqrt(b*b+c*c+d*d) ;
+                b = b*a;
+                c = c*a;
+                d = d*a;
+                a = 0;
+            else
+                a = sqrt(a);
+            end
+            qfac = hdr.hdr.dime.pixdim(1);
+            dx = abs(hdr.hdr.dime.pixdim(2));
+            dy = abs(hdr.hdr.dime.pixdim(3));
+            dz = abs(hdr.hdr.dime.pixdim(4));
+            if(qfac < 1)
+                dz = -dz;
+            end
+            qmat = [(a*a+b*b-c*c-d*d)*dx (2*b*c-2*a*d)*dy (2*b*d+2*a*c)*dz;
+                (2*b*c+2*a*d)*dx (a*a+c*c-b*b-d*d)*dy (2*c*d-2*a*b)*dz;
+                (2*b*d-2*a*c)*dx (2*c*d+2*a*b)*dy (a*a+d*d-c*c-b*b)*dz];
+            if(hdr.hdr.hist.sform_code > 0)
+                disp('Using the s-form' );
+                RotMat = smat;
+            else
+                if(hdr.hdr.hist.sform_code == 0)
+                    disp('No s-form');
+                    if(hdr.hdr.hist.qform_code > 0)
+                        disp('Using q-form');
+                        RotMat = qmat;
+                    else
+                        disp('Using identity orientation')
+                        RotMat = eye(3);
+                    end
+                end
+            end
+            for ix=1:size(RotMat,2)
+                V = RotMat(:,ix);
+                V = V/norm(V,2);
+                RotMat(:,ix) = V;
+            end
+        end
+
     end
     
 end

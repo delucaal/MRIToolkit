@@ -14,10 +14,12 @@ function mrtd_deconv_fod(varargin)
         help = [help newline '-grad_perm: how to permute the diffusion gradients 1=[x y z] 2=[y x z] 3=[z y x]' ....
             ' 4=[x z y] =[y z x] 6=[z x y]'];
         help = [help newline '-grad_flip: how to flip the sign of the diffusion gradients 1=[x y z] 2=[-x y z] 3=[x -y z] 4=[x y -z]'];
-        help = [help newline '-method: one in "csd","mscsd","grl","grl_auto","mfod"'];
+        help = [help newline '-method: one in "csd","mscsd","grl","grl_auto","mfod","lasso"]'];
         help = [help newline '-t1_seg: T1 segmentation file derived from "fsl_anat" (mscsd only)'];
         help = [help newline '-lmax: spherical harmonics order'];
         help = [help newline '-mat: provide an ExploreDTI-compatible .MAT file. Overrides -nii -bval -bvec'];
+        help = [help newline '-preserve_header: 0 (default) use a normalized ExploreDTI-like header, or 1 to preserve the original reference to world coordinates.'];
+        help = [help newline '                  If you plan on using ExploreDTI in subsequent steps, please use the normalized header.'];
         help = [help newline];
         help = [help newline 'GRL - mFOD specific options'];
         help = [help newline];
@@ -26,9 +28,10 @@ function mrtd_deconv_fod(varargin)
         help = [help newline '-aniso_rf_noddi: Add an anisotropic RF using the NODDI model. Specify 6 parameters  "intra-cellular-volume free-diffusivity*10^9 watson-concentration isotropic-fraction isotropic-diffusivity b0-amplitude"'];
         help = [help newline '-iso_rf: Add an isotropic RF using the ADC model. Specify the diffusivity in um2/ms, as 0.7 for GM and 3 for CSF'];
         help = [help newline '-shell_weight: Inner-shell weighting factor (GRL only)'];
+        help = [help newline '-reg_factor: regularization factor (mFOD and LASSO only, default is 0.01)'];
         help = [help newline];
         help = [help newline 'GRL default usage: mrtd_deconv_fod -method grl_auto -nii file.nii -bval file.bval -bvec file.bvec -out GRL_processing'];
-        help = [help newline 'mFOD default usage: mrtd_deconv_fod -method mfod -nii file.nii -bval file.bval -bvec file.bvec -out mF -aniso_rf_dki "auto" -aniso_rf_noddi "0.4 1.7 1 0 3 1" -iso_rf 3'];
+        help = [help newline 'mFOD default usage: mrtd_deconv_fod -method mfod -nii file.nii -bval file.bval -bvec file.bvec -out mFOD_processing -aniso_rf_dki "auto" -aniso_rf_noddi "0.4 1.7 1 0 3 1" -iso_rf 3'];
         help = [help newline];
         fprintf(help);
 
@@ -47,6 +50,7 @@ t1_seg = '';
 aniso_rf = {};
 iso_rf = {};
 lmax = 8;
+reg_factor = 0.01;
 
 for input_id =1:2:length(coptions)
     value = coptions{input_id};
@@ -77,7 +81,9 @@ for input_id =1:2:length(coptions)
     elseif(strcmp(value,'-iso_rf'))
         iso_rf(end+1) = {coptions{input_id+1}};
     elseif(strcmp(value,'-mat'))
-        mat_file = {coptions{input_id+1}};
+        mat_file = coptions{input_id+1};
+    elseif(strcmp(value,'-reg_factor'))
+        reg_factor = coptions{input_id+1};
     end
     
 end
@@ -110,7 +116,7 @@ if(strcmp(deconv_method,'csd') || strcmp(deconv_method,'mscsd'))
     EDTI.PerformCSD('mat_file',temp_mat_file,'mscsd',mscsd,...
         'T1seg',t1_seg,'output',outfile,'lmax',lmax);
 
-elseif(strcmp(deconv_method,'grl') || strcmp(deconv_method,'mfod'))
+elseif(strcmp(deconv_method,'grl') || strcmp(deconv_method,'mfod') || strcmp(deconv_method,'lasso'))
     % Converts a .MAT to the MRIToolkit format
     mrt_data = EDTI.EDTI_Data_2_MRIToolkit('mat_file',temp_mat_file);
     other_props = load(temp_mat_file,'FA');
@@ -153,12 +159,18 @@ elseif(strcmp(deconv_method,'grl') || strcmp(deconv_method,'mfod'))
         SD.setDeconvMethod('dRL'); % damped Richardson Lucy
     elseif(strcmp(deconv_method,'mfod'))
         SD.setInnerShellWeighting(1.0); % in mFOD this parameter has not been investigated
+        SD.setL2REG(reg_factor);
         SD.setDeconvMethod('L2LSQ');
+    elseif(strcmp(deconv_method,'lasso'))
+        SD.setInnerShellWeighting(1.0); % in mFOD this parameter has not been investigated
+        SD.setL2REG(reg_factor);
+        SD.setDeconvMethod('LASSO');
     end
     
     GRL_Results = SD.PerformDeconv();
     MRTTrack.SaveOutputToNii(SD,GRL_Results,outfile);
-
+elseif(strcmp(deconv_method,'grl_auto'))
+    MRTTrack.PerformGRL('mat_file',temp_mat_file,'output',outfile); 
 else
     error(['Unknown deconvolution method ' method]);
 end

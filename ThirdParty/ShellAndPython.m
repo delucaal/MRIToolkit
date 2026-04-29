@@ -120,7 +120,7 @@ classdef ShellAndPython < handle
         end
 
         function out = InitializeDefaultPythonEnv()
-            cmd = 'conda create -y -n MRIToolkit python=3.10';
+            cmd = 'conda create -y -n MRIToolkit -c defaults python=3.10';
             out = ShellAndPython.ExecuteSH(cmd);
             if(contains(out,'conda deactivate'))
                 disp('Success! Default python environment succesfully created.')
