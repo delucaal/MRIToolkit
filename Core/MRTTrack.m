@@ -968,13 +968,15 @@ classdef MRTTrack < handle
                     fod(:,:,indices,:) = sh.coef(output.FOD(:,:,indices,:));
                 end
 
+                data_struct.img = fod;
+                data_struct.VD = SpherDec.data.VD;
+
                 if(isfield(SpherDec.data,'hdr'))
                     orig_hdr = true;
+                    data_struct.hdr = SpherDec.data.hdr;
                 else
                     orig_hdr = false;
                 end
-                data_struct.img = fod;
-                data_struct.VD = SpherDec.data.VD;
                 MRTQuant.WriteNifti(data_struct,[file_prefix '_CSD_FOD.nii'],orig_hdr,SpherDec.preserve_header);
                 data_struct.img = output.fractions;
                 MRTQuant.WriteNifti(data_struct,[file_prefix '_fractions.nii'],orig_hdr,SpherDec.preserve_header);
@@ -2937,7 +2939,11 @@ classdef MRTTrack < handle
             
             json.parameters = parameters;
             
-            EDTI_Library.WholeBrainTrackingDTI_fast(file_in, filename_out, parameters);
+            % store_tractometry needs to be defined and handled
+            store_tractometry = false;
+            output_format = 1;
+            MRT_Library.DTIBasedFiberTractography_FACT(file_in, filename_out, parameters, store_tractometry, output_format);
+
             NiftiIO_basic.WriteJSONDescription('output',filename_out(1:end-4),'props',json);
         end
         
@@ -3025,12 +3031,12 @@ classdef MRTTrack < handle
                     test_basis = 2; % mrtrix
                     warning('CSD with new basis: this is still experimental!!!');
                     if(isempty(dti_rf))
-                        CSD_FOD = MRT_Library.Calculate_CSD_FOD_RecursiveCalibration(file_in,Lmax,rc_mask_file,filename_out,save_sh,test_basis);
+                        CSD_FOD = MRT_Library.Calculate_CSD_FOD_RecursiveCalibration(file_in,Lmax,rc_mask_file,filename_out,save_sh,test_basis,1);
                     else
                         pieces = strsplit(dti_rf);
                         sim_fa = str2double(pieces{1});
                         sim_adc = str2double(pieces{2})*1e-3;
-                        CSD_FOD = MRT_Library.Calculate_CSD_FOD_TensorBased(file_in, 1, Lmax,sim_adc, sim_fa,filename_out,save_sh,test_basis);
+                        CSD_FOD = MRT_Library.Calculate_CSD_FOD_TensorBased(file_in, 1, Lmax,sim_adc, sim_fa,filename_out,save_sh,test_basis,1);
                     end
                 else
                     if(isempty(dti_rf))

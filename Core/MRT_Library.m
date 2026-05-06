@@ -2449,22 +2449,22 @@ classdef MRT_Library < handle
         end        
 
         % From ExploreDTI: CSD with tensor based response function -
-        % extended with multi-basis support
-        function D = Calculate_CSD_FOD_TensorBased(fin, sim_rf, Lmax, sim_adc, sim_fa, filename_out, save_sh, basis)
+        % extended with multi-basis support and preservation of the NIFTI header
+        function D = Calculate_CSD_FOD_TensorBased(fin, sim_rf, Lmax, sim_adc, sim_fa, filename_out, save_sh, basis, preserve_header)
             
-            fn = [fin(1:end-4) '_CSD_FOD.nii'];
-            
-            if exist(fn,'file')==2
-                [D, VDims] = EDTI_Library.E_DTI_read_nifti_file(fn);
-                D = single(D);
-                D(D==0)=nan;
-                return;
+            if(exist('basis','var') < 1)
+                basis = 0; % 0 = EDTI, 1 = DIPY, 2 = MRTRIX
             end
+            if(exist('preserve_header','var') < 1)
+                preserve_header = 0;
+            end
+
+            fn = [fin(1:end-4) '_CSD_FOD.nii'];
             
             disp('CSD (MRIToolkit) with tensor based RF calibration (not recommended!)...')
             
             warning off all
-            load(fin,'DWI','NrB0','b','g','FA','bval','MDims','DT','VDims')
+            load(fin,'DWI','NrB0','b','g','FA','bval','MDims','DT','VDims','orig_hdr');
             warning on all
             
             if ~exist('DWI','var') || ~exist('NrB0','var') || ~exist('b','var') || ...
@@ -2583,13 +2583,28 @@ classdef MRT_Library < handle
                 fn = [fin(1:end-4) '_CSD_FOD.nii'];
             end
             
-            EDTI_Library.E_DTI_write_nifti_file(DD,VDims,fn);
+            if(preserve_header == 0 || exist('orig_hdr','var') < 1)
+                EDTI_Library.E_DTI_write_nifti_file(DD,VDims,fn);
+            else
+                data_out.img = DD;
+                data_out.VD = VDims;
+                data_out.hdr = orig_hdr;
+                MRTQuant.WriteNifti(data_out,fn,1,1);
+            end
         end
         
         % From ExploreDTI: CSD with recursively calibrated response function (Tax
-        % et al.) - adapted
-        function D = Calculate_CSD_FOD_RecursiveCalibration(fin,Lmax,rc_mask_file,file_out,save_sh,basis)
+        % et al.) - adapted to multiple SH bases, and support for orig
+        % NIFTI header
+        function D = Calculate_CSD_FOD_RecursiveCalibration(fin,Lmax,rc_mask_file,file_out,save_sh,basis,preserve_header)
             
+            if(exist('basis','var') < 1)
+                basis = 0; % 0 = EDTI, 1 = DIPY, 2 = MRTRIX
+            end
+            if(exist('preserve_header','var') < 1)
+                preserve_header = 0;
+            end
+
             fn = file_out;%[fin(1:end-4) '_CSD_FOD.nii'];
             
             if exist(fn,'file')==2
@@ -2621,20 +2636,20 @@ classdef MRT_Library < handle
             
             suf = 5;
             
-            load(fin,'DWI','VDims','NrB0','b','g','FA','bval','MDims')
-            
+            load(fin,'DWI','VDims','NrB0','b','g','FA','bval','MDims','orig_hdr')
+
             if ~exist('DWI','var') || ~exist('NrB0','var') || ~exist('b','var') || ...
                     ~exist('FA','var') || ~exist('g','var') || ~exist('bval','var')
                 disp(['Format of ''' fin ''' not correct, skipping data!'])
                 D = [];
                 return;
             end
-            
+
             DWI = EDTI_Library.E_DTI_DWI_mat2cell(DWI);
             
-            B0s = EDTI_Library.E_DTI_Clean_up_B0s_2(DWI, ~isnan(FA), NrB0);
-            DWI(1:NrB0)=B0s;
-            B0m = mean(EDTI_Library.E_DTI_DWI_cell2mat(B0s),4);
+            % B0s = EDTI_Library.E_DTI_Clean_up_B0s_2(DWI, ~isnan(FA), NrB0);
+            % DWI(1:NrB0)=B0s;
+            % B0m = mean(EDTI_Library.E_DTI_DWI_cell2mat(B0s),4);
             for ix=1:length(DWI)
                 Ndata = DWI{ix};%./B0m;
                 Ndata(~isfinite(Ndata)) = 0;
@@ -2648,14 +2663,15 @@ classdef MRT_Library < handle
             
             grad=[[zeros(NrB0,3);g],bvals];
             
-            if length(ubvals)>2
+            % if length(ubvals)>2
                 disp(['Selecting a subset of the data: ' num2str(ubvals(1)) 's/mm2 and ' num2str(ubvals(end)) 's/mm2']);
-                IX = find(bvals <= ubvals(1) | bvals >= ubvals(end));
+                IX = find(bvals >= ubvals(end));
+                % IX = find(bvals <= ubvals(1) | bvals >= ubvals(end));
                 DWI = DWI(IX);
-                grad = grad(IX,:);
+                grad = grad(IX,1:3);
                 b = b(IX,:);
                 bvals = bvals(IX);
-            end
+            % end
             
             dwi=vec(EDTI_Library.E_DTI_DWI_cell2mat(DWI),mask); clear DWI;
             dwi = single(dwi);
@@ -2692,9 +2708,9 @@ classdef MRT_Library < handle
             dwi = dwi(:,sf_mask);
             
             % select single shell without b0
-            dwi = dwi(NrB0+1:end,:);
-            grad = grad(NrB0+1:end,1:3);
-            
+            % dwi = dwi(NrB0+1:end,:);
+            % grad = grad(NrB0+1:end,1:3);
+                        
             % dwi in SH
             sh = SH_v2(lmax,grad,basis);
             
@@ -2713,7 +2729,7 @@ classdef MRT_Library < handle
                 
             end
             
-            SHPrecomp.init(lmax); % always perform this initialization first
+            % SHPrecomp.init(lmax); % always perform this initialization first
             
             I=cell(1);
             for i=1:it
@@ -2815,12 +2831,13 @@ classdef MRT_Library < handle
             % Save the Response function per iteration (ADL)
             save([file_out(1:end-4) '_r_sh.mat'],'r_shtot','r_shtot_sd','-v7.3');
             
-            load(fin,'DWI','VDims','NrB0','b','g','FA','bval','MDims')
+            load(fin,'DWI','VDims','NrB0','b','g','FA','bval','MDims','orig_hdr')
             bvals=round(sum(b(:,[1 4 6]),2)/10)*10;
+            NrB0 = 0;
 
-            B0s = EDTI_Library.E_DTI_Clean_up_B0s_2(DWI, ~isnan(FA), NrB0);
-            DWI(1:NrB0)=B0s;
-            B0m = mean(EDTI_Library.E_DTI_DWI_cell2mat(B0s),4);
+            % B0s = EDTI_Library.E_DTI_Clean_up_B0s_2(DWI, ~isnan(FA), NrB0);
+            % DWI(1:NrB0)=B0s;
+            % B0m = mean(EDTI_Library.E_DTI_DWI_cell2mat(B0s),4);
             for ix=1:length(DWI)
                 Ndata = DWI{ix};%./B0m;
                 Ndata(~isfinite(Ndata)) = 0;
@@ -2828,14 +2845,15 @@ classdef MRT_Library < handle
             end
             clear B0s;
 
-            if length(ubvals)>2
+            % if length(ubvals)>2
                 disp(['Selecting a subset of the data: ' num2str(ubvals(1)) 's/mm2 and ' num2str(ubvals(end)) 's/mm2']);
-                IX = find(bvals <= ubvals(1) | bvals >= ubvals(end));
-                DWI = DWI(IX);
+                IX = find(bvals >= ubvals(end));
+                % IX = find(bvals <= ubvals(1) | bvals >= ubvals(end));
+                DWI = DWI(IX); % Select the single shell
                 %     grad = grad(IX,:);
                 b = b(IX,:);
                 bvals = bvals(IX);
-            end
+            % end
             %
             % % bvals=sum(b(:,[1 4 6]),2);
             % bvals=round(sum(b(:,[1 4 6]),2)/100)*100;
@@ -2846,7 +2864,7 @@ classdef MRT_Library < handle
             % % Do CSD for iteration(s) iter, mostly last iteration
             iter=size(I,2);
             % % select single shell
-            dwi = dwi(NrB0+1:end,:);
+            % dwi = dwi(NrB0+1:end,:);
             % b = b(NrB0+1:end,:);
             % grad = grad(NrB0+1:end,1:3);
             % % create SH object
@@ -2901,7 +2919,14 @@ classdef MRT_Library < handle
                 end
             end
             
-            EDTI_Library.E_DTI_write_nifti_file(DD,VDims,fn);
+            if(preserve_header == 0 || exist('orig_hdr','var') < 1)
+                EDTI_Library.E_DTI_write_nifti_file(DD,VDims,fn);
+            else
+                data_out.img = DD;
+                data_out.VD = VDims;
+                data_out.hdr = orig_hdr;
+                MRTQuant.WriteNifti(data_out,fn,1,1);
+            end
             
             try
                 pctRunOnAll warning on all
@@ -3030,7 +3055,7 @@ classdef MRT_Library < handle
             % This was the default in ExploreDTI, but it then forces all
             % b0s to the same value? 
             % NrB0 = length(b0_indices); 
-            NrB0 = 1; % Changed on 5-02-2026 
+            NrB0 = 0; % Changed on 5-02-2026 
 
             if(flip == -1 || perm == -1)
                 % Transform the gradients according to the header
@@ -3091,11 +3116,12 @@ classdef MRT_Library < handle
             end
             par.DKI_constraints.constr2 = [-Inf Inf];
             
-            M = mean(DWI(:,:,:,NrB0+1:end),4);
+            % M = mean(DWI(:,:,:,NrB0+1:end),4);
+            M = mean(DWI(:,:,:,~b0_indices),4);
             DWI = EDTI_Library.E_DTI_DWI_mat2cell(DWI);
             
             if(isstruct(Mask_par))
-                mask1 = EDTI_Library.E_DTI_Create_Mask_From_DWI_enhanced_IND(DWI{1},Mask_par.tune_NDWI,Mask_par.mfs);
+                mask1 = EDTI_Library.E_DTI_Create_Mask_From_DWI_enhanced_IND(DWI{b0_indices(1)},Mask_par.tune_NDWI,Mask_par.mfs);
                 mask2 = EDTI_Library.E_DTI_Create_Mask_From_DWI_enhanced_IND(M,Mask_par.tune_DWI,Mask_par.mfs);
                 
                 mask = or(mask1,mask2);
@@ -3125,7 +3151,7 @@ classdef MRT_Library < handle
             
             [FEFA, FA, FE, SE, eigval] = EDTI_Library.E_DTI_eigensystem_analytic(DT);
             
-            g = g(NrB0+1:end,:);
+            % g = g(NrB0+1:end,:);            
             
             if ~isreal(FA)
                 FA = real(FA);
@@ -3344,6 +3370,260 @@ classdef MRT_Library < handle
                 RotMat(:,ix) = V;
             end
         end
+
+        function seedPoint = CalculateSeedPointsInMask(seed_mask,VDims,SeedPointRes)
+            disp('Calculating seed points...');
+            
+            S = size(seed_mask);
+            x = single(VDims(1):VDims(1):VDims(1)*S(1));
+            lx = length(x);
+            y = single(VDims(2):VDims(2):VDims(2)*S(2));
+            ly = length(y);
+            z = single(VDims(3):VDims(3):VDims(3)*S(3));
+            lz = length(z);
+            
+            X = repmat(x',[1 ly lz]);
+            Y = repmat(y,[lx 1 lz]);
+            p = zeros(1,1,lz);
+            p(:,:,:) = z;
+            Z = repmat(p,[lx ly 1]);
+            clear x y z p lx ly lz;
+            
+            x_min = min(X(seed_mask));
+            x_max = max(X(seed_mask));
+            y_min = min(Y(seed_mask));
+            y_max = max(Y(seed_mask));
+            z_min = min(Z(seed_mask));
+            z_max = max(Z(seed_mask));
+            clear X Y Z
+            
+            xrange = x_min:SeedPointRes(1):x_max;
+            yrange = y_min:SeedPointRes(2):y_max;
+            zrange = z_min:SeedPointRes(3):z_max;
+            
+            seedPoint = zeros(3,size(xrange,2)*size(yrange,2)*size(zrange,2), 'single');
+            i = 0;
+            for x = xrange
+                for y = yrange
+                    for z = zrange
+                        v = floor([x y z]./VDims);
+                        if(seed_mask(v(1),v(2),v(3)))
+                            i = i + 1;
+                            seedPoint(:,i) = [x y z];
+                        end
+                    end
+                end
+            end
+            seedPoint = seedPoint(:,1:i);
+            disp('Calculating seed points...DONE!');
+            clear seed_mask;
+        end
+
+
+        % From ExploreDTI: DTI based fiber tractography - Adapted
+        function Tracts = DTIBasedFiberTractography_FACT(filename_in, filename_out, parameters, store_tractometry, output_format)
+            
+            % parameters:
+            %  SeedPointRes: [3 3 3]
+            %             StepSize: 1
+            %             FAThresh: 0.2000
+            %          AngleThresh: 45
+            %     FiberLengthRange: [50 500]
+            % store_tractometry: 0
+            % output_format = 0 % mat, 1 = trk, 2 = tck
+
+            if(exist('store_tractometry','var') < 1)
+                store_tractometry = 0;
+            end
+            if(exist('output_format','var') < 1)
+                % output_format = 0;
+                % Look at filename_out
+                if(contains(filename_out,'.mat'))
+                    output_format = 0;
+                    disp('Will store tractography in an EDTI-like mat file');
+                elseif(contains(filename_out,'.trk'))
+                    output_format = 1;
+                    disp('Will store tractography in a TRK file');
+                elseif(contains(filename_out,'.tck'))
+                    output_format = 2;
+                    disp('Will store tractography in a TCK file');
+                end
+            end
+            
+            try
+                disp(['Loading ' filename_in '...']);
+                warning off all
+                load(filename_in,'VDims','FA','DT');
+                warning on all
+                disp(['Loading ' filename_in '... DONE!']);
+                
+                if ~exist('DT','var') || ~exist('FA','var') || ~exist('VDims','var')
+                    disp('Error: incorrect or corrupted input file...');
+                    return;
+                end
+                
+            catch %ME
+                disp('Error: incorrect or corrupted input file...');
+                %     disp(['Error: ' ME.message]);
+                return;
+            end
+            tic;
+            
+            DT = EDTI_Library.E_DTI_DT_cell2mat(DT);
+            
+            mask = ~isnan(FA); clear FA;
+            seedPoint = MRT_Library.CalculateSeedPointsInMask(mask,VDims,parameters.SeedPointRes);
+
+            % Tractography parameters
+            param.VDims = single(VDims); % in mm
+            param.stepSize = single(parameters.StepSize); % in mm
+            param.maxAngle = single(parameters.AngleThresh); % in degrees
+            param.threshold = single(parameters.FAThresh); % min FA value
+            param.minLength = single(parameters.FiberLengthRange(1)); % min fiber length
+            param.maxLength = single(parameters.FiberLengthRange(2)); % min fiber length
+            param.pb = true;
+            
+            % Calculate trajectories
+            disp('Calculating trajectories...');
+            Tracts = EDTI_Library.DTI_Tractography(param, DT, seedPoint);
+            disp('Calculating trajectories...DONE!');
+            
+            disp('Processing trajectories...');
+            num_tracts = size(Tracts,2);
+            FList = 1:num_tracts;
+            
+            if(store_tractometry == 1)
+                [TractFA, TractFE, TractAng, TractGEO, TractLambdas, TractMD] =...
+                    EDTI_Library.E_DTI_diff_measures_vectorized(Tracts, param.VDims, DT);
+            else
+                TractFA = []; TractFE = []; TractAng = []; TractGEO = []; TractLambdas = []; TractMD = [];
+            end
+
+            TractL = cell(1,num_tracts);
+            
+            for i = 1:num_tracts
+                TractL{i} = single(size(Tracts{i},1));
+            end
+            
+            S = size(mask);
+            TractMask = repmat(uint16(0),S);
+            
+            for i = FList
+                IND = unique(sub2ind(S,...
+                    round(double(Tracts{i}(:,1))./VDims(1)),...
+                    round(double(Tracts{i}(:,2))./VDims(2)),...
+                    round(double(Tracts{i}(:,3))./VDims(3))));
+                TractMask(IND) = uint16(double(TractMask(IND)) + 1);
+            end
+            
+            clear DT;
+            disp('Processing trajectories...DONE!');
+            
+            % Save everything
+            disp('Saving trajectories...')
+            if(output_format == 0)
+                % Writing tracts in EDTI-like format
+                save(filename_out,'FList'); clear FList;
+                save(filename_out,'Tracts','-append'); clear Tracts;
+                save(filename_out,'TractL','-append'); clear TractL;
+                save(filename_out,'TractFE','-append'); clear TractFE;
+                save(filename_out,'TractFA','-append'); clear TractFA;
+                save(filename_out,'TractAng','-append'); clear TractAng;
+                save(filename_out,'TractGEO','-append'); clear TractGEO;
+                save(filename_out,'TractMD','-append'); clear TractMD;
+                save(filename_out,'TractLambdas','-append'); clear TractLambdas;
+                save(filename_out,'TractMask','VDims','-append'); clear TractMask;
+            elseif(output_format == 1)
+                % TRK
+                info = load(filename_in,'orig_hdr');
+                if(isfield(info,'orig_hdr'))
+                    % R = MRT_Library.RotationMatrixFromNiftiHeader(info.orig_hdr);
+                    R = [info.orig_hdr.hist.srow_x;info.orig_hdr.hist.srow_y;info.orig_hdr.hist.srow_z;0 0 0 1];
+                else
+                    R = eye(4,4);
+                end
+                header.id_string                 = ['TRACK' char(0)];
+                header.dim                       = size(TractMask);
+                header.voxel_size                = VDims;
+                header.origin                    = [0 0 0];
+                header.n_scalars                 = 0;
+                header.scalar_name               = repmat(char(0),10,20);
+                header.n_properties              = 0;
+                header.property_name             = repmat(char(0),10,20);
+                header.vox_to_ras                = R;
+                header.reserved                  = repmat(char(0),444,1);
+                header.voxel_order               = ['RAS' char(0)];
+                header.pad2                      = repmat(char(0),1,4);
+                header.image_orientation_patient = zeros(1,6);
+                header.pad1                      = repmat(char(0),1,2);
+                header.invert_x                  = 0;
+                header.invert_y                  = 0;
+                header.invert_z                  = 0;
+                header.swap_xy                   = 0;
+                header.swap_yz                   = 0;
+                header.swap_zx                   = 0;
+                header.n_count                   = length(Tracts);
+                header.version                   = 2;
+                header.hdr_size                  = 1000;
+
+                for t=1:length(Tracts)
+                    tracks(t).nPoints = size(Tracts{t},1);
+                    T = Tracts{t}(:,[2 1 3]);
+                    T(:,1) = header.dim(2)*VDims(2) - T(:,1);
+                    T(:,2) = header.dim(1)*VDims(1) - T(:,2);
+                    tracks(t).matrix = T;
+                end
+
+                trk_write(header,tracks,filename_out);
+                Tracts = tracks;
+
+            elseif(output_format == 2)
+                % TCK
+                tracks.max_num_tracks = num2str(length(Tracts));
+                tracks.unidirectional = 0;
+                tracks.data = cell(1,length(Tracts));
+                %             shift = round(size(T.TractMask).*T.VDims)/2;
+                shift = (size(TractMask).*VDims)/2;
+                info = load(filename_in,'orig_hdr');
+                if(isfield(info,'orig_hdr'))
+                    % R = MRT_Library.RotationMatrixFromNiftiHeader(info.orig_hdr);
+                    RF = [info.orig_hdr.hist.srow_x; info.orig_hdr.hist.srow_y; info.orig_hdr.hist.srow_z;0 0 0 1];
+                    use_R = true;
+                else
+                    use_R = false;
+                end
+                for ij=1:length(Tracts)
+                    % Replace with RestoreSpatialDimensions?
+                    if(use_R == false)
+                        TR = Tracts{ij}(:,[2 1 3]);
+                        TR(:,1) = -TR(:,1) + shift(2);
+                        TR(:,2) = -TR(:,2) + shift(1);
+                        TR(:,3) = TR(:,3) - shift(3);
+                    else
+                        TR = Tracts{ij}(:,[1 2 3]);
+                        TR = TR./VDims;
+                        TR = TR(:,[2 1 3]);
+                        TR(:,2) = -TR(:,2) + shift(1);
+
+                        TR = TR - 0.5; % Voxel center correction?
+                        TR = TR';
+                        TR = [TR;ones(1,size(TR,2))];
+                        TR = RF*TR(:,:);
+                        TR = TR';
+                    end
+                    tracks.data(ij) = {TR(:,1:3)+[0 0 0]};
+                end
+                write_mrtrix_tracks(tracks,filename_out);
+                % Tracts = tracks.data;
+            end
+            disp('Saving trajectories...DONE!')
+            t=toc;
+            
+            m=t/60;
+            
+            disp(['Total computation time was ' num2str(m) ' min.'])
+            
+        end        
 
     end
     

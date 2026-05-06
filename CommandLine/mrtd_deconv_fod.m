@@ -114,15 +114,16 @@ if(strcmp(deconv_method,'csd') || strcmp(deconv_method,'mscsd'))
         mscsd = 0;
     end
     MRTTrack.PerformCSD('mat_file',temp_mat_file,'mscsd',mscsd,...
-        'T1seg',t1_seg,'output',outfile,'lmax',lmax);
+        'T1seg',t1_seg,'output',outfile,'lmax',lmax,'test_mode',1);
 
 elseif(strcmp(deconv_method,'grl') || strcmp(deconv_method,'mfod') || strcmp(deconv_method,'lasso'))
     % Converts a .MAT to the MRIToolkit format
-    mrt_data = MRTQuant.EDTI_Data_2_MRIToolkit('mat_file',temp_mat_file);
+    mrt_data = MRTQuant.EDTI_Data_2_MRIToolkit('mat_file',temp_mat_file,'preserve_header',1);
     other_props = load(temp_mat_file,'FA');
     % Prepare the spherical deconvolution class on this dataset
     SD = MRTTrack('data',mrt_data);
     SD.preserve_header = true;
+    SD.sh_basis = 2;
     % Add an anisotropic response function using the DKI model
     for rf_id=1:length(aniso_rf)
         requested_rf = aniso_rf{rf_id};
@@ -169,7 +170,7 @@ elseif(strcmp(deconv_method,'grl') || strcmp(deconv_method,'mfod') || strcmp(dec
     end
     
     GRL_Results = SD.PerformDeconv();
-    MRTTrack.SaveOutputToNii(SD,GRL_Results,outfile);
+    SD.SaveOutputToNii(GRL_Results,outfile);
 elseif(strcmp(deconv_method,'grl_auto'))
     MRTTrack.PerformGRL('mat_file',temp_mat_file,'output',outfile); 
 else

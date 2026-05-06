@@ -18,7 +18,7 @@ assert(f ~= -1, 'error opening %s', filename);
 
 fprintf (f, 'mrtrix tracks\ndatatype: Float32LE\ncount: %d\n', prod(size(tracks.data)));
 names = fieldnames(tracks);
-for i=1:size(names)
+for i=1:length(names)
   if strcmpi (names{i}, 'data'), continue; end
   if strcmpi (names{i}, 'count'), continue; end
   if strcmpi (names{i}, 'datatype'), continue; end

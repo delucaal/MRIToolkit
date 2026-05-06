@@ -56,12 +56,12 @@ classdef ShellAndPython < handle
             if(contains(out,'not found') || contains(out,'ERROR'))
                 % Download and install
                 disp('I will now attempt to install scilpy. If this fails, it might be due to missing prerequisites, please see also https://github.com/frheault/scilpy');
-                cmd = 'conda activate MRIToolkit; pip install "packaging>=19.0"; pip install "numpy==1.23.*"; pip install "Cython==0.29.*"; pip install pyopencl';
+                cmd = 'conda activate MRIToolkit; pip install "packaging>=19.0"; pip install "numpy==1.23.*"; pip install "Cython==0.29.*"; pip install pyopencl; SETUPTOOLS_USE_DISTUTILS=stdlib pip install spams';
                 out = ShellAndPython.ExecuteSH(cmd);
                 %if(contains(out,'Successfully installed Cython'))              
                 cmd = ['cd ' tempdir2 ';rm -rf scilpy;git clone https://github.com/frheault/scilpy.git'];
                 out = ShellAndPython.ExecuteSH(cmd);
-                cmd = ['cd ' fullfile(tempdir2,'scilpy') ';conda run -n MRIToolkit pip install -e .'];
+                cmd = ['cd ' fullfile(tempdir2,'scilpy') ';SETUPTOOLS_USE_DISTUTILS=stdlib conda run -n MRIToolkit pip install -e .'];
                 out = ShellAndPython.ExecuteSH(cmd);
                 if(contains(out,'ERROR'))
                     disp(out);

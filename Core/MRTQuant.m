@@ -959,7 +959,7 @@ classdef MRTQuant < handle
             % no_preproc: 0 (default) or 1. Disables rounding of b-values and
             % removal of PIS (physically implausible signals)
             % repol: 0 (default) or 1. Replace outliers with fitted datapoints using DTI/DKI
-            % orig_hdr: 0 (default) or 1 (preserve original NIFTI header,
+            % preserve_header: 0 (default) or 1 (preserve original NIFTI header,
             %           if available)
 
             if(isempty(varargin))
@@ -980,7 +980,7 @@ classdef MRTQuant < handle
             if(isempty(repol))
                 repol = 0;
             end
-            orig_hdr = GiveValueForName(coptions,'orig_hdr');
+            orig_hdr = GiveValueForName(coptions,'preserve_header');
             if(isempty(orig_hdr))
                 orig_hdr = 0;
             end

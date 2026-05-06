@@ -51,11 +51,15 @@ fwrite(fid, header.n_count, 'int');
 fwrite(fid, header.version, 'int');
 fwrite(fid, header.hdr_size, 'int');
 
-% Check orientation
-[tmp ix] = max(abs(header.image_orientation_patient(1:3)));
-[tmp iy] = max(abs(header.image_orientation_patient(4:6)));
-iz = 1:3;
-iz([ix iy]) = [];
+% Modified from ADL on 5/5/2026
+% % Check orientation
+% [tmp ix] = max(abs(header.image_orientation_patient(1:3)));
+% [tmp iy] = max(abs(header.image_orientation_patient(4:6)));
+% iz = 1:3;
+% iz([ix iy]) = [];
+ix = 1;
+iy = 2;
+iz = 3;
 
 % Write body
 for iTrk = 1:header.n_count

@@ -2600,7 +2600,7 @@ classdef EDTI_Library < handle
             hdr.glmax 			= zeros(1, 1, 'int32');
             hdr.glmax           = max(I(:));
             hdr.glmin			= zeros(1, 1, 'int32');
-            hdr.descrip         = 'Created with ExploreDTI';
+            hdr.descrip         = 'Created with MRIToolkit';
             hdr.descrip = [hdr.descrip  ...
                 char(zeros(1, 80-length(hdr.descrip)))];
             hdr.aux_file = 'none';
