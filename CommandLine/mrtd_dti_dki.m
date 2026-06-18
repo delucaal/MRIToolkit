@@ -38,6 +38,7 @@ dki = 0;
 dki_constraints = [];
 preserve_header = 0;
 grad_header = 0;
+grad_conform = 0;
 
 for input_id =1:2:length(coptions)
     value = coptions{input_id};

@@ -1184,7 +1184,7 @@ classdef MRT_Library < handle
 
         % Originally from ExploreDTI: Perform fiber tractography of any FOD in SH - Adapted
         % and parallelized. Supports multiple trackers
-        function WholeBrainFODTractography_par(reference_mat,CSD_FOD_or_file,p,f_out)
+        function WholeBrainFODTractography_par(reference_mat,CSD_FOD_or_file,p,f_out,store_tractometry,output_format)
             global MRIToolkit
             
             tic
@@ -1305,9 +1305,12 @@ classdef MRT_Library < handle
             
             load(f_in,'DT','MDims');
             
-            [TractFA, TractFE, TractAng, TractGEO, TractLambdas, TractMD] =...
-                EDTI_Library.E_DTI_diff_measures_vectorized(Tracts, VDims, DT);
-            
+            if(store_tractometry == 1)
+                [TractFA, TractFE, TractAng, TractGEO, TractLambdas, TractMD] =...
+                    EDTI_Library.E_DTI_diff_measures_vectorized(Tracts, VDims, DT);
+            else
+                TractFA = []; TractFE = []; TractAng = []; TractGEO = []; TractLambdas = []; TractMD = [];
+            end
             % TractL = cellfun(@length, Tracts, 'UniformOutput', 0);
             
             FList = (1:length(Tracts))';
@@ -1332,9 +1335,33 @@ classdef MRT_Library < handle
             
             
             disp('Saving trajectories...')
-            save(f_out,'FList','Tracts','TractL','TractFE',...
-                'TractFA','TractAng','TractGEO','TractMD',...
-                'TractLambdas','TractMask','VDims','TractsFOD','Parameters','-v7.3');
+            if(output_format == 0)
+                save(f_out,'FList','Tracts','TractL','TractFE',...
+                    'TractFA','TractAng','TractGEO','TractMD',...
+                    'TractLambdas','TractMask','VDims','TractsFOD','Parameters','-v7.3');
+            elseif(output_format == 1)
+                % TRK
+                info = load(reference_mat,'orig_hdr');
+                if(isfield(info,'orig_hdr'))
+                    % R = MRT_Library.RotationMatrixFromNiftiHeader(info.orig_hdr);
+                    R = [info.orig_hdr.hist.srow_x;info.orig_hdr.hist.srow_y;info.orig_hdr.hist.srow_z;0 0 0 1];
+                else
+                    R = eye(4,4);
+                end
+                Tracts = MRT_Library.ConvertTracts2TRK(Tracts,TractMask,R,f_out);
+
+            elseif(output_format == 2)
+                % TCK
+                info = load(reference_mat,'orig_hdr');
+                if(isfield(info,'orig_hdr'))
+                    % R = MRT_Library.RotationMatrixFromNiftiHeader(info.orig_hdr);
+                    RF = [info.orig_hdr.hist.srow_x; info.orig_hdr.hist.srow_y; info.orig_hdr.hist.srow_z;0 0 0 1];
+                else
+                    RF = [];
+                end
+                Tracts = MRT_Library.ConvertTracts2TCK(Tracts,TractMask,RF,f_out);
+            end
+
             disp('Saving trajectories done.')
             
             ti = toc;
@@ -3041,13 +3068,13 @@ classdef MRT_Library < handle
 
             % The concept of non-weighted image can be acquisition dependent.
             if(isfield(MRIToolkit,'min_bval_as_b0'))
-                b0_indices = find(bval <= MRIToolkit.min_bval_as_b0);
+                b0_indices = (bval <= MRIToolkit.min_bval_as_b0);
             else
-                b0_indices = find(bval <= 1);
-                if(isempty(b0_indices))
+                b0_indices = (bval <= 1);
+                if(sum(b0_indices)==0)
                     min_bval = min(bval);
                     if(min_bval < 55) % bval tolerance set to 55, if we do not have any b = 0s/mm2
-                       b0_indices = find(bval <= min_bval);
+                       b0_indices = (bval <= min_bval);
                     end
                 end                
             end
@@ -3121,7 +3148,7 @@ classdef MRT_Library < handle
             DWI = EDTI_Library.E_DTI_DWI_mat2cell(DWI);
             
             if(isstruct(Mask_par))
-                mask1 = EDTI_Library.E_DTI_Create_Mask_From_DWI_enhanced_IND(DWI{b0_indices(1)},Mask_par.tune_NDWI,Mask_par.mfs);
+                mask1 = EDTI_Library.E_DTI_Create_Mask_From_DWI_enhanced_IND(DWI{find(b0_indices,1)},Mask_par.tune_NDWI,Mask_par.mfs);
                 mask2 = EDTI_Library.E_DTI_Create_Mask_From_DWI_enhanced_IND(M,Mask_par.tune_DWI,Mask_par.mfs);
                 
                 mask = or(mask1,mask2);
@@ -3419,6 +3446,84 @@ classdef MRT_Library < handle
             clear seed_mask;
         end
 
+        % Convert MRIToolkit/ExploreDTI streamlines to TRK
+        function Tracts = ConvertTracts2TRK(Tracts,TractMask,affine,filename_out)
+            header.id_string                 = ['TRACK' char(0)];
+            header.dim                       = size(TractMask);
+            VDims = diag(affine(1:3,1:3));
+            header.voxel_size                = VDims;
+            header.origin                    = [0 0 0];
+            header.n_scalars                 = 0;
+            header.scalar_name               = repmat(char(0),10,20);
+            header.n_properties              = 0;
+            header.property_name             = repmat(char(0),10,20);
+            header.vox_to_ras                = affine;
+            header.reserved                  = repmat(char(0),444,1);
+            header.voxel_order               = ['RAS' char(0)];
+            header.pad2                      = repmat(char(0),1,4);
+            header.image_orientation_patient = zeros(1,6);
+            header.pad1                      = repmat(char(0),1,2);
+            header.invert_x                  = 0;
+            header.invert_y                  = 0;
+            header.invert_z                  = 0;
+            header.swap_xy                   = 0;
+            header.swap_yz                   = 0;
+            header.swap_zx                   = 0;
+            header.n_count                   = length(Tracts);
+            header.version                   = 2;
+            header.hdr_size                  = 1000;
+
+            for t=1:length(Tracts)
+                tracks(t).nPoints = size(Tracts{t},1);
+                T = Tracts{t}(:,[2 1 3]);
+                T(:,1) = header.dim(2)*VDims(2) - T(:,1);
+                T(:,2) = header.dim(1)*VDims(1) - T(:,2);
+                tracks(t).matrix = T;
+            end
+
+            if(exist('filename_out','var') > 0)
+                trk_write(header,tracks,filename_out);
+            end
+            Tracts = tracks;
+        end
+
+        function Tracts = ConvertTracts2TCK(Tracts,TractMask,affine,filename_out)
+            tracks.max_num_tracks = num2str(length(Tracts));
+            tracks.unidirectional = 0;
+            tracks.data = cell(1,length(Tracts));
+            VDims = diag(affine(1:3,1:3));
+            shift = (size(TractMask).*VDims)/2;
+            if(isempty(affine))
+                use_R = false;
+            else
+                use_R = true;
+            end
+            for ij=1:length(Tracts)
+                % Replace with RestoreSpatialDimensions?
+                if(use_R == false)
+                    TR = Tracts{ij}(:,[2 1 3]);
+                    TR(:,1) = -TR(:,1) + shift(2);
+                    TR(:,2) = -TR(:,2) + shift(1);
+                    TR(:,3) = TR(:,3) - shift(3);
+                else
+                    TR = Tracts{ij}(:,[1 2 3]);
+                    TR = TR./VDims;
+                    TR = TR(:,[2 1 3]);
+                    TR(:,2) = -TR(:,2) + shift(1);
+
+                    TR = TR - 0.5; % Voxel center correction?
+                    TR = TR';
+                    TR = [TR;ones(1,size(TR,2))];
+                    TR = affine*TR(:,:);
+                    TR = TR';
+                end
+                tracks.data(ij) = {TR(:,1:3)+[0 0 0]};
+            end
+            if(exist('filename_out','var') > 0)
+                write_mrtrix_tracks(tracks,filename_out);
+            end
+            Tracts = tracks.data;
+        end
 
         % From ExploreDTI: DTI based fiber tractography - Adapted
         function Tracts = DTIBasedFiberTractography_FACT(filename_in, filename_out, parameters, store_tractometry, output_format)
@@ -3542,79 +3647,18 @@ classdef MRT_Library < handle
                 else
                     R = eye(4,4);
                 end
-                header.id_string                 = ['TRACK' char(0)];
-                header.dim                       = size(TractMask);
-                header.voxel_size                = VDims;
-                header.origin                    = [0 0 0];
-                header.n_scalars                 = 0;
-                header.scalar_name               = repmat(char(0),10,20);
-                header.n_properties              = 0;
-                header.property_name             = repmat(char(0),10,20);
-                header.vox_to_ras                = R;
-                header.reserved                  = repmat(char(0),444,1);
-                header.voxel_order               = ['RAS' char(0)];
-                header.pad2                      = repmat(char(0),1,4);
-                header.image_orientation_patient = zeros(1,6);
-                header.pad1                      = repmat(char(0),1,2);
-                header.invert_x                  = 0;
-                header.invert_y                  = 0;
-                header.invert_z                  = 0;
-                header.swap_xy                   = 0;
-                header.swap_yz                   = 0;
-                header.swap_zx                   = 0;
-                header.n_count                   = length(Tracts);
-                header.version                   = 2;
-                header.hdr_size                  = 1000;
-
-                for t=1:length(Tracts)
-                    tracks(t).nPoints = size(Tracts{t},1);
-                    T = Tracts{t}(:,[2 1 3]);
-                    T(:,1) = header.dim(2)*VDims(2) - T(:,1);
-                    T(:,2) = header.dim(1)*VDims(1) - T(:,2);
-                    tracks(t).matrix = T;
-                end
-
-                trk_write(header,tracks,filename_out);
-                Tracts = tracks;
+                Tracts = MRT_Library.ConvertTracts2TRK(Tracts,TractMask,R,filename_out);
 
             elseif(output_format == 2)
                 % TCK
-                tracks.max_num_tracks = num2str(length(Tracts));
-                tracks.unidirectional = 0;
-                tracks.data = cell(1,length(Tracts));
-                %             shift = round(size(T.TractMask).*T.VDims)/2;
-                shift = (size(TractMask).*VDims)/2;
                 info = load(filename_in,'orig_hdr');
                 if(isfield(info,'orig_hdr'))
                     % R = MRT_Library.RotationMatrixFromNiftiHeader(info.orig_hdr);
                     RF = [info.orig_hdr.hist.srow_x; info.orig_hdr.hist.srow_y; info.orig_hdr.hist.srow_z;0 0 0 1];
-                    use_R = true;
                 else
-                    use_R = false;
+                    RF = [];
                 end
-                for ij=1:length(Tracts)
-                    % Replace with RestoreSpatialDimensions?
-                    if(use_R == false)
-                        TR = Tracts{ij}(:,[2 1 3]);
-                        TR(:,1) = -TR(:,1) + shift(2);
-                        TR(:,2) = -TR(:,2) + shift(1);
-                        TR(:,3) = TR(:,3) - shift(3);
-                    else
-                        TR = Tracts{ij}(:,[1 2 3]);
-                        TR = TR./VDims;
-                        TR = TR(:,[2 1 3]);
-                        TR(:,2) = -TR(:,2) + shift(1);
-
-                        TR = TR - 0.5; % Voxel center correction?
-                        TR = TR';
-                        TR = [TR;ones(1,size(TR,2))];
-                        TR = RF*TR(:,:);
-                        TR = TR';
-                    end
-                    tracks.data(ij) = {TR(:,1:3)+[0 0 0]};
-                end
-                write_mrtrix_tracks(tracks,filename_out);
-                % Tracts = tracks.data;
+                Tracts = MRT_Library.ConvertTracts2TCK(Tracts,TractMask,RF,filename_out);
             end
             disp('Saving trajectories...DONE!')
             t=toc;
