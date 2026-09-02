@@ -459,7 +459,7 @@ classdef EDTI_Library < handle
                 
                 try
                     save(f_out,'DWI','VDims','b','bval','g','info','FEFA','NrB0','MDims',...
-                        'FA','FE','SE','eigval','DT','outlier','DWIB0','chi_sq','chi_sq_iqr','DM_info','par')
+                        'FA','FE','SE','eigval','DT','outlier','DWIB0','chi_sq','chi_sq_iqr','DM_info','par','-v7.3')
                 catch me
                     suc = 0;
                     disp(me.message)
@@ -4646,8 +4646,8 @@ classdef EDTI_Library < handle
 
             % This was the default in ExploreDTI, but it then forces all
             % b0s to the same value? 
-            % NrB0 = length(b0_indices); 
-            NrB0 = 1; % Changed on 5-02-2026 
+            NrB0 = length(b0_indices); 
+            % NrB0 = 1; % Changed on 5-02-2026 
 
             [bval, g] =  EDTI_Library.E_DTI_GetGradientsandBval_SC(b, NrB0);
             [g, b] = EDTI_Library.E_DTI_flip_g_b(g,b,perm,flip);

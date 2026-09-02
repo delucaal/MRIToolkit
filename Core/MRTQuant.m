@@ -767,7 +767,11 @@ classdef MRTQuant < handle
             json.grad_perm = perm;
             json.rekindle_kappa = rekindle_kappa;
 
-            MRT_Library.E_DTI_model_fit(file_in,txtfile,out_name,Mask_par,perm,flip, fit_mode,dki_fit, dki_constraints, rekindle_kappa);
+            EDTI_Library.E_DTI_model_fit(file_in,txtfile,out_name,Mask_par,perm,flip, fit_mode,dki_fit, dki_constraints, rekindle_kappa);
+            % MRT_Library.E_DTI_model_fit(file_in,txtfile,out_name,Mask_par,perm,flip,
+            % fit_mode,dki_fit, dki_constraints, rekindle_kappa); % Check
+            % this is well compatible with the previous one before
+            % switching
 
             if(mk_curve_fit == 1)
                 disp('Performing M-K curve fit');
@@ -4474,13 +4478,15 @@ KT_Q = reshape(KT_Q,sx*sy*sz,size(KT_Q,4));
 
 lambda = 0.5;
 
-S0 = data.img(:,:,:,1);
+b0s = bval <= 5; % consider generalizing this threshold
+S0 = mean(data.img(:,:,:,b0s),4);
 min_val = max(S0(:))*0.01;
 
 data.img = reshape(data.img,sx*sy*sz,st);
 %     outliers = reshape(tensors.outlier,sx*sy*sz,st);
 
 parfor x=1:size(data.img,1)
+% for x=1:size(data.img,1)
     S = [];
     GP = [];
     So = squeeze(data.img(x,:))';
@@ -4488,7 +4494,7 @@ parfor x=1:size(data.img,1)
         continue
     end
     l_bval = bval;%(outliers(x,:)==0);
-    s0_val = mean(So(l_bval <= 1));
+    s0_val = mean(So(b0s));
     s0_range = linspace(0.5*s0_val,s0_val*2,100);
     %         [~,C_IX] = min(abs(s0_range-s0_val));
 
@@ -4497,20 +4503,21 @@ parfor x=1:size(data.img,1)
     for s0_id=1:length(s0_range)
 
         S = So;
-        S(l_bval <= 1) = s0_range(s0_id);
+        S(b0s) = s0_range(s0_id);
 
-        GP = S' ~= 0;% & outliers(x,:) == 0;
+        GP = S' ~= 0;% & b0s' == 0;% & outliers(x,:) == 0;
         X = Xd(:,GP)*log(S(GP));
 
-        DT = X(2:7,:);
+        DT = real(X(2:7,:));
         MD = (DT(1)+DT(4)+DT(6))/3;
-        KT = X(8:end,:)./((MD*3).^2);
+        KT = real(X(8:end,:)./((MD*3).^2));
 
         dt = DT([1 4 6 2 3 5]);
         MDsq = MD^2;
 
-        for i=gradient_info.NrB0+1:size(g,1)
-            if(GP(i) == 0)
+        % for i=gradient_info.NrB0+1:size(g,1)
+        for i=1:size(g,1)
+            if(GP(i) == 0 || b0s(i) > 0)
                 continue
             end
 
@@ -4527,7 +4534,7 @@ parfor x=1:size(data.img,1)
 
         end
 
-        MK(s0_id) = MK(s0_id)/(size(g,1)-sum(GP(l_bval > 1) == 0));
+        MK(s0_id) = MK(s0_id)/(size(g,1)-sum(b0s>0)-sum(GP(b0s == 0) == 0));
     end
 
     last_negative = find(MK<0,1,'last');
@@ -4553,7 +4560,7 @@ parfor x=1:size(data.img,1)
         %             end
     end
 
-    S(1:gradient_info.NrB0) = corr_s0;
+    S(b0s) = corr_s0;
     X = Xd(:,GP)*log(S(GP));
 
     DT = X(2:7,:);

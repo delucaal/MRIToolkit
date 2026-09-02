@@ -197,7 +197,7 @@ classdef MRTTrack < handle
             obj.rf_models(end+1) = {sprintf('DKI %.4f %.4f %.4f %.2f %.2f',EigenValues(1),EigenValues(2),EigenValues(3),MeanKurtosis,Offset)};
         end
 
-        function [obj,success] = AddAnisotropicRF_StandardModel(obj,AD_Stick,EigenValuesZeppelin,fraction)
+        function [obj,success] = AddAnisotropicRF_StandardModel(obj,AD_Stick,EigenValuesZeppelin,fraction,dotc)
             % Add an anisotropic RF based on the WM standard model. This must be
             % added before any isotropic RF. 
             success = -1;
@@ -211,10 +211,10 @@ classdef MRTTrack < handle
             end
             pass_data = obj.data;
             pass_data.bvecs(:,3) = -pass_data.bvecs(:,3);
-            if(exist('offset','var') < 1)
-                offset = 0;
+            if(exist('dotc','var') < 1)
+                dotc = 0;
             end
-            [~,lLRKernel,lHRKernel] = mDRLMT_MakeSMKernel_multicomp(pass_data,obj.nDirections,AD_Stick,EigenValuesZeppelin,fraction,0);
+            [~,lLRKernel,lHRKernel] = mDRLMT_MakeSMKernel_multicomp(pass_data,obj.nDirections,AD_Stick,EigenValuesZeppelin,fraction,0,dotc);
 
             ubvals = unique(round(obj.data.bvals));
             for ibv=2:length(ubvals)
@@ -414,6 +414,9 @@ classdef MRTTrack < handle
                         NormFactor = mean(Stot(obj_copy.data.bvals<=min_bval));
                         %                         S0(x) = NormFactor;
                         Stot = Stot/NormFactor;
+                        if(NormFactor == 0 || any(~isfinite(Stot)))
+                            continue
+                        end
                         
                         Stot_w = Stot.*obj_copy.shell_weight; % Weight the lower shells
                         
@@ -442,7 +445,11 @@ classdef MRTTrack < handle
                             elseif(DeconvMethodCode == 6)
                                 fODFC = sph_deconv_tv_motor_all(DS, LLRKernel(fit_data,:), zeros(size(obj_copy.weighted_LRKernel,2)-NC,1), obj_copy.drl_iters, 1, 'SMF-SENSE-based');
                             elseif(DeconvMethodCode == 7)
-                                fODFC = lasso(LLRKernel(fit_data,:),DS,'Alpha',obj_copy.LASSO_alpha,'Lambda',obj_copy.L2LSQ_reg);
+                                try
+                                    fODFC = lasso(LLRKernel(fit_data,:),DS,'Alpha',obj_copy.LASSO_alpha,'Lambda',obj_copy.L2LSQ_reg);
+                                catch
+                                    continue
+                                end
                             elseif(DeconvMethodCode == 8)
                                 fODFC = MRT_Library.ConstrainedDeconvolution(LLRKernel(fit_data,:),DS,obj_copy.L2LSQ_reg);
                             end
@@ -612,7 +619,699 @@ classdef MRTTrack < handle
             obj.data.img = permute(obj.data.img,[2 1]);
             obj.data.img = reshape(obj.data.img,siz); %
         end
+
+        function output = PerformDeconvWithIterativeNNLS(obj,nof_workers,low_mem_mode)
+            % Actually perform the deconvolution. All parameters must be set
+            % before hand using the dedicated functions. Output is a structure
+            % with fields FOD and FOD_norm. FOD_norm is a rescaled version of the FOD
+            % meant to be compatible with ExploreDTI-based fiber tractography.
+            
+            if(nargin < 2)
+                myCluster = parcluster('local');
+                nof_workers = myCluster.NumWorkers;
+            end
+            if(nargin < 3)
+                low_mem_mode = 0;
+            end
+            
+            if(~obj.isInitialized())
+                warning('Not all conditions are met to perform the deconvolution. Make sure you setted all needed parameters.');
+                output = [];
+                return
+            end
+            
+            siz = obj.data_size;
+            if(~ismatrix(obj.data.img))
+                obj.data.img = reshape(obj.data.img,siz(1)*siz(2)*siz(3),siz(4)); % st(133)* ~isnan(FA)
+                obj.data.img = permute(obj.data.img,[2 1]);
+            end
+            [st,sm] = size(obj.data.img);
+            
+            NC = obj.n_isotropic;
+            ANC = obj.n_anisotropic;
+            
+            nreconstruction_vertices = size(obj.HRKernel,2)-NC;
+            nreconstruction_vertices_lr = size(obj.LRKernel,2)-NC;
+            
+            %             fprintf('Determining NN: %.3f for LR and %.3f for HR %s',obj.NN_L, obj.NN_H, newline);
+            
+            obj.setInnerShellWeighting(obj.inner_shells_weight);
+            %             weighted_LRKernel = obj.LRKernel;
+            %             weighted_HRKernel = obj.HRKernel;
+            
+            fractions = zeros([sm NC+ANC],'single');
+            if(low_mem_mode == 0)
+                WM_fod = zeros([sm obj.nDirections],'single');
+            else
+                WM_fod = sparse([sm obj.nDirections],'single');
+            end
+            RSS = zeros([sm 1],'single');
+            %             S0 = zeros([sm 1],'single');
+            
+            N = sm;
+            op_e2 = optimset('TolX',1e-2);
+            op = optimset('TolX',1e-6);
+            max_discarded_vols = round(obj.max_outlier_rejection*st);
+            
+            [~,DeconvMethodCode] = SphericalDeconvolution.isSupportedMethod(obj.deconv_method); % -1 = failure; 1 = LSQNONNEG; 2 = DW_RegularizedDeconv; 3 = dRL
+            if(DeconvMethodCode == -1)
+                warning('Unsupported deconvolution method.');
+                return;
+            end
+            
+            TheTol = 1e-3;
+            tic
+            
+            min_bval = min(obj.data.bvals);
+            
+            fODF0_HR = zeros(nreconstruction_vertices+NC,1,'single');
+            % fODF0_HR = fODF0_HR/sum(fODF0_HR);
+            
+            LHRKernel = obj.weighted_HRKernel;
+            UHRKernel = obj.HRKernel;
+            
+            max_voxels_per_worker = 3e4;
+            mask_vector = find(obj.data.mask > 0);
+            nruns = ceil(length(mask_vector)/max_voxels_per_worker);
+            for run=1:nruns
+                disp(['Run ' num2str(run) ' of ' num2str(nruns)])
+                indices = (1+(run-1)*max_voxels_per_worker):min(run*max_voxels_per_worker,...
+                    length(mask_vector));
+                Nindices = length(indices);
+                obj_copy = MRTTrack('data',obj.data);
+                props = properties(obj);
+                for k = 1:length(props)
+                    if isprop(obj_copy,props{k})
+                        obj_copy.(props{k}) = obj.(props{k});
+                    end
+                end
+                obj_copy.data.img = obj_copy.data.img(:,mask_vector(indices));
+                obj_copy.data.mask = obj_copy.data.mask(mask_vector(indices));
+                l_fractions = zeros([Nindices size(fractions,2)],'single');
+                l_WM_fod = zeros([Nindices obj_copy.nDirections],'single');
+                l_RSS = zeros([Nindices 1],'single');
+                
+                parfor (x=1:Nindices,nof_workers)
+                                        % for x=1:Nindices
+
+                    Stot = obj_copy.data.img(:,x);
+                    fit_data = true(size(Stot));
+                    
+                    % This normalization assumes there is some b=0s/mm2 data. It is not
+                    % essential to do it as long as fractions is normalized at the end
+                    NormFactor = mean(Stot(obj_copy.data.bvals<=min_bval));
+                    %                         S0(x) = NormFactor;
+                    Stot = Stot/NormFactor;
+                    if(NormFactor == 0 || any(~isfinite(Stot)))
+                        continue
+                    end
+                    
+                    Stot_w = Stot.*obj_copy.shell_weight; % Weight the lower shells
+                    
+                    Signal2Fit = Stot_w;
+                    SelectedDictionary = [];
+                    SelectedDictionaryColumns = [];
+                    res_thr = 0.9; % 10% improvement
+                    NPeaks = 0;
+                    MaxPeaks = 5;
+                    residuals = inf(MaxPeaks,1);
+                    for peak=1:MaxPeaks   
+                        % [order1,min_cost1] = MRT_Library.FindBestFittingAtom(LHRKernel,Signal2Fit);
+                        [order2,min_cost2] = MRT_Library.FindBestFittingAtoms(LHRKernel,Signal2Fit);
+                        % if(min_cost1 < min_cost2(1))
+                        %     order = order1;
+                        % else
+                        %     order = order2;
+                        % end
+                        order = order2;
+                        SelectedDictionary = cat(2,SelectedDictionary,LHRKernel(:,order(1)));
+                        SelectedDictionaryColumns = cat(2,SelectedDictionaryColumns,order(1));
+                        SelectedFit = lsqnonneg(double(SelectedDictionary),double(Stot_w));
+                        Signal2Fit = Stot_w-SelectedDictionary*SelectedFit;
         
+                        residuals(peak) = mean((Signal2Fit).^2);%-2*log(sum((Signal2Fit).^2))+peak*log(length(Signal2Fit));%+mean(I>0);
+                        % Signal2Fit = max(Signal2Fit,0);
+                        if(peak > 1 && residuals(peak) > residuals(peak-1))%residuals(peak) / residuals(peak-1) > res_thr)
+                            residuals(peak) = nan;
+                            break;
+                        end     
+                        NPeaks = NPeaks + 1;
+                    end
+        
+                    SelectedDictionary = SelectedDictionary(:,1:NPeaks);
+                    SelectedDictionaryColumns = SelectedDictionaryColumns(1:NPeaks);
+                    I = lsqnonneg(double(SelectedDictionary),double(Stot_w));
+                    fODFC = fODF0_HR;
+                    fODFC(SelectedDictionaryColumns) = I;
+                    if(ANC > 1)
+                        F = reshape(fODFC(1:end-NC),ANC,obj_copy.nDirections);
+                        FR = sum(F,2);
+                        F = sum(F,1);
+                        l_fractions(x,:) = [FR; fODFC(end-NC+1:end)];
+                    else
+                        F = fODFC(1:end-NC);
+                        l_fractions(x,:) = [sum(F); fODFC(end-NC+1:end)];
+                    end
+
+                    l_WM_fod(x,:) = single(F);
+                end
+                WM_fod(mask_vector(indices),:) = l_WM_fod;
+                fractions(mask_vector(indices),:) = l_fractions;
+                RSS(mask_vector(indices)) = l_RSS;
+            end
+
+            % Reshape data
+            toc
+            
+            fsum = sum(fractions,2);
+            for ij=1:size(fractions,2)
+                fractions(:,ij) = fractions(:,ij) ./ (fsum+eps);
+            end
+            
+            output.fractions = reshape(fractions,[siz(1:3),size(fractions,2)]);
+            
+            %             WM_fod_max = max(WM_fod,[],2);
+            %             WM_fod_normalized = WM_fod;
+            %             WM_fod_val = mean(WM_fod_max(fractions(:,1) > 0.7*max(WM_fod_max(:)))); % 20/12/2017
+            %             for ij=1:size(WM_fod_normalized,2)
+            %                 WM_fod_normalized(:,ij) = WM_fod_normalized(:,ij) / WM_fod_val;% .* fractions(:,1); % 20/12/2017
+            %             end
+            
+            output.RSS = reshape(RSS,siz(1:3));
+            clear RSS;
+            output.FOD = reshape(WM_fod,[siz(1:3),size(WM_fod,2)]);
+            clear WM_fod;
+            %             output.FOD_norm = reshape(WM_fod_normalized,[siz(1:3),size(WM_fod_normalized,2)]);
+            %             clear WM_fod_normalized;
+            
+            obj.data.img = permute(obj.data.img,[2 1]);
+            obj.data.img = reshape(obj.data.img,siz); %            
+        end
+
+        function output = PerformDeconvWithIterativeNNLS_test2(obj,nof_workers,low_mem_mode,orientations_dictionary)
+            % Actually perform the deconvolution. All parameters must be set
+            % before hand using the dedicated functions. Output is a structure
+            % with fields FOD and FOD_norm. FOD_norm is a rescaled version of the FOD
+            % meant to be compatible with ExploreDTI-based fiber tractography.
+            
+            if(nargin < 2)
+                myCluster = parcluster('local');
+                nof_workers = myCluster.NumWorkers;
+            end
+            if(nargin < 3)
+                low_mem_mode = 0;
+            end
+            
+            if(~obj.isInitialized())
+                warning('Not all conditions are met to perform the deconvolution. Make sure you setted all needed parameters.');
+                output = [];
+                return
+            end
+            
+            siz = obj.data_size;
+            if(~ismatrix(obj.data.img))
+                obj.data.img = reshape(obj.data.img,siz(1)*siz(2)*siz(3),siz(4)); % st(133)* ~isnan(FA)
+                obj.data.img = permute(obj.data.img,[2 1]);
+            end
+            [st,sm] = size(obj.data.img);
+            
+            NC = obj.n_isotropic;
+            ANC = obj.n_anisotropic;
+            
+            nreconstruction_vertices = size(obj.HRKernel,2)-NC;
+            nreconstruction_vertices_lr = size(obj.LRKernel,2)-NC;
+            
+            if(nargin < 4)
+                orientations_dictionary = 1:size(obj.HRKernel,2);
+            end
+            
+            %             fprintf('Determining NN: %.3f for LR and %.3f for HR %s',obj.NN_L, obj.NN_H, newline);
+            
+            obj.setInnerShellWeighting(obj.inner_shells_weight);
+            %             weighted_LRKernel = obj.LRKernel;
+            %             weighted_HRKernel = obj.HRKernel;
+            
+            fractions = zeros([sm NC+ANC],'single');
+            if(low_mem_mode == 0)
+                WM_fod = zeros([sm obj.nDirections],'single');
+            else
+                WM_fod = sparse([sm obj.nDirections],'single');
+            end
+            RSS = zeros([sm 1],'single');
+            %             S0 = zeros([sm 1],'single');
+            
+            N = sm;
+            op_e2 = optimset('TolX',1e-2);
+            op = optimset('TolX',1e-6);
+            max_discarded_vols = round(obj.max_outlier_rejection*st);
+            
+            [~,DeconvMethodCode] = SphericalDeconvolution.isSupportedMethod(obj.deconv_method); % -1 = failure; 1 = LSQNONNEG; 2 = DW_RegularizedDeconv; 3 = dRL
+            if(DeconvMethodCode == -1)
+                warning('Unsupported deconvolution method.');
+                return;
+            end
+            
+            TheTol = 1e-3;
+            tic
+            
+            min_bval = min(obj.data.bvals);
+            
+            fODF0_HR = zeros(nreconstruction_vertices+NC,1,'single');
+            % fODF0_HR = fODF0_HR/sum(fODF0_HR);
+            
+            LHRKernel = obj.weighted_HRKernel;
+            UHRKernel = obj.HRKernel;
+            
+            max_voxels_per_worker = 3e4;
+            mask_vector = find(obj.data.mask > 0);
+            nruns = ceil(length(mask_vector)/max_voxels_per_worker);
+            for run=1:nruns
+                disp(['Run ' num2str(run) ' of ' num2str(nruns)])
+                indices = (1+(run-1)*max_voxels_per_worker):min(run*max_voxels_per_worker,...
+                    length(mask_vector));
+                Nindices = length(indices);
+                obj_copy = MRTTrack('data',obj.data);
+                props = properties(obj);
+                for k = 1:length(props)
+                    if isprop(obj_copy,props{k})
+                        obj_copy.(props{k}) = obj.(props{k});
+                    end
+                end
+                obj_copy.data.img = obj_copy.data.img(:,mask_vector(indices));
+                obj_copy.data.mask = obj_copy.data.mask(mask_vector(indices));
+                l_fractions = zeros([Nindices size(fractions,2)],'single');
+                l_WM_fod = zeros([Nindices obj_copy.nDirections],'single');
+                l_RSS = zeros([Nindices 1],'single');
+                
+                parfor (x=1:Nindices,nof_workers)
+                                        % for x=1:Nindices
+
+                    Stot = obj_copy.data.img(:,x);
+                    fit_data = true(size(Stot));
+                    
+                    % This normalization assumes there is some b=0s/mm2 data. It is not
+                    % essential to do it as long as fractions is normalized at the end
+                    NormFactor = mean(Stot(obj_copy.data.bvals<=min_bval));
+                    %                         S0(x) = NormFactor;
+                    Stot = Stot/NormFactor;
+                    if(NormFactor == 0 || any(~isfinite(Stot)))
+                        continue
+                    end
+                    
+                    Stot_w = Stot.*obj_copy.shell_weight; % Weight the lower shells
+                    
+                    OriginalKernel = LHRKernel;
+                    OriginalParameters = orientations_dictionary;
+                    
+                    AvailableOrientations = true(1,size(OriginalKernel,2));
+                    
+                    LocalKernel = [];
+                    LocalKernelIndices = [];
+                    
+                    MaxFibers = 5;
+                    CoeffThreshold = 0.01;
+                    ImprovementThreshold = 0.99;
+                    ResidualSignal = Stot_w;
+
+                    for iter=1:MaxFibers
+                    
+                        % NNLS on the remaining dictionary
+                        CandidateKernel = OriginalKernel(:,AvailableOrientations);
+                    
+                        % [max_val,local_idx] = max(coeff);
+                        coeff = lsqnonneg(double(CandidateKernel(fit_data,:)), ...
+                                          double(ResidualSignal(fit_data)));
+                        SignalFit = CandidateKernel*coeff;
+    
+                        importance = zeros(size(coeff));
+                        
+                        for k = 1:length(coeff)
+                        
+                            if coeff(k)==0
+                                continue
+                            end
+                        
+                            tmp = coeff;
+                            tmp(k) = 0;
+                            importance(k) = mean( ...
+                                (SignalFit - CandidateKernel*tmp).^2);
+                        
+                        end
+                        
+                        importance = importance / max(importance);
+                        [max_val,local_idx] = max(importance);
+    
+                        if max_val < CoeffThreshold
+                            break
+                        end
+                    
+                        % Recover the original column index
+                        AvailableIdx = find(AvailableOrientations);
+                    
+                        selected_idx = AvailableIdx(local_idx);
+                    
+                        % Add atom to the active set
+                        LocalKernel = [LocalKernel, OriginalKernel(:,selected_idx)];
+                        LocalKernelIndices = [LocalKernelIndices, selected_idx];
+                    
+                        % Refit the complete active set
+                        CurrentCoeff = lsqnonneg( ...
+                            double(LocalKernel(fit_data,:)), ...
+                            double(Stot_w(fit_data)));
+                    
+                        CurrentFit = LocalKernel*CurrentCoeff;
+                    
+                        CurrentRes = mean( ...
+                            (Stot_w(fit_data) ...
+                            - CurrentFit(fit_data)).^2);
+                    
+                        % Check whether the last atom was useful
+                        if size(LocalKernel,2) > 1
+                    
+                            PreviousKernel = LocalKernel(:,1:end-1);
+                    
+                            PreviousCoeff = lsqnonneg( ...
+                                double(PreviousKernel(fit_data,:)), ...
+                                double(Stot_w(fit_data)));
+                    
+                            PreviousFit = PreviousKernel*PreviousCoeff;
+                    
+                            PreviousRes = mean( ...
+                                (Stot_w(fit_data) ...
+                                - PreviousFit(fit_data)).^2);
+                    
+                            if CurrentRes > ImprovementThreshold*PreviousRes
+                    
+                                LocalKernel = LocalKernel(:,1:end-1);
+                                LocalKernelIndices = LocalKernelIndices(1:end-1);
+                    
+                                break
+                    
+                            end
+                        end
+                    
+                        ResidualSignal = Stot_w - CurrentFit;
+                        % Remove the entire orientation group
+                        SelectedOrientation = orientations_dictionary(selected_idx);
+                    
+                        AvailableOrientations( ...
+                            orientations_dictionary==SelectedOrientation) = false;
+                    
+                    end
+        
+                    % Final coefficients
+                    fODFC = zeros(size(OriginalKernel,2),1);
+                    
+                    if ~isempty(LocalKernel)
+                    
+                        FinalCoeff = lsqnonneg( ...
+                            double(LocalKernel(fit_data,:)), ...
+                            double(Stot_w(fit_data)));
+                    
+                        fODFC(LocalKernelIndices) = FinalCoeff;
+                    
+                    end
+
+                    if(ANC > 1)
+                        F = reshape(fODFC(1:end-NC),ANC,obj_copy.nDirections);
+                        FR = sum(F,2);
+                        F = sum(F,1);
+                        l_fractions(x,:) = [FR; fODFC(end-NC+1:end)];
+                    else
+                        F = fODFC(1:end-NC);
+                        l_fractions(x,:) = [sum(F); fODFC(end-NC+1:end)];
+                    end
+
+                    l_WM_fod(x,:) = single(F);
+                end
+                WM_fod(mask_vector(indices),:) = l_WM_fod;
+                fractions(mask_vector(indices),:) = l_fractions;
+                RSS(mask_vector(indices)) = l_RSS;
+            end
+
+            % Reshape data
+            toc
+            
+            fsum = sum(fractions,2);
+            for ij=1:size(fractions,2)
+                fractions(:,ij) = fractions(:,ij) ./ (fsum+eps);
+            end
+            
+            output.fractions = reshape(fractions,[siz(1:3),size(fractions,2)]);
+            
+            %             WM_fod_max = max(WM_fod,[],2);
+            %             WM_fod_normalized = WM_fod;
+            %             WM_fod_val = mean(WM_fod_max(fractions(:,1) > 0.7*max(WM_fod_max(:)))); % 20/12/2017
+            %             for ij=1:size(WM_fod_normalized,2)
+            %                 WM_fod_normalized(:,ij) = WM_fod_normalized(:,ij) / WM_fod_val;% .* fractions(:,1); % 20/12/2017
+            %             end
+            
+            output.RSS = reshape(RSS,siz(1:3));
+            clear RSS;
+            output.FOD = reshape(WM_fod,[siz(1:3),size(WM_fod,2)]);
+            clear WM_fod;
+            %             output.FOD_norm = reshape(WM_fod_normalized,[siz(1:3),size(WM_fod_normalized,2)]);
+            %             clear WM_fod_normalized;
+            
+            obj.data.img = permute(obj.data.img,[2 1]);
+            obj.data.img = reshape(obj.data.img,siz); %            
+        end
+
+        function output = PerformDeconvWithIteratveMP(obj,max_fibers,nof_workers,low_mem_mode)
+            % Actually perform the deconvolution. All parameters must be set
+            % before hand using the dedicated functions. Output is a structure
+            % with fields FOD and FOD_norm. FOD_norm is a rescaled version of the FOD
+            % meant to be compatible with ExploreDTI-based fiber tractography.
+            
+            if(nargin < 3)
+                myCluster = parcluster('local');
+                nof_workers = myCluster.NumWorkers;
+            end
+            if(nargin < 3)
+                low_mem_mode = 0;
+            end
+            
+            if(~obj.isInitialized())
+                warning('Not all conditions are met to perform the deconvolution. Make sure you setted all needed parameters.');
+                output = [];
+                return
+            end
+            
+            siz = obj.data_size;
+            if(~ismatrix(obj.data.img))
+                obj.data.img = reshape(obj.data.img,siz(1)*siz(2)*siz(3),siz(4)); % st(133)* ~isnan(FA)
+                obj.data.img = permute(obj.data.img,[2 1]);
+            end
+            [st,sm] = size(obj.data.img);
+            
+            NC = obj.n_isotropic;
+            ANC = obj.n_anisotropic;
+            
+            nreconstruction_vertices = size(obj.HRKernel,2)-NC;
+            nreconstruction_vertices_lr = size(obj.LRKernel,2)-NC;
+            
+            %             fprintf('Determining NN: %.3f for LR and %.3f for HR %s',obj.NN_L, obj.NN_H, newline);
+            
+            obj.setInnerShellWeighting(obj.inner_shells_weight);
+            %             weighted_LRKernel = obj.LRKernel;
+            %             weighted_HRKernel = obj.HRKernel;
+            
+            fractions = zeros([sm NC+ANC],'single');
+            if(low_mem_mode == 0)
+                WM_fod = zeros([sm obj.nDirections],'single');
+            else
+                WM_fod = sparse([sm obj.nDirections],'single');
+            end
+            RSS = zeros([sm 1],'single');
+            %             S0 = zeros([sm 1],'single');
+            
+            N = sm;
+            op_e2 = optimset('TolX',1e-2);
+            op = optimset('TolX',1e-6);
+            max_discarded_vols = round(obj.max_outlier_rejection*st);
+            
+            [~,DeconvMethodCode] = SphericalDeconvolution.isSupportedMethod(obj.deconv_method); % -1 = failure; 1 = LSQNONNEG; 2 = DW_RegularizedDeconv; 3 = dRL
+            if(DeconvMethodCode == -1)
+                warning('Unsupported deconvolution method.');
+                return;
+            end
+            
+            TheTol = 1e-3;
+            tic
+            
+            min_bval = min(obj.data.bvals);
+            
+            fODF0_HR = zeros(nreconstruction_vertices+NC,1,'single');
+            % fODF0_HR = fODF0_HR/sum(fODF0_HR);
+            
+            LHRKernel = obj.weighted_HRKernel;
+            switch(max_fibers)
+                case 1
+                    LHRKernel_e = nan(size(LHRKernel,1),size(LHRKernel,2));%+size(LHRKernel,2)*(size(LHRKernel,2)-1)*(size(LHRKernel,2)-2)/6);
+                    ColumnsMatching = nan(3,size(LHRKernel,2));%+size(LHRKernel,2)*(size(LHRKernel,2)-1)*(size(LHRKernel,2)-2)/6);%[1:size(LHRKernel,2);zeros(1,size(LHRKernel,2));zeros(1,size(LHRKernel,2))];
+                    ImplicitParameters = [ones(1,size(LHRKernel,2))];
+                case 2
+                    LHRKernel_e = nan(size(LHRKernel,1),size(LHRKernel,2)+size(LHRKernel,2)*(size(LHRKernel,2)-1)/2);%+size(LHRKernel,2)*(size(LHRKernel,2)-1)*(size(LHRKernel,2)-2)/6);
+                    ColumnsMatching = nan(3,size(LHRKernel,2)+size(LHRKernel,2)*(size(LHRKernel,2)-1)/2);%+size(LHRKernel,2)*(size(LHRKernel,2)-1)*(size(LHRKernel,2)-2)/6);%[1:size(LHRKernel,2);zeros(1,size(LHRKernel,2));zeros(1,size(LHRKernel,2))];
+                    ImplicitParameters = [ones(1,size(LHRKernel,2)) 2*ones(1,size(LHRKernel,2)*(size(LHRKernel,2)-1)/2)];
+                case 3
+                    LHRKernel_e = nan(size(LHRKernel,1),size(LHRKernel,2)+size(LHRKernel,2)*(size(LHRKernel,2)-1)/2+size(LHRKernel,2)*(size(LHRKernel,2)-1)*(size(LHRKernel,2)-2)/6);
+                    ColumnsMatching = nan(3,size(LHRKernel,2)+size(LHRKernel,2)*(size(LHRKernel,2)-1)/2+size(LHRKernel,2)*(size(LHRKernel,2)-1)*(size(LHRKernel,2)-2)/6);%[1:size(LHRKernel,2);zeros(1,size(LHRKernel,2));zeros(1,size(LHRKernel,2))];
+                    ImplicitParameters = [ones(1,size(LHRKernel,2)) 2*ones(1,size(LHRKernel,2)*(size(LHRKernel,2)-1)/2) 3*ones(1,size(LHRKernel,2)*(size(LHRKernel,2)-1)*(size(LHRKernel,2)-2)/6)];
+            end
+            idx = 1;
+
+            for c1=1:size(LHRKernel,2)
+                LHRKernel_e(:,idx) = LHRKernel(:,c1);
+                ColumnsMatching(:,idx) = [c1;0;0];
+                idx = idx+1;
+            end
+            
+            if(max_fibers > 1)
+                for c1=1:size(LHRKernel,2)
+                    for c2=c1+1:size(LHRKernel,2)
+                        LHRKernel_e(:,idx) = LHRKernel(:,c1)*0.5+LHRKernel(:,c2)*0.5;
+                        ColumnsMatching(:,idx) = [c1;c2;0];
+                        idx = idx+1;
+                    end
+                end            
+            end
+
+            if(max_fibers > 2)
+                for c1=1:size(LHRKernel,2)
+                    for c2=c1+1:size(LHRKernel,2)
+                        for c3=c2+1:size(LHRKernel,2)
+                            LHRKernel_e(:,idx) = LHRKernel(:,c1)*0.33+LHRKernel(:,c2)*0.33+LHRKernel(:,c3)*0.33;
+                            ColumnsMatching(:,idx) = [c1;c2;c3];
+                            idx = idx+1;
+                        end
+                    end
+                end
+            end
+
+            max_voxels_per_worker = 3e4;
+            mask_vector = find(obj.data.mask > 0);
+            nruns = ceil(length(mask_vector)/max_voxels_per_worker);
+            for run=1:nruns
+                disp(['Run ' num2str(run) ' of ' num2str(nruns)])
+                indices = (1+(run-1)*max_voxels_per_worker):min(run*max_voxels_per_worker,...
+                    length(mask_vector));
+                Nindices = length(indices);
+                obj_copy = MRTTrack('data',obj.data);
+                props = properties(obj);
+                for k = 1:length(props)
+                    if isprop(obj_copy,props{k})
+                        obj_copy.(props{k}) = obj.(props{k});
+                    end
+                end
+                obj_copy.data.img = obj_copy.data.img(:,mask_vector(indices));
+                obj_copy.data.mask = obj_copy.data.mask(mask_vector(indices));
+                l_fractions = zeros([Nindices size(fractions,2)],'single');
+                l_WM_fod = zeros([Nindices obj_copy.nDirections],'single');
+                l_RSS = zeros([Nindices 1],'single');
+                
+                parfor (x=1:Nindices,nof_workers)
+                                        % for x=1:Nindices
+
+                    Stot = obj_copy.data.img(:,x);
+                    fit_data = true(size(Stot));
+                    
+                    % This normalization assumes there is some b=0s/mm2 data. It is not
+                    % essential to do it as long as fractions is normalized at the end
+                    NormFactor = mean(Stot(obj_copy.data.bvals<=min_bval));
+                    %                         S0(x) = NormFactor;
+                    Stot = Stot/NormFactor;
+                    if(NormFactor == 0 || any(~isfinite(Stot)))
+                        continue
+                    end
+                    
+                    Stot_w = Stot.*obj_copy.shell_weight; % Weight the lower shells
+                    
+                    Signal2Fit = Stot_w;
+                    SelectedDictionary = [];
+                    SelectedDictionaryColumns = [];
+                    res_thr = 0.9; % 10% improvement
+                    NPeaks = 0;
+                    MaxPeaks = 5;
+                    residuals = inf(MaxPeaks,1);
+                    for peak=1:MaxPeaks   
+                        [order1,min_cost1] = MRT_Library.FindBestFittingAtomBIC(LHRKernel_e,Signal2Fit,ImplicitParameters);
+                        % [order2,min_cost2] = MRT_Library.FindBestFittingAtoms(LHRKernel,Signal2Fit);
+                        % if(min_cost1 < min_cost2(1))
+                        %     order = order1;
+                        % else
+                        %     order = order2;
+                        % end
+                        order = order1;
+                        AdditionalColumns = order(1);
+                        % if(AdditionalColumns > size(LHRKernel,2))
+                        AdditionalIndices = ColumnsMatching(:,AdditionalColumns);
+                        AdditionalIndices = AdditionalIndices(AdditionalIndices ~= 0);
+                        % end
+                        SelectedDictionary = cat(2,SelectedDictionary,LHRKernel_e(:,AdditionalIndices(:)));
+                        SelectedDictionaryColumns = cat(1,SelectedDictionaryColumns,AdditionalIndices(:));
+                        SelectedFit = lsqnonneg(double(SelectedDictionary),double(Stot_w));
+                        Signal2Fit = Stot_w-SelectedDictionary*SelectedFit;
+        
+                        residuals(peak) = mean((Signal2Fit).^2);%log(mean((Signal2Fit).^2))+length(SelectedDictionaryColumns)*log(st);%mean((Signal2Fit).^2);%+mean(I>0);
+                        % Signal2Fit = max(Signal2Fit,0);
+                        if(peak > 1 && residuals(peak) >= residuals(peak-1)*0.9)
+                            residuals(peak) = nan;
+                            break;
+                        end     
+                        NPeaks = NPeaks + length(AdditionalIndices);
+                    end
+        
+                    SelectedDictionaryColumns = unique(SelectedDictionaryColumns(1:NPeaks));
+                    SelectedDictionary = LHRKernel(:,SelectedDictionaryColumns);
+                    I = lsqnonneg(double(SelectedDictionary),double(Stot_w));
+                    fODFC = fODF0_HR;
+                    fODFC(SelectedDictionaryColumns) = I;
+                    if(ANC > 1)
+                        F = reshape(fODFC(1:end-NC),ANC,obj_copy.nDirections);
+                        FR = sum(F,2);
+                        F = sum(F,1);
+                        l_fractions(x,:) = [FR; fODFC(end-NC+1:end)];
+                    else
+                        F = fODFC(1:end-NC);
+                        l_fractions(x,:) = [sum(F); fODFC(end-NC+1:end)];
+                    end
+
+                    l_WM_fod(x,:) = single(F);
+                end
+                WM_fod(mask_vector(indices),:) = l_WM_fod;
+                fractions(mask_vector(indices),:) = l_fractions;
+                RSS(mask_vector(indices)) = l_RSS;
+            end
+
+            % Reshape data
+            toc
+            
+            fsum = sum(fractions,2);
+            for ij=1:size(fractions,2)
+                fractions(:,ij) = fractions(:,ij) ./ (fsum+eps);
+            end
+            
+            output.fractions = reshape(fractions,[siz(1:3),size(fractions,2)]);
+            
+            %             WM_fod_max = max(WM_fod,[],2);
+            %             WM_fod_normalized = WM_fod;
+            %             WM_fod_val = mean(WM_fod_max(fractions(:,1) > 0.7*max(WM_fod_max(:)))); % 20/12/2017
+            %             for ij=1:size(WM_fod_normalized,2)
+            %                 WM_fod_normalized(:,ij) = WM_fod_normalized(:,ij) / WM_fod_val;% .* fractions(:,1); % 20/12/2017
+            %             end
+            
+            output.RSS = reshape(RSS,siz(1:3));
+            clear RSS;
+            output.FOD = reshape(WM_fod,[siz(1:3),size(WM_fod,2)]);
+            clear WM_fod;
+            %             output.FOD_norm = reshape(WM_fod_normalized,[siz(1:3),size(WM_fod_normalized,2)]);
+            %             clear WM_fod_normalized;
+            
+            obj.data.img = permute(obj.data.img,[2 1]);
+            obj.data.img = reshape(obj.data.img,siz); %            
+        end   
+
         function output = OneVoxelDeconv(obj, Stot,LRKernel, HRKernel,min_bval)
             % Actually perform the deconvolution. All parameters must be set
             % before hand using the dedicated functions. Output is a structure
@@ -680,7 +1379,7 @@ classdef MRTTrack < handle
                         %                               fODFC = fODFC / sum(fODFC);
                     end
                     
-                    p = lsqnonneg(Y(fit_data,:),Stot(fit_data)./obj.shell_weight(fit_data)); % Compute the signal fractions
+                    p = lsqnonneg(double(Y(fit_data,:)),double(Stot(fit_data)./obj.shell_weight(fit_data))); % Compute the signal fractions
                     piso = p(end-NC+1:end);
                     
                     % if nothing changed compared to previous iter, exit. (Tol may need to be
@@ -739,9 +1438,9 @@ classdef MRTTrack < handle
                     end
                     Y = [Y obj.weighted_HRKernel(:,end-NC+1:end)]; % 3 columns (WM-SIGNAL GM-SIGNAL CSF-SIGNAL)
                 end
-                p = lsqnonneg(Y(fit_data,:),Stot(fit_data)./obj.shell_weight(fit_data),op_e2); % Compute the signal fractions
+                p = lsqnonneg(double(Y(fit_data,:)),double(Stot(fit_data)./obj.shell_weight(fit_data)),op_e2); % Compute the signal fractions
                 output.RSS = sum((Stot-Y*p).^2);
-                
+                output.fit = Y*p;
                 output.fractions = p/sum(p);
                 output.WM_fod = single(fODF);
             else
@@ -1075,7 +1774,7 @@ classdef MRTTrack < handle
     methods(Static)
         function methods = SupportedMethods()
             % List the supported deconvolution methods
-            methods = {'LSQ','L2LSQ','RL','dRL','dRL_W','RUMBA','LASSO','CONSTR'};
+            methods = {'LSQ','L2LSQ','RL','dRL','dRL_W','RUMBA','LASSO','CONSTR','ADSNNLS'};
         end
         
         % Check whether a method is actually supported
@@ -4288,7 +4987,7 @@ end
 % Private function assembling the DTI/DKI kernels
 function [bmat,LRKernel,HRKernel] = mDRLMT_MakeDKIKernel_multicomp(data,nreconstruction_vertices,lambdas,K,offset,isoDs,shell_data)
 
-shells = single(unique(int16(round(data.bvals)/1)*1)); % automatic detection of number of shells.
+shells = single(unique(int16(round(data.bvals)/1e2)*1e2)); % automatic detection of number of shells.
 % This shell splitting works only for b-value spaced more than 100. To be fixed for other datasets.
 ndirections = zeros(length(shells),1);
 for ij=1:length(shells)
@@ -4307,12 +5006,12 @@ else
 end
 
 super_scheme = gen_scheme(nreconstruction_vertices,4); % the reconstruction scheme. Change 300 to any number
-HRKernel = zeros(sum(ndirections),nreconstruction_vertices+length(isoDs));
+HRKernel = zeros(length(data.bvals),nreconstruction_vertices+length(isoDs));
 [phi, theta] = cart2sph(super_scheme.vert(:,1),super_scheme.vert(:,2),super_scheme.vert(:,3)); % polar decomposition
 % lr_scheme = gen_scheme(min(length(data.bvals),90),4);
 lr_scheme = gen_scheme(min(length(data.bvals),45),4);
 [phi_LR, theta_LR] = cart2sph(lr_scheme.vert(:,1),lr_scheme.vert(:,2),lr_scheme.vert(:,3));
-LRKernel = zeros(sum(ndirections),size(lr_scheme.vert,1)+length(isoDs));
+LRKernel = zeros(length(data.bvals),size(lr_scheme.vert,1)+length(isoDs));
 
 if(shell_data > 0)
     
@@ -4563,7 +5262,7 @@ end
 end
 
 % Private function assembling the StandardModel based kernels
-function [bmat,LRKernel,HRKernel] = mDRLMT_MakeSMKernel_multicomp(data,nreconstruction_vertices,ax_stick,zep_lambdas, fraction, shell_data)
+function [bmat,LRKernel,HRKernel] = mDRLMT_MakeSMKernel_multicomp(data,nreconstruction_vertices,ax_stick,zep_lambdas, fraction, shell_data, dotc)
 
 shells = single(unique(int16(round(data.bvals)/1)*1)); % automatic detection of number of shells.
 % This shell splitting works only for b-value spaced more than 100. To be fixed for other datasets.
@@ -4583,8 +5282,8 @@ else
 end
 
 isoDs = [];
-K = 0;
-offset = 0;
+K = 0.;
+offset = dotc;
 
 super_scheme = MRT_Library.gen_scheme(nreconstruction_vertices,4); % the reconstruction scheme. Change 300 to any number
 HRKernel = zeros(sum(ndirections),nreconstruction_vertices+length(isoDs));

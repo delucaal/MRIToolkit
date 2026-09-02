@@ -3667,8 +3667,54 @@ classdef MRT_Library < handle
             
             disp(['Total computation time was ' num2str(m) ' min.'])
             
-        end        
+        end      
 
+        % Find the closest match in a dictionary
+        function [idx,min_cost,fit] = FindBestFittingAtom(Dictionary,Signal)
+            cost = inf(size(Dictionary,2),1);
+            for x=1:size(Dictionary,2)
+                X = Dictionary(:,x);
+                p = X\Signal;
+                cost(x) = mean((Signal-X*p).^2);
+            end    
+            [min_cost,idx] = min(cost);
+            p = Dictionary(:,idx)\Signal;
+            fit = Dictionary(:,idx)*p;
+        end
+
+        function [idx,min_cost,fit] = FindBestFittingAtomBIC(Dictionary,Signal,ImplicitParameters)
+            cost = inf(size(Dictionary,2),1);
+            for x=1:size(Dictionary,2)
+                X = Dictionary(:,x);
+                p = X\Signal;
+                cost(x) = log(mean((Signal-X*p).^2))+0.1*ImplicitParameters(x);
+            end    
+            [min_cost,idx] = min(cost);
+            p = Dictionary(:,idx)\Signal;
+            fit = Dictionary(:,idx)*p;
+        end
+
+        % Find the closest match in a dictionary
+        function [sorted_idx,sorted_cost] = FindBestFittingAtoms(Dictionary,Signal)
+            cost = zeros(size(Dictionary,2),1);
+            % p = lsqnonneg(double(Dictionary),double(Signal));
+            p = MRT_Library.DW_RegularizedDeconv(double(Dictionary),double(Signal),optimset('TolX',1e-2),0.1);
+            % p = lasso(Dictionary,Signal,'Alpha',0.5,'Lambda',0.008);
+            % if(any(~isfinite(p)) || sum(p ~= 0) == 0)
+                % p = lasso(Dictionary,Signal,'Alpha',0.5,'Lambda',0.001);
+            % end
+            % p = pinv(Dictionary)*Signal;
+            sig_r = Dictionary*p;
+            for x=1:size(Dictionary,2)
+                if(p(x) == 0)
+                    continue 
+                end
+                pcopy = p;
+                pcopy(x) = 0;
+                cost(x) = mean((sig_r-Dictionary*pcopy).^2);
+            end    
+            [sorted_cost,sorted_idx] = sort(cost,'descend');
+        end
     end
     
 end
